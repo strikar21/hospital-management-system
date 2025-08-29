@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Patient Card Auto-scroll Animation */
+@keyframes scroll-infinite {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes scroll-infinite-reverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+/* Patient Card Infinite Scroll - Smooth CSS Animation */
+.patient-infinite-scroll {
+  animation: scroll-infinite linear infinite;
+  will-change: transform;
+}
+
+.patient-infinite-scroll:hover,
+.patient-infinite-scroll:focus-within {
+  animation-play-state: paused;
+}
+
+.patient-infinite-scroll-reverse {
+  animation: scroll-infinite-reverse linear infinite;
+  will-change: transform;
+}
+
+.patient-infinite-scroll-reverse:hover,
+.patient-infinite-scroll-reverse:focus-within {
+  animation-play-state: paused;
+}
+
+/* Vital Signs Infinite Scroll within Patient Cards */
+@keyframes vitals-scroll-infinite {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-33.333%);
+  }
+}
+
+.vitals-infinite-scroll {
+  animation: vitals-scroll-infinite 45s linear infinite;
+  will-change: transform;
+}
+
+.vitals-infinite-scroll:hover,
+.vitals-infinite-scroll:focus-within {
+  animation-play-state: paused;
+}
+
+/* Enhanced touch scrolling for mobile devices */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Hide scrollbars but keep functionality - SPECIFIC to avoid conflicts */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none; /* Safari and Chrome */
+}
+
+/* Dashboard Patient Card Scrolling - Separate from vital scrolling */
+.dashboard-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+}
+
+.dashboard-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Vital Signs Scrolling within Patient Cards - Separate class */
+.vital-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.vital-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Patient Card Row Manual + Auto-scroll */
+.patient-row-scroll {
+  overflow-x: auto; /* Allow manual horizontal scrolling */
+  overflow-y: hidden;
+  scrollbar-width: thin; /* Show thin scrollbar */
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+}
+
+/* Style the scrollbar to be subtle but visible */
+.patient-row-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.patient-row-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.patient-row-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.patient-row-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Ensure smooth auto-scroll transitions */
+.patient-card-container {
+  scroll-snap-type: x mandatory;
+  scroll-snap-align: start;
+}
+
+/* Prevent layout shifts during scroll */
+.scroll-container {
+  contain: layout style paint;
+}

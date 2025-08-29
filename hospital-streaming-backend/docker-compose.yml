@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # Hospital Streaming Backend API
+  hospital-backend:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://hospital_user:hospital_pass@postgres:5432/hospital_streaming
+      - TIMESCALE_URL=postgresql://hospital_user:hospital_pass@timescaledb:5432/hospital_vitals
+      - REDIS_URL=redis://redis:6379
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - MQTT_USERNAME=hospital_user
+      - MQTT_PASSWORD=hospital_pass
+    depends_on:
+      - postgres
+      - timescaledb
+      - redis
+      - mosquitto
+    volumes:
+      - ./app:/app/app
+    networks:
+      - hospital-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=hospital_streaming
+      - POSTGRES_USER=hospital_user
+      - POSTGRES_PASSWORD=hospital_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - hospital-network
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hospital-network
+
+  # MQTT Broker for IoT devices
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1884:1883"
+      - "9002:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - hospital-network
+
+  # TimescaleDB for time-series data (vitals, sensor readings)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      - POSTGRES_DB=hospital_vitals
+      - POSTGRES_USER=hospital_user
+      - POSTGRES_PASSWORD=hospital_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./timescale_init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - hospital-network
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:7
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@hospital.com
+      - PGADMIN_DEFAULT_PASSWORD=admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+      - timescaledb
+    networks:
+      - hospital-network
+
+volumes:
+  postgres_data:
+  timescale_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  hospital-network:
+    driver: bridge
