@@ -256,7 +256,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
       // Add case sheet entry to backend
       try {
-        const response = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+        const response = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -1788,7 +1788,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                           // Add case sheet entry to backend
                           try {
-                            const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                            const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                               method: 'POST',
                               headers: {
                                 'Content-Type': 'application/json'
@@ -2067,7 +2067,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           
                           // Add case sheet entry to backend
                           try {
-                            const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                            const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                               method: 'POST',
                               headers: {
                                 'Content-Type': 'application/json'
@@ -2226,7 +2226,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                                   ));
                                   // Add case sheet entry to backend
                                   try {
-                                    const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                                    const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                                       method: 'POST',
                                       headers: {
                                         'Content-Type': 'application/json'
@@ -2328,7 +2328,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                                 
                                 // Add case sheet entry after completing investigation
                                 try {
-                                  const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                                  const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                                     method: 'POST',
                                     headers: {
                                       'Content-Type': 'application/json'
@@ -2374,7 +2374,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                                     
                                     // Add case sheet entry to backend
                                     try {
-                                      const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                                      const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                                         method: 'POST',
                                         headers: {
                                           'Content-Type': 'application/json'
@@ -2687,7 +2687,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           
                           // Add case sheet entry to backend
                           try {
-                            const caseResponse = await fetch(`https://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
+                            const caseResponse = await fetch(`http://localhost:8001/api/v1/patients/${patient.id}/case-entries`, {
                               method: 'POST',
                               headers: {
                                 'Content-Type': 'application/json'
