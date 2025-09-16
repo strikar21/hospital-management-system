@@ -10,7 +10,7 @@ import {
   getVitalStatus, getStatusColor, getVitalStatusColor, canViewMedications, canViewNotes, 
   canEditNotes, canEditMedications, getMedicationStatusColor, formatTimeOnly, formatDateTime
 } from './utils';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 import CaseSheetBook from './CaseSheetBook';
 import { ClinicalDecisionSupportService } from './services/ClinicalDecisionSupport';
 import { LabIntegrationService } from './services/LabIntegration';
@@ -47,15 +47,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   const getRoleBasedNoteType = (userRole: string): 'doctorNotes' | 'nursingNotes' | 'therapistNotes' | 'technicianNotes' | 'pharmacyNotes' | 'otherNotes' => {
     switch (userRole) {
       case 'Doctor':
-      case 'Senior Consultant':
+      // 'Senior Consultant' role not available in current interface
         return 'doctorNotes';
       case 'Nurse':
-      case 'Senior Nurse':
+      // 'Senior Nurse' role not available in current interface
         return 'nursingNotes';
       case 'Technician':
         return 'technicianNotes';
       case 'Admin':
-      case 'Hospital Administrator':
+      case 'Administrator':
       case 'Master Admin':
       case 'Provisioner':
         return 'otherNotes';
@@ -479,7 +479,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     // For now, assume patient dischargeStatus from props or default to 'active'
     const dischargeStatus = (patient as any).dischargeStatus || 'active';
     
-    if (currentUser.role === 'Doctor' || currentUser.role === 'Senior Consultant') {
+    if (currentUser.role === 'Doctor') {
       if (dischargeStatus === 'active') {
         return (
           <button
@@ -496,7 +496,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       } else {
         return <div className="text-xs text-green-600 px-2 py-1 bg-green-100 rounded">Discharge in Progress</div>;
       }
-    } else if (currentUser.role === 'Hospital Administrator') {
+    } else if (currentUser.role === 'Administrator') {
       if (dischargeStatus === 'requested') {
         return (
           <button
@@ -513,7 +513,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       } else {
         return <div className="text-xs text-gray-500">No pending requests</div>;
       }
-    } else if (currentUser.role === 'Senior Nurse') {
+    } else if (currentUser.role === 'Nurse') {
       if (dischargeStatus === 'adminApproved') {
         return (
           <button
@@ -544,7 +544,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
           modifiedBy: currentUser.name, 
           updatedAt: new Date().toISOString(),
           canEdit: HospitalAPI.canEditItem(new Date().toISOString()),
-          history: [...med.history, {
+          history: [...(med.history || []), {
             id: 'hist_' + Date.now(),
             action: status === 'active' ? 'resumed' : status,
             timestamp: new Date().toISOString(),
@@ -611,10 +611,10 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     medications.forEach((med: any) => {
       enhancedEntries.push({
         id: `med-${med.id}`,
-        timestamp: med.createdAt,
+        timestamp: med.createdat,
         type: 'medication',
         description: `💊 ${med.name} (${med.dosage}) - ${med.frequency} via ${med.route}. Status: ${med.status.toUpperCase()}`,
-        performedBy: med.performedBy,
+        performedBy: med.prescribedby,
         canEdit: false
       });
     });
@@ -623,10 +623,10 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     investigations.forEach((inv: any) => {
       enhancedEntries.push({
         id: `inv-${inv.id}`,
-        timestamp: inv.createdAt ? `${inv.createdAt}T00:00:00Z` : new Date().toISOString(),
+        timestamp: inv.createdat ? `${inv.createdat}T00:00:00Z` : new Date().toISOString(),
         type: 'investigation',
         description: `🧪 ${inv.name} (${inv.type}) - Priority: ${inv.priority.toUpperCase()}, Status: ${inv.status.toUpperCase()}`,
-        performedBy: inv.performedBy,
+        performedBy: inv.performedby,
         canEdit: false
       });
     });
@@ -701,7 +701,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
         // Auto-update investigations with lab results
         const updatedInvestigations = await Promise.all(
           investigations.map(async (inv) => {
-            if (inv.type === 'lab' && inv.status === 'inProgress') {
+            if (inv.type === 'lab' && inv.status === 'in_progress') {
               return await LabIntegrationService.updateInvestigationWithResults(inv);
             }
             return inv;
@@ -1766,9 +1766,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           const medicationData = {
                             ...newMedication,
                             status: 'active' as const,
-                            startDate: timestamp.split('T')[0],
-                            performedBy: currentUser.name,
-                            createdAt: timestamp,
+                            startdate: timestamp.split('T')[0],
+                            prescribedby: currentUser.name,
+                            createdat: timestamp,
                             canEdit: true
                           };
                           await HospitalAPI.addMedication(patient.id, medicationData, currentUser.id);
@@ -1863,7 +1863,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         </div>
                         <div className="text-sm text-gray-600">
                           <p><span className="font-medium">Frequency:</span> {med.frequency} • <span className="font-medium">Route:</span> {med.route}</p>
-                          <p><span className="font-medium">Prescribed by:</span> {med.performedBy} on {formatDateTime(med.createdAt)?.split(',')[0] || 'Unknown date'}</p>
+                          <p><span className="font-medium">Prescribed by:</span> {med.prescribedby} on {formatDateTime(med.createdat)?.split(',')[0] || 'Unknown date'}</p>
                           
                           
                           
@@ -2053,9 +2053,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           const timestamp = new Date().toISOString();
                           const investigationData = {
                             ...newInvestigation,
-                            createdAt: timestamp.split('T')[0],
+                            createdat: timestamp.split('T')[0],
                             status: 'ordered' as const,
-                            performedBy: currentUser.name,
+                            performedby: currentUser.name,
                             canEdit: true
                           };
                           await HospitalAPI.addInvestigation(patient.id, investigationData, currentUser.id);
@@ -2142,7 +2142,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                             inv.status === 'ordered' ? 'bg-blue-100 text-blue-800' :
                             inv.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            inv.status === 'inProgress' ? 'bg-yellow-100 text-yellow-800' :
+                            inv.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
                             {inv.status.toUpperCase().replace('_', ' ')}
@@ -2156,7 +2156,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mb-2">
-                          <p><span className="font-medium">Type:</span> {inv.type} • <span className="font-medium">Ordered by:</span> {inv.performedBy}</p>
+                          <p><span className="font-medium">Type:</span> {inv.type} • <span className="font-medium">Ordered by:</span> {inv.performedby}</p>
                           {inv.notes && <p><span className="font-medium">Notes:</span> {inv.notes}</p>}
                           {inv.results && <p><span className="font-medium">Results:</span> {inv.results}</p>}
                           
@@ -2202,7 +2202,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           )}
                           
                           {/* Loading Lab Results */}
-                          {inv.type === 'lab' && inv.status === 'inProgress' && loadingLabResults && (
+                          {inv.type === 'lab' && inv.status === 'in_progress' && loadingLabResults && (
                             <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
                               <div className="flex items-center space-x-2">
                                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -2220,9 +2220,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                             <button
                               onClick={async () => {
                                 try {
-                                  await HospitalAPI.updateInvestigation(patient.id, inv.id, 'inProgress', currentUser.id);
+                                  await HospitalAPI.updateInvestigation(patient.id, inv.id, 'in_progress', currentUser.id);
                                   setInvestigations(prev => prev.map(i => 
-                                    i.id === inv.id ? { ...i, status: 'inProgress' } : i
+                                    i.id === inv.id ? { ...i, status: 'in_progress' } : i
                                   ));
                                   // Add case sheet entry to backend
                                   try {
@@ -2263,7 +2263,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                               <Play className="w-4 h-4" />
                             </button>
                           )}
-                          {(inv.status === 'inProgress' || inv.status === 'ordered') && (
+                          {(inv.status === 'in_progress' || inv.status === 'ordered') && (
                             <button
                               onClick={async () => {
                                 let results = '';
@@ -2459,7 +2459,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           </div>
                           <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                             study.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            study.status === 'inProgress' ? 'bg-yellow-100 text-yellow-800' :
+                            study.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-blue-100 text-blue-800'
                           }`}>
                             {study.status.toUpperCase().replace('_', ' ')}
@@ -2467,8 +2467,8 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         </div>
                         
                         <div className="text-sm text-gray-600 mb-3">
-                          <p><span className="font-medium">Study Date:</span> {new Date(study.createdAt).toLocaleString()}</p>
-                          <p><span className="font-medium">Ordered by:</span> {study.performedBy}</p>
+                          <p><span className="font-medium">Study Date:</span> {new Date(study.createdat).toLocaleString()}</p>
+                          <p><span className="font-medium">Ordered by:</span> {study.performedby}</p>
                           {study.technologist && <p><span className="font-medium">Technologist:</span> {study.technologist}</p>}
                           {study.radiologist && <p><span className="font-medium">Radiologist:</span> {study.radiologist}</p>}
                         </div>
@@ -2526,7 +2526,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                                 </div>
                               )}
                               <div className="text-xs text-gray-500 pt-2 border-t">
-                                Reported by {study.report.performedBy} • {new Date(study.report.createdAt).toLocaleString()}
+                                Reported by {study.report.performedby} • {new Date(study.report.createdat).toLocaleString()}
                               </div>
                             </div>
 
@@ -2672,9 +2672,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           const timestamp = new Date().toISOString();
                           const therapyData = {
                             ...newTherapy,
-                            startDate: timestamp.split('T')[0],
+                            startdate: timestamp.split('T')[0],
                             status: 'active' as const,
-                            performedBy: currentUser.name,
+                            performedby: currentUser.name,
                             canEdit: true,
                             sessions: []
                           };
@@ -2769,7 +2769,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         </div>
                         <div className="text-sm text-gray-600 mb-2">
                           <p><span className="font-medium">Type:</span> {therapy.type} • <span className="font-medium">Frequency:</span> {therapy.frequency}</p>
-                          <p><span className="font-medium">Duration:</span> {therapy.duration} • <span className="font-medium">Prescribed by:</span> {therapy.performedBy}</p>
+                          <p><span className="font-medium">Duration:</span> {therapy.duration} • <span className="font-medium">Prescribed by:</span> {therapy.performedby}</p>
                           {therapy.therapist && <p><span className="font-medium">Therapist:</span> {therapy.therapist}</p>}
                           {therapy.sessions && therapy.sessions.length > 0 && (
                             <p><span className="font-medium">Sessions:</span> {therapy.sessions.length} completed</p>
@@ -2911,3 +2911,5 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     </div>
   );
 };
+
+export default PatientDetail;
