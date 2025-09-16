@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, RefreshCw, Activity, Settings, X, Monitor } from 'lucide-react';
 import { User, Patient, RoomProximity, VitalHistory, TimeRange, AppSettings } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 import { isNurseOrTechnician } from './utils';
 import { Header } from './Header';
 import { PatientCard } from './PatientCard';
-import { PatientDetail } from './PatientDetail';
+import PatientDetail from './PatientDetail';
 import { EnhancedVitalChart } from './EnhancedVitalChart';
 import { ECGViewer } from './ECGViewer';
 import { DeviceAssignment } from './DeviceAssignment';
@@ -32,7 +32,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onUpdateSettings,
   onBedsideMode
 }) => {
-  console.log(`📋 DASHBOARD RENDERED for user: ${currentUser.name} (${currentUser.role}) department: ${currentUser.department}`);
+  // Dashboard component for ${currentUser.name}
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedWard, setSelectedWard] = useState<string>('My Patients');
   const [roomProximity, setRoomProximity] = useState<RoomProximity | null>(null);
@@ -158,7 +158,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setCurrentPage(1); // Reset to page 1 when filters change
       loadPatients();
     }
-  }, [currentUser, selectedWard, showAllDepartments, roomProximity]);
+  }, [currentUser, selectedWard, showAllDepartments]); // Removed roomProximity to stop constant reloading
 
   // Auto-proximity detection for nurses and technicians
   useEffect(() => {
@@ -179,14 +179,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const loadPatients = async () => {
     setLoading(true);
-    console.log(`🚀 DASHBOARD: loadPatients called for user: ${currentUser.name} (${currentUser.role})`);
     try {
-      console.log(`🔄 Loading patients for user: ${currentUser.name} (${currentUser.role}), department: ${currentUser.department}, selectedWard: ${selectedWard}`);
-      
       // TEMPORARILY BYPASS ALL FILTERING - JUST GET ALL PATIENTS
       let patientsData: Patient[] = await HospitalAPI.getPatients(undefined, undefined, true);
-      
-      console.log(`👥 Loaded ${patientsData.length} patients:`, patientsData.map(p => ({ id: p.id, name: p.name, department: p.department })));
       setPatients(patientsData);
       setLastSync(new Date());
     } catch (error) {
@@ -305,6 +300,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const toggleReferralMode = () => {
     setShowAllDepartments(!showAllDepartments);
+  };
+
+  const handlePatientSelection = async (patient: Patient) => {
+    try {
+      console.log(`🔍 Fetching complete details for patient: ${patient.id}`);
+      const fullPatientData = await HospitalAPI.getPatient(patient.id);
+      if (fullPatientData) {
+        console.log(`✅ Got complete patient data with ${fullPatientData.medications?.length || 0} medications, ${fullPatientData.investigations?.length || 0} investigations, ${fullPatientData.therapies?.length || 0} therapies`);
+        setSelectedPatient(fullPatientData);
+      } else {
+        console.error('❌ Failed to fetch complete patient data');
+        // Fallback to basic data if API call fails
+        setSelectedPatient(patient);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching complete patient data:', error);
+      // Fallback to basic data if API call fails
+      setSelectedPatient(patient);
+    }
   };
 
   const getWardOptions = () => {
@@ -617,7 +631,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         currentUser={currentUser}
         onClose={() => setSelectedPatient(null)}
         onVitalClick={handleVitalClick}
-        onECGView={(patient) => setShowECGViewer(patient)}
+        onECGView={(patient: Patient) => setShowECGViewer(patient)}
+        onToggleECGMode={(patient: Patient) => {
+          // Toggle ECG mode for the patient
+          console.log('Toggle ECG mode for patient:', patient.name);
+        }}
         onPatientDischarge={handlePatientDischarge}
       />
     );
@@ -761,7 +779,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <PatientCard
                       patient={patient}
                       currentUser={currentUser}
-                      onPatientClick={setSelectedPatient}
+                      onPatientClick={handlePatientSelection}
                       onVitalClick={handleVitalClick}
                       onAcknowledgeAlert={handleAcknowledgeAlert}
                       onBedsideMode={handleSingleBedsideMode}
@@ -775,7 +793,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <PatientCard
                       patient={patient}
                       currentUser={currentUser}
-                      onPatientClick={setSelectedPatient}
+                      onPatientClick={handlePatientSelection}
                       onVitalClick={handleVitalClick}
                       onAcknowledgeAlert={handleAcknowledgeAlert}
                       onBedsideMode={handleSingleBedsideMode}
@@ -802,7 +820,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <PatientCard
                       patient={patient}
                       currentUser={currentUser}
-                      onPatientClick={setSelectedPatient}
+                      onPatientClick={handlePatientSelection}
                       onVitalClick={handleVitalClick}
                       onAcknowledgeAlert={handleAcknowledgeAlert}
                       onBedsideMode={handleSingleBedsideMode}
@@ -816,7 +834,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <PatientCard
                       patient={patient}
                       currentUser={currentUser}
-                      onPatientClick={setSelectedPatient}
+                      onPatientClick={handlePatientSelection}
                       onVitalClick={handleVitalClick}
                       onAcknowledgeAlert={handleAcknowledgeAlert}
                       onBedsideMode={handleSingleBedsideMode}
