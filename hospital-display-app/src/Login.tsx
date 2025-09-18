@@ -6,7 +6,7 @@ import {
   Shield, AlertCircle, CheckCircle, Eye, EyeOff 
 } from 'lucide-react';
 import { User as UserType, AuthMethod } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 import { HybridLogin } from './HybridLogin';
 
 interface LoginProps {

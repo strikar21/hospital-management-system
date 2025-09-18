@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Pill, TrendingUp, TrendingDown, ArrowLeft } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Patient } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 import auditService from './services/auditService';
 
 interface EnhancedVitalChartProps {

@@ -4,7 +4,7 @@ import {
   Heart, AlertCircle, CheckCircle, UserPlus 
 } from 'lucide-react';
 import { User as UserType } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 
 interface PatientAdmissionProps {
   currentUser: UserType;
@@ -96,7 +96,7 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
         diagnosis: formData.diagnosis,
         priority: formData.priority.toLowerCase(),
         recommendedWard: formData.admissionType,
-        recommendedDepartment: formData.department,
+        department: formData.department,
         estimatedLengthOfStay: formData.priority === 'Emergency' ? 1 : 3,
         specialRequirements: formData.allergies ? `Allergies: ${formData.allergies}` : null,
         insuranceType: formData.insuranceType,
@@ -116,7 +116,7 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
           diagnosis: formData.diagnosis,
           priority: formData.priority.toLowerCase(), 
           recommendedWard: formData.admissionType,
-          recommendedDepartment: formData.department,
+          department: formData.department,
           estimatedLengthOfStay: formData.priority === 'Emergency' ? 1 : 3,
           specialRequirements: formData.allergies ? `Allergies: ${formData.allergies}` : null,
           insuranceType: formData.insuranceType,

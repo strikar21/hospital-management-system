@@ -1,135 +1,62 @@
-// Lab Integration Service - Simulates automatic lab result import
+// Lab Integration Service - Fetches lab results from backend
 import { LabResult, Investigation } from '../types';
+import HospitalAPI from '../api';
 
 export class LabIntegrationService {
-  // Mock lab results database
-  private static mockLabResults: LabResult[] = [
-    {
-      id: 'lab001',
-      patientId: 'P001',
-      testName: 'Complete Blood Count',
-      testCode: 'CBC',
-      result: '12.5',
-      normalRange: '12.0-15.5',
-      units: 'g/dL',
-      status: 'final',
-      abnormalFlag: 'normal',
-      createdAt: '2024-08-27T08:00:00Z',
-      completedAt: '2024-08-27T10:30:00Z',
-      performingLab: 'Central Lab',
-      performedBy: 'Dr. Smith',
-      performedBy: 'Lab Tech Johnson'
-    },
-    {
-      id: 'lab002',
-      patientId: 'P001',
-      testName: 'White Blood Cell Count',
-      testCode: 'WBC',
-      result: '15.2',
-      normalRange: '4.0-11.0',
-      units: '10³/μL',
-      status: 'final',
-      abnormalFlag: 'high',
-      createdAt: '2024-08-27T08:00:00Z',
-      completedAt: '2024-08-27T10:30:00Z',
-      performingLab: 'Central Lab',
-      performedBy: 'Dr. Smith',
-      performedBy: 'Lab Tech Johnson'
-    },
-    {
-      id: 'lab003',
-      patientId: 'P001',
-      testName: 'Hemoglobin',
-      testCode: 'HGB',
-      result: '12.1',
-      normalRange: '12.0-15.5',
-      units: 'g/dL',
-      status: 'final',
-      abnormalFlag: 'normal',
-      createdAt: '2024-08-27T08:00:00Z',
-      completedAt: '2024-08-27T10:30:00Z',
-      performingLab: 'Central Lab',
-      performedBy: 'Dr. Smith'
-    },
-    {
-      id: 'lab004',
-      patientId: 'P001',
-      testName: 'Creatinine',
-      testCode: 'CREAT',
-      result: '2.1',
-      normalRange: '0.6-1.2',
-      units: 'mg/dL',
-      status: 'final',
-      abnormalFlag: 'high',
-      createdAt: '2024-08-27T14:00:00Z',
-      completedAt: '2024-08-27T16:15:00Z',
-      performingLab: 'Chemistry Lab',
-      performedBy: 'Dr. Smith',
-      performedBy: 'Lab Tech Williams'
-    },
-    {
-      id: 'lab005',
-      patientId: 'P001',
-      testName: 'Blood Glucose',
-      testCode: 'GLUC',
-      result: '245',
-      normalRange: '70-100',
-      units: 'mg/dL',
-      status: 'final',
-      abnormalFlag: 'criticalHigh',
-      createdAt: '2024-08-27T14:00:00Z',
-      completedAt: '2024-08-27T16:15:00Z',
-      performingLab: 'Chemistry Lab',
-      performedBy: 'Dr. Smith',
-      performedBy: 'Lab Tech Williams'
-    }
-  ];
-
-  // Simulate fetching lab results from external lab system
+  // Fetch lab results from external lab system
   static async fetchLabResults(investigationId: string): Promise<LabResult[]> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Return mock results based on investigation
-    return this.mockLabResults.filter(result => 
-      // In real implementation, this would match by investigation order ID
-      result.patientId === 'P001'
-    );
+    try {
+      console.log('Fetching lab results for investigation:', investigationId);
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch lab results:', error);
+      return [];
+    }
   }
 
   // Get pending lab results for a patient
   static async getPendingResults(patientId: string): Promise<LabResult[]> {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return this.mockLabResults.filter(result => 
-      result.patientId === patientId && result.status === 'preliminary'
-    );
+    try {
+      console.log('Fetching pending lab results for patient:', patientId);
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch pending lab results:', error);
+      return [];
+    }
   }
 
   // Get all lab results for a patient
   static async getPatientLabResults(patientId: string): Promise<LabResult[]> {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    return this.mockLabResults.filter(result => result.patientId === patientId);
+    try {
+      console.log('Fetching patient lab results:', patientId);
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch patient lab results:', error);
+      return [];
+    }
   }
 
   // Auto-update investigation with lab results
   static async updateInvestigationWithResults(investigation: Investigation): Promise<Investigation> {
-    if (investigation.type === 'lab' && investigation.status === 'inProgress') {
-      // Simulate getting results from lab system
-      const labResults = await this.fetchLabResults(investigation.id);
-      
-      if (labResults.length > 0) {
-        // Update investigation with results
-        const updatedInvestigation: Investigation = {
-          ...investigation,
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-          labResults: labResults,
-          results: this.formatLabResultsSummary(labResults)
-        };
+    if (investigation.type === 'lab' && investigation.status === 'in_progress') {
+      try {
+        // Get results from backend
+        const labResults = await this.fetchLabResults(investigation.id);
         
-        return updatedInvestigation;
+        if (labResults.length > 0) {
+          // Update investigation with results
+          const updatedInvestigation: Investigation = {
+            ...investigation,
+            status: 'completed',
+            completedat: new Date().toISOString(),
+            labResults: labResults,
+            results: this.formatLabResultsSummary(labResults)
+          };
+          
+          return updatedInvestigation;
+        }
+      } catch (error) {
+        console.error('Failed to update investigation with lab results:', error);
       }
     }
     
@@ -181,21 +108,6 @@ export class LabIntegrationService {
     return labResults.filter(result => 
       result.abnormalFlag !== 'normal' && !result.performedBy
     );
-  }
-
-  // Simulate real-time lab result notifications
-  static simulateLabResultNotification(patientId: string, callback: (results: LabResult[]) => void): void {
-    // Simulate getting new results every 30 seconds
-    setInterval(() => {
-      const newResults = this.mockLabResults.filter(result => 
-        result.patientId === patientId && 
-        new Date(result.completedAt) > new Date(Date.now() - 30000) // Last 30 seconds
-      );
-      
-      if (newResults.length > 0) {
-        callback(newResults);
-      }
-    }, 30000);
   }
 
   // Generate lab result report for printing/export

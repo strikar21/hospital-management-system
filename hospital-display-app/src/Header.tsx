@@ -212,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {/* Patient Admission Button (Doctors only) */}
-            {(currentUser.role === 'Senior Consultant' || currentUser.role === 'Doctor' || currentUser.role === 'Hospital Administrator') && onShowPatientAdmission && (
+            {(currentUser.role === 'Doctor' || currentUser.role === 'Administrator') && onShowPatientAdmission && (
               <button
                 onClick={onShowPatientAdmission}
                 className="flex items-center space-x-1.5 px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {/* Device Assignment Button (Nurses only) */}
-            {(isNurseOrTechnician(currentUser.role) || currentUser.role === 'Hospital Administrator') && onShowDeviceAssignment && (
+            {(isNurseOrTechnician(currentUser.role) || currentUser.role === 'Administrator') && onShowDeviceAssignment && (
               <button
                 onClick={onShowDeviceAssignment}
                 className="flex items-center space-x-1.5 px-2 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -248,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {/* Device Provisioning Button (Tech staff only) */}
-            {(currentUser.role === 'Technician' || currentUser.role === 'Hospital Administrator') && onShowDeviceProvisioning && (
+            {(currentUser.role === 'Technician' || currentUser.role === 'Administrator') && onShowDeviceProvisioning && (
               <button
                 onClick={onShowDeviceProvisioning}
                 className="flex items-center space-x-1.5 px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -259,8 +259,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Staff Management Button (Provisioner and Master Admin only) */}
-            {(currentUser.role === 'Provisioner' || currentUser.role === 'Master Admin') && onShowStaffManagement && (
+            {/* Staff Management Button (Provisioner and Administrator only) */}
+            {(currentUser.role === 'Provisioner' || currentUser.role === 'Administrator') && onShowStaffManagement && (
               <button
                 onClick={onShowStaffManagement}
                 className="flex items-center space-x-1.5 px-2 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"

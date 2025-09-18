@@ -3,7 +3,7 @@
 export interface User {
   id: string;
   name: string;
-  role: 'Doctor' | 'Nurse' | 'Admin' | 'Technician' | 'Hospital Administrator' | 'Senior Consultant' | 'Senior Nurse' | 'Provisioner' | 'Master Admin';
+  role: 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
   nfcId?: string;
   staffId: string;
   department: string;
@@ -29,6 +29,10 @@ export interface Patient {
   room: string;
   department: string;
   assignedDoctor: string;
+  attendingphysicianname?: string;
+  assignedDeviceId?: string;  // ID of assigned ESP32 watch device
+  deviceStatus?: 'connected' | 'disconnected' | 'offline' | 'low_battery';  // Real-time device status
+  deviceBattery?: number;  // Device battery level (0-100)
   // Enhanced patient safety fields
   allergies?: Allergy[];
   codeStatus?: 'fullCode' | 'dnr' | 'dnrCca' | 'comfortCare';
@@ -62,7 +66,8 @@ export interface Patient {
     lastUpdated: string;
     lastSync: string;
   };
-  status: 'stable' | 'critical' | 'emergency';
+  status: 'stable' | 'critical' | 'emergency' | 'active' | 'pending_discharge' | 'ready_for_nurse' | 'discharged' | 'PENDING_DISCHARGE' | 'DISCHARGE_APPROVED' | 'discharge_approved';
+  dischargeStatus?: 'active' | 'requested' | 'adminapproved' | 'discharged';
   alerts: Alert[];
   admissionDate: string;
   age: number;
@@ -82,6 +87,7 @@ export interface NoteComment {
   content: string;
   authorId: string;
   authorName: string;
+  authorname?: string;  // Backend provides lowercase version with resolved name
   authorRole: string;
   timestamp: string;
   editedAt?: string;
@@ -101,6 +107,7 @@ export interface HandoffNote {
   timestamp: string;
   acknowledged: boolean;
   performedBy?: string;
+  performedbyname?: string;
   completedAt?: string;
 }
 
@@ -110,20 +117,22 @@ export interface Medication {
   dosage: string;
   frequency: string;
   route: string;
-  status: 'active' | 'stopped' | 'held';
-  startDate: string;
-  endDate?: string;
-  performedBy: string;
-  createdAt: string;
+  status: 'active' | 'stopped' | 'held' | 'administered';
+  startdate: string;
+  enddate?: string;
+  duration?: string;
+  prescribedby: string;
+  prescribedbyname?: string;
+  createdat: string;
   modifiedBy?: string;
-  updatedAt?: string;
-  canEdit: boolean;
-  history: MedicationHistoryEntry[];
+  updatedat?: string;
+  canEdit?: boolean;
+  history?: MedicationHistoryEntry[];
 }
 
 export interface MedicationHistoryEntry {
   id: string;
-  action: 'prescribed' | 'held' | 'resumed' | 'stopped' | 'modified';
+  action: 'prescribed' | 'held' | 'resumed' | 'stopped' | 'modified' | 'administered';
   timestamp: string;
   performedBy: string;
   reason?: string;
@@ -135,13 +144,14 @@ export interface Investigation {
   id: string;
   type: 'lab' | 'imaging' | 'biopsy' | 'culture';
   name: string;
-  createdAt: string;
-  scheduledAt?: string;
-  completedAt?: string;
-  status: 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+  createdat: string;
+  scheduledat?: string;
+  completedat?: string;
+  status: 'ordered' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   results?: string;
   labResults?: LabResult[]; // Detailed lab results
-  performedBy: string;
+  performedby: string;
+  performedbyname?: string;
   priority: 'routine' | 'urgent' | 'stat';
   notes?: string;
   canEdit: boolean;
@@ -153,10 +163,11 @@ export interface Therapy {
   description: string;
   frequency: string;
   duration: string;
-  startDate: string;
-  endDate?: string;
+  startdate: string;
+  enddate?: string;
   status: 'active' | 'completed' | 'cancelled';
-  performedBy: string;
+  performedby: string;
+  performedbyname?: string;
   therapist?: string;
   notes?: string;
   sessions: TherapySession[];
@@ -178,6 +189,7 @@ export interface CaseSheetEntry {
   type: 'admission' | 'medication' | 'investigation' | 'therapy' | 'vitalAlert' | 'statusChange' | 'alertAcknowledged' | 'discharge' | 'doctorNotes' | 'nursingNotes' | 'therapistNotes' | 'technicianNotes' | 'pharmacyNotes' | 'otherNotes' | 'handoffNote' | 'medicationAdministration';
   description: string;
   performedBy: string;
+  performedbyname?: string;
   details?: any;
   canEdit: boolean;
 }
@@ -306,7 +318,7 @@ export interface FallEvent {
 export interface BackendUser {
   id: string;
   name: string;
-  role: 'Doctor' | 'Nurse' | 'Admin' | 'Technician' | 'Hospital Administrator' | 'Senior Consultant' | 'Senior Nurse';
+  role: 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
   nfcId: string;
   staffId: string;
   department: string;
@@ -336,11 +348,11 @@ export type VitalType = 'heartRate' | 'oxygenSat' | 'temperature' | 'skinTempera
 export type VitalStatus = 'normal' | 'warning' | 'critical';
 export type TimeRange = '1h' | '6h' | '24h' | '7d';
 export type AuthMethod = 'nfc' | 'credentials';
-export type UserRole = 'Doctor' | 'Nurse' | 'Admin' | 'Technician' | 'Hospital Administrator' | 'Senior Consultant';
+export type UserRole = 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
 export type PatientStatus = 'stable' | 'critical' | 'emergency';
 export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type MedicationStatus = 'active' | 'stopped' | 'held';
-export type InvestigationStatus = 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+export type InvestigationStatus = 'ordered' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type TherapyStatus = 'active' | 'completed' | 'cancelled';
 export type MonitoringMode = 'ecg' | 'eeg';
 
@@ -484,7 +496,7 @@ export interface LabResult {
   completedAt: string;
   performingLab: string;
   performedBy: string;
-  performedBy?: string;
+  performedbyname?: string;
 }
 
 // Imaging/PACS
@@ -493,11 +505,12 @@ export interface ImagingStudy {
   patientId: string;
   studyType: 'xray' | 'ct' | 'mri' | 'ultrasound' | 'mammography' | 'pet' | 'nuclear';
   bodyPart: string;
-  createdAt: string;
-  status: 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+  createdat: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   images: ImagingImage[];
   report?: ImagingReport;
-  performedBy: string;
+  performedby: string;
+  performedbyname?: string;
   technologist?: string;
   radiologist?: string;
   urgency: 'routine' | 'urgent' | 'stat';
@@ -517,8 +530,8 @@ export interface ImagingReport {
   findings: string;
   impression: string;
   recommendations: string;
-  performedBy: string;
-  createdAt: string;
+  performedby: string;
+  createdat: string;
   status: 'preliminary' | 'final' | 'addendum';
 }
 

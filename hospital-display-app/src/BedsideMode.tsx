@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Settings, Monitor, Wifi, WifiOff, AlertTriangle, Heart, Activity, Thermometer, Droplets, Zap, CreditCard, Volume2, VolumeX } from 'lucide-react';
 import { Patient, User, AppSettings } from './types';
 import { getVitalStatus, detectArrhythmia } from './utils';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 
 interface BedsideModeProps {
   patients: Patient[];

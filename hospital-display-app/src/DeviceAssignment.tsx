@@ -5,19 +5,25 @@ import {
   Search, Filter, RefreshCw
 } from 'lucide-react';
 import { User as UserType, Patient } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
+import { canAssignDevices } from './utils';
 
 interface Device {
+  id: string;
   deviceId: string;
-  name: string;
+  serialNumber: string;
+  macAddress: string;
+  firmwareVersion: string;
   deviceType: string;
   location: string;
   status: string;
   batteryLevel: number | null;
-  lastHeartbeat: string | null;
-  assignmentStatus?: string;
-  assignedTo?: string;
-  assignedAt?: string;
+  lastSeen: string | null;
+  assignedPatientId: string | null;
+  calibrationDate: string | null;
+  nextMaintenanceDate: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface DeviceAssignment {
@@ -120,24 +126,21 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
   const loadAssignedDevices = async () => {
     try {
-      // Get all active assignments
+      // Get all active assignments - backend already includes patient names
       const allAssignments = await HospitalAPI.getAssignmentHistory(currentUser.staffId, undefined, undefined, 100);
       const activeAssignments = allAssignments.filter(assignment => assignment.status === 'active');
       
-      // Enhance with patient names
-      const assignedWithPatients = await Promise.all(
-        activeAssignments.map(async (assignment) => {
-          const patient = patients.find(p => p.id === assignment.patientId);
-          return {
-            ...assignment,
-            patientName: patient?.name || 'Unknown Patient',
-            patientBed: patient?.bedNumber || 'N/A',
-            patientWard: patient?.ward || 'N/A'
-          };
-        })
-      );
+      // Backend already includes patient names - use them directly
+      const assignedWithPatients = activeAssignments.map((assignment) => ({
+        ...assignment,
+        // Use backend-provided patient data, with fallbacks only if truly missing
+        patientName: assignment.patientName || 'Unknown Patient',
+        patientBed: assignment.patientBed || 'N/A',
+        patientWard: assignment.patientWard || 'N/A'
+      }));
       
       setAssignedDevices(assignedWithPatients);
+      console.log('🔍 Loaded assigned devices with patient names:', assignedWithPatients.map(a => `${a.deviceId} -> ${a.patientName}`));
     } catch (error) {
       console.error('Error loading assigned devices:', error);
     }
@@ -169,8 +172,17 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   };
 
   const unassignDevice = async (deviceId: string, reason: string = 'patientDischarge') => {
+    console.log('🔧 DeviceAssignment.unassignDevice called for device:', deviceId, 'reason:', reason);
+    console.trace('Call stack for unassign device');
+    
+    if (loading) {
+      console.log('⚠️ Unassign already in progress, ignoring duplicate call');
+      return;
+    }
+    
     setLoading(true);
     try {
+      console.log('🔧 DeviceAssignment: About to call HospitalAPI.unassignDevice from ADMIN interface');
       await HospitalAPI.unassignDevice(currentUser.staffId, deviceId, reason);
       showMessage('Device unassigned successfully!');
       await Promise.all([
@@ -339,10 +351,10 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                   const DeviceIcon = getDeviceIcon(device.deviceType);
                   return (
                     <div
-                      key={device.deviceId}
-                      onClick={() => setSelectedDevice(device.deviceId)}
+                      key={device.id}
+                      onClick={() => setSelectedDevice(device.id)}
                       className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedDevice === device.deviceId
+                        selectedDevice === device.id
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
@@ -351,8 +363,8 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                         <div className="flex items-center space-x-3">
                           <DeviceIcon className="w-5 h-5 text-gray-600" />
                           <div>
-                            <div className="font-medium text-gray-900">{device.name}</div>
-                            <div className="text-sm text-gray-600">{device.deviceId}</div>
+                            <div className="font-medium text-gray-900">{device.serialNumber}</div>
+                            <div className="text-sm text-gray-600">{device.id}</div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -589,7 +601,11 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                       
                       <div className="ml-6">
                         <button
-                          onClick={() => unassignDevice(assignment.deviceId, 'patientDischarge')}
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to unassign this device from ${assignment.patientName}? This will stop monitoring for this patient.`)) {
+                              unassignDevice(assignment.deviceId, 'patientDischarge');
+                            }
+                          }}
                           disabled={loading}
                           className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
                         >

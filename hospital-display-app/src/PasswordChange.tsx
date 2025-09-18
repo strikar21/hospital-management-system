@@ -39,7 +39,7 @@ const PasswordChange: React.FC<PasswordChangeProps> = ({ staffId, onClose }) => 
     setMessage('');
     
     try {
-      const response = await fetch(`/api/v1/staff/${staffId}/change-password`, {
+      const response = await fetch(`http://localhost:8001/api/v1/staff/${staffId}/change-password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

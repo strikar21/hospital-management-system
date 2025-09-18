@@ -1,11 +1,12 @@
 // App.tsx - Main Application Component
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, AppSettings, Patient } from './types';
 import { Login } from './Login';
 import { Dashboard } from './Dashboard';
 import { BedsideMode } from './BedsideMode';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
+import MedicalErrorBoundary from './components/MedicalErrorBoundary';
 
 const DEFAULT_SETTINGS: AppSettings = {
   autoLogoutMinutes: 15,
@@ -43,21 +44,34 @@ const App: React.FC = () => {
 
   // NFC override functionality removed - using backend-only mode
 
-  // Save settings to localStorage whenever they change
+  // Debounce settings saves to prevent excessive localStorage writes
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    try {
-      localStorage.setItem('hospitalDisplaySettings', JSON.stringify(settings));
-      console.log('⚙️ Settings saved:', {
-        autoLogout: settings.enableAutoLogout,
-        autoScroll: settings.enableAutoScroll,
-        arrhythmiaDetection: settings.arrhythmiaDetection,
-        eegMonitoring: settings.eegMonitoring,
-        tremorDetection: settings.tremorDetection,
-        fallDetection: settings.fallDetection
-      });
-    } catch (error) {
-      console.error('Failed to save settings:', error);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem('hospitalDisplaySettings', JSON.stringify(settings));
+        console.log('⚙️ Settings saved:', {
+          autoLogout: settings.enableAutoLogout,
+          autoScroll: settings.enableAutoScroll,
+          arrhythmiaDetection: settings.arrhythmiaDetection,
+          eegMonitoring: settings.eegMonitoring,
+          tremorDetection: settings.tremorDetection,
+          fallDetection: settings.fallDetection
+        });
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
+    }, 300); // Debounce for 300ms
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [settings]);
 
   const handleLogin = (user: User) => {
@@ -79,7 +93,7 @@ const App: React.FC = () => {
     setBedsidePatients([]);
   };
 
-  const handleUpdateSettings = (newSettings: AppSettings) => {
+  const handleUpdateSettings = useCallback((newSettings: AppSettings) => {
     setSettings(newSettings);
     console.log('⚙️ Settings updated:', {
       autoLogout: `${newSettings.enableAutoLogout ? 'Enabled' : 'Disabled'} (${newSettings.autoLogoutMinutes}min)`,
@@ -93,7 +107,7 @@ const App: React.FC = () => {
         privacy: newSettings.privacyMode
       }
     });
-  };
+  }, []);
 
   const handleBedsideMode = (patients: Patient[], displayCount: 1 | 2 = 1) => {
     setBedsidePatients(patients);
@@ -124,31 +138,46 @@ const App: React.FC = () => {
   // If in bedside mode, show bedside monitor
   if (settings.bedsideMode && bedsidePatients.length > 0) {
     return (
-      <BedsideMode
-        patients={bedsidePatients}
-        displayCount={bedsideDisplayCount}
-        onClose={handleExitBedsideMode}
-        onDisplayCountChange={setBedsideDisplayCount}
-        onNFCTap={handleLogin} // Allow NFC login from bedside mode
-        settings={settings} // Pass settings for monitoring configuration
-      />
+      <MedicalErrorBoundary 
+        patientId={bedsidePatients[0]?.id}
+        medicalContext="bedsideMonitoring"
+      >
+        <BedsideMode
+          patients={bedsidePatients}
+          displayCount={bedsideDisplayCount}
+          onClose={handleExitBedsideMode}
+          onDisplayCountChange={setBedsideDisplayCount}
+          onNFCTap={handleLogin} // Allow NFC login from bedside mode
+          settings={settings} // Pass settings for monitoring configuration
+        />
+      </MedicalErrorBoundary>
     );
   }
 
   // If no user logged in, show login
   if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <MedicalErrorBoundary medicalContext="authentication">
+        <Login onLogin={handleLogin} />
+      </MedicalErrorBoundary>
+    );
   }
+
 
   // Normal dashboard view
   return (
-    <Dashboard 
-      currentUser={currentUser} 
-      onLogout={handleLogout}
-      settings={settings}
-      onUpdateSettings={handleUpdateSettings}
-      onBedsideMode={handleBedsideMode}
-    />
+    <MedicalErrorBoundary
+      patientId={currentUser.id}
+      medicalContext="dashboard"
+    >
+      <Dashboard
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onBedsideMode={handleBedsideMode}
+      />
+    </MedicalErrorBoundary>
   );
 };
 

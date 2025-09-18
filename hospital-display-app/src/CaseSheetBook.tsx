@@ -21,10 +21,12 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
   const touchEndX = useRef<number>(0);
   const MIN_SWIPE_DISTANCE = 50;
   
-  // Sort entries by timestamp (oldest first) - NO FILTERING OR DATA MANIPULATION
-  const sortedEntries = [...caseSheet].sort((a, b) => 
-    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  // Filter out medicationAdministration entries and sort by timestamp (newest first)
+  const sortedEntries = [...caseSheet]
+    .filter(entry => entry.type !== 'medicationAdministration')
+    .sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
 
   // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -164,22 +166,37 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
                     
                     {/* Time - more compact */}
                     <div className="text-xs text-gray-500">
-                      {new Date(entry.timestamp).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {(() => {
+                        const date = new Date(entry.timestamp);
+                        if (isNaN(date.getTime())) {
+                          return 'Invalid Date';
+                        }
+                        return date.toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                        });
+                      })()}
                     </div>
                     
                     {/* Description - compact */}
                     <p className="text-sm text-gray-900 leading-tight line-clamp-3">
-                      {entry.description}
+                      {(() => {
+                        let description = entry.description;
+                        // Clean up verbose prefixes
+                        description = description.replace(/^Note by [^:]*: /, '');
+                        description = description.replace(/^Note edited by [^:]*: /, '');
+                        description = description.replace(/^Medication prescribed: /, '');
+                        description = description.replace(/^Note: "/, '').replace(/"$/, '');
+                        return description;
+                      })()}
                     </p>
-                    
+
                     {/* Performer - compact */}
                     <div className="text-xs text-gray-600 truncate">
-                      by {entry.performedBy}
+                      by {entry.performedbyname || entry.performedBy || 'Unknown'}
                     </div>
                   </div>
                 </div>

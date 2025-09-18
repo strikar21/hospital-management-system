@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User as UserType } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
 import PINLogin from './PINLogin';
 import { 
   Tablet, User, Lock, LogIn, RefreshCw, Wifi, WifiOff, 
@@ -55,12 +55,26 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
           setAuthType('password');
         }
       } else {
-        setError('Staff ID not found. Please check and try again.');
-        setAuthType('unknown');
+        // If staff endpoint fails, default based on staff ID pattern
+        if (staffIdToCheck.startsWith('DOC') || staffIdToCheck.startsWith('NUR') || staffIdToCheck.startsWith('TEC')) {
+          setAuthType('pin');
+        } else if (staffIdToCheck.startsWith('ADM') || staffIdToCheck.startsWith('PRV')) {
+          setAuthType('password');
+        } else {
+          setError('Staff ID not found. Please check and try again.');
+          setAuthType('unknown');
+        }
       }
     } catch (err) {
-      setError('');
-      setAuthType('unknown');
+      // If staff endpoint fails, default based on staff ID pattern
+      if (staffIdToCheck.startsWith('DOC') || staffIdToCheck.startsWith('NUR') || staffIdToCheck.startsWith('TEC')) {
+        setAuthType('pin');
+      } else if (staffIdToCheck.startsWith('ADM') || staffIdToCheck.startsWith('PRV')) {
+        setAuthType('password');
+      } else {
+        setError('');
+        setAuthType('unknown');
+      }
     } finally {
       setIsCheckingRole(false);
     }
@@ -68,7 +82,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
 
   // Auto-check auth type when staff ID changes
   useEffect(() => {
-    if (staffId.trim().length >= 4) { // Check when we have a reasonable staff ID length (4 digits)
+    if (staffId.trim().length >= 7) { // Check when we have a reasonable staff ID length (DOC0001 format)
       checkAuthType(staffId);
     } else {
       setAuthType('unknown');

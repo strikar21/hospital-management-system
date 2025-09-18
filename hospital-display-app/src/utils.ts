@@ -240,15 +240,131 @@ export const canEditMedications = (userRole: string): boolean => {
   return userRole === 'Doctor' || userRole === 'Senior Consultant';
 };
 
+export const canAdministerMedications = (userRole: string): boolean => {
+  return userRole === 'Doctor' || userRole === 'Senior Consultant' || userRole === 'Nurse';
+};
+
+// 2-Hour Fixed Edit Window - Universal Function for ALL Medical Records
+// Medications, Investigations, Therapy, Notes - all use the same 2-hour rule
+
+/**
+ * Universal edit check: 2-hour window from creation for ALL medical records
+ * @param record - Any medical record (medication, investigation, therapy, note)
+ * @param userRole - User role for permission check  
+ * @returns boolean - true if editable within 2 hours and user has permission
+ */
+export const canEditRecord = (record: any, userRole: string): boolean => {
+  // Get creation timestamp (handle different field names)
+  const createdAt = record.createdAt || record.timestamp || record.createdat;
+  if (!createdAt) return false;
+  
+  const creationTime = new Date(createdAt);
+  const currentTime = new Date();
+  const hoursElapsed = (currentTime.getTime() - creationTime.getTime()) / (1000 * 60 * 60);
+  
+  // Fixed 2-hour window for ALL records
+  const withinTimeWindow = hoursElapsed <= 2;
+  
+  // Must also have role permission (basic check)
+  const hasPermission = canEditNotes(userRole) || canEditMedications(userRole);
+  
+  return withinTimeWindow && hasPermission;
+};
+
+/**
+ * Get remaining edit time in minutes for any record
+ */
+export const getRemainingEditTime = (record: any): number => {
+  const createdAt = record.createdAt || record.timestamp || record.createdat;
+  if (!createdAt) return 0;
+  
+  const creationTime = new Date(createdAt);
+  const currentTime = new Date();
+  const minutesElapsed = (currentTime.getTime() - creationTime.getTime()) / (1000 * 60);
+  const remainingMinutes = 120 - minutesElapsed; // 2 hours = 120 minutes
+  return Math.max(0, Math.floor(remainingMinutes));
+};
+
+/**
+ * Format remaining edit time for display
+ */
+export const formatRemainingEditTime = (record: any): string => {
+  const remainingMinutes = getRemainingEditTime(record);
+  
+  if (remainingMinutes === 0) {
+    return 'Edit window expired';
+  }
+  
+  if (remainingMinutes < 60) {
+    return `${remainingMinutes}m remaining`;
+  }
+  
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  return `${hours}h ${minutes}m remaining`;
+};
+
+// Device and Staff Management Permissions
+export const canManageDevices = (userRole: string): boolean => {
+  return userRole === 'Provisioner' || userRole === 'Master Admin' || userRole === 'Hospital Administrator';
+};
+
+export const canManageStaff = (userRole: string): boolean => {
+  return userRole === 'Provisioner' || userRole === 'Master Admin' || userRole === 'Hospital Administrator';
+};
+
+export const canManageNFC = (userRole: string): boolean => {
+  return userRole === 'Provisioner' || userRole === 'Master Admin';
+};
+
+export const canAssignDevices = (userRole: string): boolean => {
+  return ['Doctor', 'Senior Consultant', 'Nurse', 'Senior Nurse', 'Technician', 'Provisioner', 'Master Admin'].includes(userRole);
+};
+
 // ECG/EEG data generation removed - now handled by backend
 
+// Universal Status Color Functions - All status colors centralized here
 export const getMedicationStatusColor = (status: string): string => {
   switch (status) {
     case 'active': return 'text-green-600 bg-green-50 border-green-200';
     case 'held': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    case 'stopped': return 'text-red-600 bg-red-50 border-red-200';
+    case 'stopped': 
+    case 'discontinued': return 'text-red-600 bg-red-50 border-red-200';
     default: return 'text-gray-600 bg-gray-50 border-gray-200';
   }
+};
+
+export const getDeviceStatusColor = (status: string): string => {
+  switch (status) {
+    case 'online': return 'text-green-500';
+    case 'offline': return 'text-red-500';
+    case 'maintenance': return 'text-yellow-500';
+    default: return 'text-gray-500';
+  }
+};
+
+export const getOrderStatusColor = (status: string): string => {
+  switch (status) {
+    case 'dispensed':
+    case 'completed':
+    case 'finalized': return 'text-green-600 bg-green-50 border-green-200';
+    case 'pending':
+    case 'ordered':
+    case 'scheduled': return 'text-blue-600 bg-blue-50 border-blue-200';
+    case 'in_progress':
+    case 'processing': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+    case 'cancelled':
+    case 'rejected': return 'text-red-600 bg-red-50 border-red-200';
+    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+  }
+};
+
+export const getInvestigationStatusColor = (status: string): string => {
+  return getOrderStatusColor(status); // Same color scheme
+};
+
+export const getTherapyStatusColor = (status: string): string => {
+  return getOrderStatusColor(status); // Same color scheme
 };
 
 // Helper to ensure blood pressure is always integer

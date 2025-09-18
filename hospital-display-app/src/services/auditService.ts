@@ -3,9 +3,7 @@
  * Handles logging user actions and frontend events to backend audit system
  */
 
-// For development with proxy, use empty string to make relative URLs
-// For production mobile app, this will be set to the actual backend URL  
-const BACKEND_BASE_URL = process.env.NODE_ENV === 'development' ? '' : (process.env.REACT_APP_BACKEND_URL || 'https://localhost:8002');
+import { getApiUrl } from '../config/apiConfig';
 
 interface AuditLogData {
   eventType: string;
@@ -191,6 +189,34 @@ class AuditService {
   }
   
   /**
+   * Log NFC interaction events (staff tapping patient watches)
+   */
+  async logNfcInteraction(
+    staffNfcId: string,
+    patientId: string, 
+    patientWatchId: string,
+    location?: string,
+    additionalContext?: Record<string, any>
+  ): Promise<void> {
+    await this.logUserAction({
+      action: 'nfcInteraction',
+      description: `Staff NFC tap with patient ${patientId} at ${location || 'unknown location'}`,
+      patientId: patientId,
+      severity: 'info',
+      additionalContext: {
+        interactionType: 'nfcTap',
+        staffNfcId: staffNfcId,
+        patientWatchId: patientWatchId,
+        location: location || 'unknown',
+        proximityDetected: true,
+        complianceRelevant: true,
+        medicalContext: 'patient_staff_interaction',
+        ...additionalContext
+      }
+    });
+  }
+  
+  /**
    * Log form submission events
    */
   async logFormSubmission(
@@ -256,19 +282,17 @@ class AuditService {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(`/api/v1/audit/log`, {
+      const response = await fetch(getApiUrl('/audit/log'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          ...data,
-          userId: this.userId,
-          sessionId: this.sessionId,
-          sourceIp: null, // Will be filled by backend
-          userAgent: navigator.userAgent,
-          endpoint: null, // Frontend events don't have API endpoints
-          httpMethod: null,
-          httpStatus: null,
-          hipaaRelevant: !!data.patientId
+          userId: this.userId || 'anonymous',
+          action: data.action,
+          resourceType: data.eventCategory || 'frontend',
+          resourceId: data.patientId,
+          details: data.description,
+          ipAddress: null, // Will be filled by backend
+          userAgent: navigator.userAgent
         })
       });
       

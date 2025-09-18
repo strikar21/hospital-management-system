@@ -5,7 +5,20 @@
       "Bash(venvScripts:*)",
       "Bash(pip install:*)",
       "Bash(venv/Scripts/activate:*)",
-      "Bash(pg_isready:*)"
+      "Bash(pg_isready:*)",
+      "Bash(tree:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm install)",
+      "Bash(npm start)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(del hospital-backend\\hospital_management.db)",
+      "Bash(del hospital-backend\\hospital_timeseries.db)"
     ],
     "deny": [],
     "ask": []

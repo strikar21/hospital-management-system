@@ -1,0 +1,380 @@
+/**
+ * BLE Service for Hospital Display App
+ * Connects to ESP32 hospital watches via Web Bluetooth API
+ */
+
+// BLE UUIDs matching ESP32 watch
+const HOSPITAL_SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
+const VITALS_CHARACTERISTIC_UUID = '12345678-1234-1234-1234-123456789abd';
+const COMMAND_CHARACTERISTIC_UUID = '12345678-1234-1234-1234-123456789abe';
+
+export interface BLEVitalsData {
+  device_id: string;
+  patient_id: string;
+  timestamp: number;
+  vitals: {
+    heartRate: number;
+    bloodPressure: string;
+    bloodPressureValue: number;
+    respiratoryRate: number;
+    oxygenSat: number;
+    temperature: number;
+    ecg: number;
+    eeg: number;
+    bioimpedance: number;
+    tremor: number;
+  };
+  battery: number;
+  source: 'BLE';
+}
+
+export interface BLEDevice {
+  id: string;
+  name: string;
+  connected: boolean;
+  battery: number;
+  lastSeen: Date;
+}
+
+type VitalsHandler = (data: BLEVitalsData) => void;
+type DeviceHandler = (device: BLEDevice) => void;
+
+class BLEService {
+  private device: BluetoothDevice | null = null;
+  private server: BluetoothRemoteGATTServer | null = null;
+  private service: BluetoothRemoteGATTService | null = null;
+  private vitalsCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private commandCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  
+  private vitalsHandlers: Set<VitalsHandler> = new Set();
+  private deviceHandlers: Set<DeviceHandler> = new Set();
+  private connectedDevices: Map<string, BLEDevice> = new Map();
+  
+  private isScanning = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Check Web Bluetooth support
+    if (!navigator.bluetooth) {
+      console.warn('⚠️ Web Bluetooth not supported in this browser');
+    }
+  }
+
+  /**
+   * Check if Web Bluetooth is supported
+   */
+  isSupported(): boolean {
+    return 'bluetooth' in navigator;
+  }
+
+  /**
+   * Scan for nearby hospital watches
+   */
+  async scanForWatches(): Promise<BLEDevice[]> {
+    if (!this.isSupported()) {
+      throw new Error('Web Bluetooth not supported');
+    }
+
+    console.log('[BLE] Scanning for hospital watches...');
+    this.isScanning = true;
+
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [
+          { namePrefix: 'Hospital_Watch_' },
+          { services: [HOSPITAL_SERVICE_UUID] }
+        ],
+        optionalServices: [HOSPITAL_SERVICE_UUID]
+      });
+
+      const bleDevice: BLEDevice = {
+        id: device.id,
+        name: device.name || 'Unknown Watch',
+        connected: false,
+        battery: 0,
+        lastSeen: new Date()
+      };
+
+      this.connectedDevices.set(device.id, bleDevice);
+      this.notifyDeviceHandlers(bleDevice);
+
+      return Array.from(this.connectedDevices.values());
+
+    } catch (error) {
+      console.error('[BLE] Scan failed:', error);
+      throw error;
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  /**
+   * Connect to a specific hospital watch
+   */
+  async connectToWatch(deviceId?: string): Promise<boolean> {
+    try {
+      let device: BluetoothDevice;
+
+      if (deviceId && this.device?.id === deviceId) {
+        device = this.device;
+      } else {
+        // Scan and connect to first available
+        await this.scanForWatches();
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'Hospital_Watch_' }],
+          optionalServices: [HOSPITAL_SERVICE_UUID]
+        });
+      }
+
+      console.log(`[BLE] Connecting to: ${device.name}`);
+      
+      // Connect to GATT server
+      this.server = await device.gatt!.connect();
+      this.device = device;
+
+      // Get hospital service
+      this.service = await this.server.getPrimaryService(HOSPITAL_SERVICE_UUID);
+
+      // Get characteristics
+      this.vitalsCharacteristic = await this.service.getCharacteristic(VITALS_CHARACTERISTIC_UUID);
+      this.commandCharacteristic = await this.service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+
+      // Subscribe to vitals notifications
+      await this.vitalsCharacteristic.startNotifications();
+      this.vitalsCharacteristic.addEventListener('characteristicvaluechanged', this.handleVitalsData.bind(this));
+
+      // Handle disconnection
+      device.addEventListener('gattserverdisconnected', this.onDisconnected.bind(this));
+
+      // Update device status
+      const bleDevice = this.connectedDevices.get(device.id);
+      if (bleDevice) {
+        bleDevice.connected = true;
+        this.notifyDeviceHandlers(bleDevice);
+      }
+
+      console.log(`[BLE] ✅ Connected to ${device.name}`);
+      return true;
+
+    } catch (error) {
+      console.error('[BLE] Connection failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Disconnect from current watch
+   */
+  async disconnect(): Promise<void> {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.server?.connected) {
+      this.server.disconnect();
+    }
+
+    if (this.device) {
+      const bleDevice = this.connectedDevices.get(this.device.id);
+      if (bleDevice) {
+        bleDevice.connected = false;
+        this.notifyDeviceHandlers(bleDevice);
+      }
+    }
+
+    this.device = null;
+    this.server = null;
+    this.service = null;
+    this.vitalsCharacteristic = null;
+    this.commandCharacteristic = null;
+
+    console.log('[BLE] Disconnected');
+  }
+
+  /**
+   * Send command to connected watch
+   */
+  async sendCommand(command: any): Promise<boolean> {
+    if (!this.commandCharacteristic) {
+      console.warn('[BLE] No command characteristic available');
+      return false;
+    }
+
+    try {
+      const commandString = JSON.stringify(command);
+      const encoder = new TextEncoder();
+      await this.commandCharacteristic.writeValue(encoder.encode(commandString));
+      
+      console.log('[BLE] Command sent:', command);
+      return true;
+    } catch (error) {
+      console.error('[BLE] Command failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Assign patient to connected watch
+   */
+  async assignPatientToWatch(patientId: string): Promise<boolean> {
+    return this.sendCommand({
+      command: 'assign_patient',
+      patient_id: patientId
+    });
+  }
+
+  /**
+   * Test emergency alert on watch
+   */
+  async testEmergencyAlert(): Promise<boolean> {
+    return this.sendCommand({
+      command: 'emergency_test'
+    });
+  }
+
+  /**
+   * Get connection status
+   */
+  getConnectionStatus(): { connected: boolean; deviceName: string; deviceCount: number } {
+    return {
+      connected: this.server?.connected || false,
+      deviceName: this.device?.name || '',
+      deviceCount: this.connectedDevices.size
+    };
+  }
+
+  /**
+   * Get connected devices list
+   */
+  getConnectedDevices(): BLEDevice[] {
+    return Array.from(this.connectedDevices.values());
+  }
+
+  /**
+   * Add vitals data handler
+   */
+  addVitalsHandler(handler: VitalsHandler): void {
+    this.vitalsHandlers.add(handler);
+  }
+
+  /**
+   * Remove vitals data handler
+   */
+  removeVitalsHandler(handler: VitalsHandler): void {
+    this.vitalsHandlers.delete(handler);
+  }
+
+  /**
+   * Add device status handler
+   */
+  addDeviceHandler(handler: DeviceHandler): void {
+    this.deviceHandlers.add(handler);
+  }
+
+  /**
+   * Remove device status handler
+   */
+  removeDeviceHandler(handler: DeviceHandler): void {
+    this.deviceHandlers.delete(handler);
+  }
+
+  /**
+   * Handle incoming vitals data from watch
+   */
+  private handleVitalsData(event: Event): void {
+    const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
+    const decoder = new TextDecoder();
+    const data = decoder.decode(characteristic.value!);
+
+    try {
+      const vitalsData: BLEVitalsData = JSON.parse(data);
+      
+      // Update device battery level
+      if (this.device) {
+        const bleDevice = this.connectedDevices.get(this.device.id);
+        if (bleDevice) {
+          bleDevice.battery = vitalsData.battery;
+          bleDevice.lastSeen = new Date();
+          this.notifyDeviceHandlers(bleDevice);
+        }
+      }
+
+      // Convert BLE format to frontend format
+      const frontendVitals = this.convertBLEToFrontendFormat(vitalsData);
+      
+      // Notify all handlers
+      this.vitalsHandlers.forEach(handler => {
+        try {
+          handler(vitalsData);
+        } catch (error) {
+          console.error('[BLE] Vitals handler error:', error);
+        }
+      });
+
+      console.log(`[BLE] Vitals received from ${vitalsData.device_id}:`, frontendVitals);
+
+    } catch (error) {
+      console.error('[BLE] Failed to parse vitals data:', error);
+    }
+  }
+
+  /**
+   * Convert BLE vitals format to frontend format
+   */
+  private convertBLEToFrontendFormat(bleData: BLEVitalsData) {
+    return {
+      heartRate: bleData.vitals.heartRate,
+      bloodPressure: bleData.vitals.bloodPressure,
+      bloodPressureValue: bleData.vitals.bloodPressureValue,
+      respiratoryRate: bleData.vitals.respiratoryRate,
+      oxygenSat: bleData.vitals.oxygenSat,
+      temperature: bleData.vitals.temperature,
+      ecg: bleData.vitals.ecg,
+      eeg: bleData.vitals.eeg,
+      bioimpedance: bleData.vitals.bioimpedance,
+      tremor: bleData.vitals.tremor,
+      lastUpdated: new Date(bleData.timestamp).toISOString(),
+      lastSync: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Handle device disconnection
+   */
+  private onDisconnected(): void {
+    console.log('[BLE] Watch disconnected - attempting reconnect...');
+    
+    if (this.device) {
+      const bleDevice = this.connectedDevices.get(this.device.id);
+      if (bleDevice) {
+        bleDevice.connected = false;
+        this.notifyDeviceHandlers(bleDevice);
+      }
+    }
+
+    // Attempt reconnection after 5 seconds
+    this.reconnectTimer = setTimeout(() => {
+      if (this.device?.id) {
+        this.connectToWatch(this.device.id);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Notify device status handlers
+   */
+  private notifyDeviceHandlers(device: BLEDevice): void {
+    this.deviceHandlers.forEach(handler => {
+      try {
+        handler(device);
+      } catch (error) {
+        console.error('[BLE] Device handler error:', error);
+      }
+    });
+  }
+}
+
+// Export singleton instance
+export const bleService = new BLEService();
+export default bleService;

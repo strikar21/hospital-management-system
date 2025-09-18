@@ -4,7 +4,8 @@ import {
   CheckCircle, AlertCircle, Wifi, Settings, Plus
 } from 'lucide-react';
 import { User as UserType } from './types';
-import { HospitalAPI } from './api';
+import HospitalAPI from './api';
+import { canManageDevices, canManageNFC } from './utils';
 
 interface DeviceProvisioningProps {
   currentUser: UserType;
@@ -71,7 +72,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
         provisionedBy: currentUser.staffId
       };
 
-      const response = await fetch(`/api/v1/provisioning/devices?staffId=${currentUser.staffId}`, {
+      const response = await fetch(`http://localhost:8001/api/v1/provisioning/devices?staffId=${currentUser.staffId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deviceData)
@@ -125,6 +126,30 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
     };
     return iconMap[deviceType as keyof typeof iconMap] || Activity;
   };
+
+  // Role-based access control
+  if (!canManageDevices(currentUser.role)) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6 text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600 mb-4">
+            Device provisioning is restricted to Provisioner, Master Admin, and Hospital Administrator roles only.
+          </p>
+          <p className="text-sm text-gray-500 mb-4">
+            Your current role: <span className="font-medium">{currentUser.role}</span>
+          </p>
+          <button
+            onClick={onBack}
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

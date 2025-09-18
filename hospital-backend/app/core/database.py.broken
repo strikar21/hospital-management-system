@@ -1,0 +1,796 @@
+"""
+Database connection and configuration
+"""
+
+import asyncio
+import asyncpg
+from typing import AsyncGenerator
+from contextlib import asynccontextmanager
+import logging
+
+from .config import settings
+
+# TimescaleDB connection pool for vitals data
+timescale_pool = None
+
+logger = logging.getLogger(__name__)
+
+# Database connection pools
+_connection_pool = None
+_timescaledb_pool = None
+
+async def get_connection_pool():
+    """Get or create PostgreSQL database connection pool"""
+    global _connection_pool
+    
+    if _connection_pool is None:
+        try:
+            _connection_pool = await asyncpg.create_pool(
+                settings.database_url,
+                min_size=1,
+                max_size=10,
+                command_timeout=60
+            )
+            logger.info("✅ PostgreSQL connection pool created")
+        except Exception as e:
+            logger.error(f"❌ Failed to create PostgreSQL pool: {e}")
+            raise
+    
+    return _connection_pool
+
+async def get_timescaledb_pool():
+    """Get or create TimescaleDB connection pool for vitals data"""
+    global _timescaledb_pool
+    
+    if _timescaledb_pool is None:
+        # PostgreSQL only - removed SQLite support
+        # OLD SQLite code commented out:
+        # if settings.use_sqlite:
+        #     return None
+        # else:
+        try:
+            _timescaledb_pool = await asyncpg.create_pool(
+                settings.timescaledb_url,
+                min_size=1,
+                max_size=10,
+                command_timeout=60
+            )
+            logger.info("✅ TimescaleDB connection pool created")
+        except Exception as e:
+            logger.error(f"❌ Failed to create TimescaleDB pool: {e}")
+            raise
+    
+    return _timescaledb_pool
+
+@asynccontextmanager
+async def get_db_connection():
+    """Get PostgreSQL database connection context manager"""
+    pool = await get_connection_pool()
+    async with pool.acquire() as conn:
+        yield conn
+
+@asynccontextmanager
+async def get_timescale_connection():
+    """Get TimescaleDB connection context manager for vitals data"""
+    pool = await get_timescaledb_pool()
+    async with pool.acquire() as conn:
+        yield conn
+
+async def create_tables():
+    """Create PostgreSQL database tables"""
+    
+    # OLD SQLite version commented out:
+    # OLD SQLite tables_sql commented out:
+    # tables_sql = \"\"\"
+    # ... SQLite version with AUTOINCREMENT etc ...
+    # \"\"\"
+    # (SQLite SQL content commented out - lines 87-237)
+    # ... SQLite CREATE TABLE statements ...
+    # \"\"\"
+    
+    # OLD SQLite section commented out above
+    # else: # PostgreSQL section  
+    # Using PostgreSQL tables only
+    # (Commenting out broken SQLite SQL lines 94-229)
+    
+    # PostgreSQL-compatible SQL  
+    tables_sql = """
+        -- Staff table
+        CREATE TABLE IF NOT EXISTS staff (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            email TEXT UNIQUE,
+            phoneNumber TEXT,
+            department TEXT,
+            pin TEXT,
+            password TEXT,
+            isActive BOOLEAN DEFAULT true,
+            lastSeen TIMESTAMPTZ,
+            nfcCardId TEXT UNIQUE,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Patients table  
+        CREATE TABLE IF NOT EXISTS patients (
+            id TEXT PRIMARY KEY,
+            firstName TEXT NOT NULL,
+            lastName TEXT NOT NULL,
+            dateOfBirth DATE,
+            gender TEXT,
+            phoneNumber TEXT,
+            emergencyContactName TEXT,
+            emergencyContactPhone TEXT,
+            bloodType TEXT,
+            allergies TEXT,
+            medicalHistory TEXT,
+            currentMedications TEXT,
+            admissionDate TIMESTAMPTZ,
+            dischargeDate TIMESTAMPTZ,
+            roomNumber TEXT,
+            bedNumber TEXT,
+            assignedDeviceId TEXT,
+            attendingPhysician TEXT,
+            nurseInCharge TEXT,
+            status TEXT DEFAULT 'active',
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Devices table
+        CREATE TABLE IF NOT EXISTS devices (
+            id TEXT PRIMARY KEY,
+            deviceType TEXT NOT NULL,
+            serialNumber TEXT UNIQUE NOT NULL,
+            macAddress TEXT UNIQUE,
+            firmwareVersion TEXT,
+            batteryLevel INTEGER,
+            status TEXT DEFAULT 'available',
+            lastSeen TIMESTAMPTZ,
+            assignedPatientId TEXT,
+            location TEXT,
+            calibrationDate TIMESTAMPTZ,
+            nextMaintenanceDate TIMESTAMPTZ,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Device Assignments table
+        CREATE TABLE IF NOT EXISTS deviceAssignments (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            deviceId TEXT NOT NULL,
+            assignedBy TEXT NOT NULL,
+            assignedAt TIMESTAMPTZ DEFAULT NOW(),
+            unassignedAt TIMESTAMPTZ,
+            status TEXT DEFAULT 'active',
+            notes TEXT
+        );
+        
+        -- Audit Log table
+        CREATE TABLE IF NOT EXISTS auditLog (
+            id SERIAL PRIMARY KEY,
+            userId TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resourceType TEXT NOT NULL,
+            resourceId TEXT,
+            details TEXT,
+            ipAddress TEXT,
+            userAgent TEXT,
+            timestamp TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Medications table
+        CREATE TABLE IF NOT EXISTS medications (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            dosage TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            route TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            startDate TIMESTAMPTZ,
+            endDate TIMESTAMPTZ,
+            prescribedBy TEXT NOT NULL,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Investigations table  
+        CREATE TABLE IF NOT EXISTS investigations (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            scheduledAt TIMESTAMPTZ,
+            completedAt TIMESTAMPTZ,
+            priority TEXT DEFAULT 'routine',
+            status TEXT DEFAULT 'ordered',
+            performedBy TEXT,
+            results TEXT,
+            notes TEXT,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Therapy table
+        CREATE TABLE IF NOT EXISTS therapy (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            startDate TIMESTAMPTZ,
+            endDate TIMESTAMPTZ,
+            frequency TEXT,
+            duration TEXT,
+            status TEXT DEFAULT 'active',
+            performedBy TEXT,
+            notes TEXT,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Patient Notes table
+        CREATE TABLE IF NOT EXISTS patientNotes (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            content TEXT NOT NULL,
+            authorId TEXT NOT NULL,
+            authorName TEXT NOT NULL,
+            authorRole TEXT NOT NULL,
+            timestamp TIMESTAMPTZ DEFAULT NOW(),
+            editedAt TIMESTAMPTZ,
+            isEdited BOOLEAN DEFAULT FALSE
+        );
+        """
+    
+    # (More broken SQLite SQL commented out from here until rest of function)
+    
+    # Create indexes (temporarily disabled)  
+    indexes_sql = """
+    -- CREATE INDEX IF NOT EXISTS idx_patients_status ON patients (status);
+    -- CREATE INDEX IF NOT EXISTS idx_devices_status ON devices (status);
+    -- CREATE INDEX IF NOT EXISTS idx_vital_signs_patient_time ON vitalSigns (patientId, timestamp);
+    -- CREATE INDEX IF NOT EXISTS idx_device_assignments_patient ON deviceAssignments (patientId, status);
+    -- CREATE INDEX IF NOT EXISTS idx_audit_log_user_time ON auditLog (userId, timestamp);
+    """
+    
+    try:
+        async with get_db_connection() as conn:
+            # PostgreSQL execution
+            try:
+                # Execute tables creation
+                await conn.execute(tables_sql)
+                logger.info("✅ Tables created successfully")
+                
+                # Execute indexes creation  
+                await conn.execute(indexes_sql)
+                logger.info("✅ Indexes created successfully")
+                
+            except Exception as e:
+                logger.error(f"❌ PostgreSQL execution failed: {e}")
+                # Try statement by statement as fallback
+                for statement in (tables_sql + indexes_sql).split(';'):
+                    statement = statement.strip()
+                    if statement and not statement.startswith('--'):
+                        try:
+                            await conn.execute(statement)
+                        except Exception as stmt_error:
+                            logger.warning(f"⚠️ Skipping statement due to error: {stmt_error}")
+                            continue
+        
+        logger.info("✅ Database tables created successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create tables: {e}")
+        raise
+
+# (All remaining broken SQLite SQL commented out from line 288-623)
+# ... duplicate SQL tables and broken syntax from lines 291-622 commented out ...
+
+@asynccontextmanager
+async def get_timescale_connection():
+    """Get TimescaleDB connection for vitals data"""
+    global timescale_pool
+    
+    if timescale_pool is None:
+        # PostgreSQL only - removed SQLite support
+        # OLD SQLite code commented out:
+        # if settings.use_sqlite:
+        #     return None
+        # else:
+        try:
+            timescale_pool = await asyncpg.create_pool(
+                settings.timescaledb_url,
+                min_size=1,
+                max_size=10,
+                command_timeout=60
+            )
+            logger.info("✅ TimescaleDB connection pool created for vitals")
+        except Exception as e:
+            logger.error(f"❌ Failed to create TimescaleDB pool: {e}")
+            raise
+    
+    async with timescale_pool.acquire() as conn:
+        yield conn
+
+async def create_timescale_tables():
+    """Create TimescaleDB hypertables for vitals data"""
+    
+    # TimescaleDB SQL for vitals hypertable
+    timescale_sql = """
+    -- Enable TimescaleDB extension
+    CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+    
+    -- Create vitals_timeseries table
+    CREATE TABLE IF NOT EXISTS vitals_timeseries (
+        timestamp TIMESTAMPTZ NOT NULL,
+        patient_id TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        metric_name TEXT NOT NULL,
+        metric_value DOUBLE PRECISION,
+        metric_unit TEXT,
+        quality_indicator TEXT DEFAULT 'good'
+    );
+    
+    -- Convert to hypertable (only if not already a hypertable)
+    SELECT create_hypertable('vitals_timeseries', 'timestamp', if_not_exists => TRUE);
+    
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals_timeseries (patient_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_vitals_device_time ON vitals_timeseries (device_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_vitals_metric ON vitals_timeseries (patient_id, metric_name, timestamp);
+    """
+    
+    try:
+        async with get_timescale_connection() as conn:
+            # Execute TimescaleDB creation
+            await conn.execute(timescale_sql)
+            logger.info("✅ TimescaleDB hypertables created successfully")
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to create TimescaleDB tables: {e}")
+        # Don't raise - TimescaleDB is optional
+        logger.warning("⚠️ Continuing without TimescaleDB - vitals storage may be limited")
+
+# End of database.py - all remaining broken SQL commented out
+            assignedPatientId TEXT,
+            location TEXT,
+            calibrationDate TIMESTAMP,
+            nextMaintenanceDate TIMESTAMP,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Vital Signs are now stored in TimescaleDB vitals_timeseries table only
+        
+        -- Device Assignments table
+        CREATE TABLE IF NOT EXISTS deviceAssignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            deviceId TEXT NOT NULL,
+            assignedBy TEXT NOT NULL,
+            assignedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            unassignedAt TIMESTAMP,
+            status TEXT DEFAULT 'active',
+            notes TEXT
+        );
+        
+        -- Audit Log table
+        CREATE TABLE IF NOT EXISTS auditLog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resourceType TEXT NOT NULL,
+            resourceId TEXT,
+            details TEXT,
+            ipAddress TEXT,
+            userAgent TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Medications table
+        CREATE TABLE IF NOT EXISTS medications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            dosage TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            route TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            startDate TIMESTAMP,
+            endDate TIMESTAMP,
+            prescribedBy TEXT NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Investigations table  
+        CREATE TABLE IF NOT EXISTS investigations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            scheduledAt TIMESTAMP,
+            completedAt TIMESTAMP,
+            priority TEXT DEFAULT 'routine',
+            status TEXT DEFAULT 'ordered',
+            performedBy TEXT,
+            results TEXT,
+            notes TEXT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Therapy table
+        CREATE TABLE IF NOT EXISTS therapy (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            startDate TIMESTAMP,
+            endDate TIMESTAMP,
+            frequency TEXT,
+            duration TEXT,
+            status TEXT DEFAULT 'active',
+            performedBy TEXT,
+            notes TEXT,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Patient Notes table
+        CREATE TABLE IF NOT EXISTS patientNotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patientId TEXT NOT NULL,
+            content TEXT NOT NULL,
+            authorId TEXT NOT NULL,
+            authorName TEXT NOT NULL,
+            authorRole TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            editedAt TIMESTAMP,
+            isEdited BOOLEAN DEFAULT 0
+        );
+        """
+    # OLD SQLite section commented out above
+    # else: # PostgreSQL section
+    # Using PostgreSQL tables only
+    tables_sql = """
+        -- Staff table
+        CREATE TABLE IF NOT EXISTS staff (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            email TEXT UNIQUE,
+            phoneNumber TEXT,
+            department TEXT,
+            pin TEXT,
+            password TEXT,
+            isActive BOOLEAN DEFAULT true,
+            lastSeen TIMESTAMPTZ,
+            nfcCardId TEXT UNIQUE,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Patients table
+        CREATE TABLE IF NOT EXISTS patients (
+            id TEXT PRIMARY KEY,
+            firstName TEXT NOT NULL,
+            lastName TEXT NOT NULL,
+            dateOfBirth DATE,
+            gender TEXT,
+            phoneNumber TEXT,
+            emergencyContactName TEXT,
+            emergencyContactPhone TEXT,
+            bloodType TEXT,
+            allergies TEXT,
+            medicalHistory TEXT,
+            currentMedications TEXT,
+            admissionDate TIMESTAMPTZ,
+            dischargeDate TIMESTAMPTZ,
+            roomNumber TEXT,
+            bedNumber TEXT,
+            assignedDeviceId TEXT,
+            attendingPhysician TEXT,
+            nurseInCharge TEXT,
+            status TEXT DEFAULT 'active',
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Devices table
+        CREATE TABLE IF NOT EXISTS devices (
+            id TEXT PRIMARY KEY,
+            deviceType TEXT NOT NULL,
+            serialNumber TEXT UNIQUE NOT NULL,
+            macAddress TEXT UNIQUE,
+            firmwareVersion TEXT,
+            batteryLevel INTEGER,
+            status TEXT DEFAULT 'available',
+            lastSeen TIMESTAMPTZ,
+            assignedPatientId TEXT,
+            location TEXT,
+            calibrationDate TIMESTAMPTZ,
+            nextMaintenanceDate TIMESTAMPTZ,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Vital Signs are now stored in TimescaleDB vitals_timeseries table only
+        
+        -- Device Assignments table
+        CREATE TABLE IF NOT EXISTS deviceAssignments (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            deviceId TEXT NOT NULL,
+            assignedBy TEXT NOT NULL,
+            assignedAt TIMESTAMPTZ DEFAULT NOW(),
+            unassignedAt TIMESTAMPTZ,
+            status TEXT DEFAULT 'active',
+            notes TEXT
+        );
+        
+        -- Audit Log table
+        CREATE TABLE IF NOT EXISTS auditLog (
+            id SERIAL PRIMARY KEY,
+            userId TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resourceType TEXT NOT NULL,
+            resourceId TEXT,
+            details TEXT,
+            ipAddress TEXT,
+            userAgent TEXT,
+            timestamp TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Medications table
+        CREATE TABLE IF NOT EXISTS medications (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            dosage TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            route TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            startDate TIMESTAMPTZ,
+            endDate TIMESTAMPTZ,
+            prescribedBy TEXT NOT NULL,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Investigations table  
+        CREATE TABLE IF NOT EXISTS investigations (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            scheduledAt TIMESTAMPTZ,
+            completedAt TIMESTAMPTZ,
+            priority TEXT DEFAULT 'routine',
+            status TEXT DEFAULT 'ordered',
+            performedBy TEXT,
+            results TEXT,
+            notes TEXT,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Therapy table
+        CREATE TABLE IF NOT EXISTS therapy (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            startDate TIMESTAMPTZ,
+            endDate TIMESTAMPTZ,
+            frequency TEXT,
+            duration TEXT,
+            status TEXT DEFAULT 'active',
+            performedBy TEXT,
+            notes TEXT,
+            createdAt TIMESTAMPTZ DEFAULT NOW(),
+            updatedAt TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Patient Notes table
+        CREATE TABLE IF NOT EXISTS patientNotes (
+            id SERIAL PRIMARY KEY,
+            patientId TEXT NOT NULL,
+            content TEXT NOT NULL,
+            authorId TEXT NOT NULL,
+            authorName TEXT NOT NULL,
+            authorRole TEXT NOT NULL,
+            timestamp TIMESTAMPTZ DEFAULT NOW(),
+            editedAt TIMESTAMPTZ,
+            isEdited BOOLEAN DEFAULT FALSE
+        );
+        """
+    
+    # Create indexes (temporarily disabled)
+    indexes_sql = """
+    -- CREATE INDEX IF NOT EXISTS idx_patients_status ON patients (status);
+    -- CREATE INDEX IF NOT EXISTS idx_devices_status ON devices (status);
+    -- CREATE INDEX IF NOT EXISTS idx_vital_signs_patient_time ON vitalSigns (patientId, timestamp);
+    -- CREATE INDEX IF NOT EXISTS idx_device_assignments_patient ON deviceAssignments (patientId, status);
+    -- CREATE INDEX IF NOT EXISTS idx_audit_log_user_time ON auditLog (userId, timestamp);
+    """
+    
+    try:
+        async with get_db_connection() as conn:
+            # PostgreSQL only - removed SQLite support
+                await conn.executescript(tables_sql)
+                await conn.executescript(indexes_sql)
+                await conn.commit()
+            else:
+                # For PostgreSQL, execute the complete SQL as one block
+                try:
+                    # Execute tables creation
+                    await conn.execute(tables_sql)
+                    logger.info("✅ Tables created successfully")
+                    
+                    # Execute indexes creation  
+                    await conn.execute(indexes_sql)
+                    logger.info("✅ Indexes created successfully")
+                    
+                except Exception as e:
+                    logger.error(f"❌ PostgreSQL execution failed: {e}")
+                    # Try statement by statement as fallback
+                    for statement in (tables_sql + indexes_sql).split(';'):
+                        statement = statement.strip()
+                        if statement and not statement.startswith('--'):
+                            try:
+                                await conn.execute(statement)
+                            except Exception as stmt_error:
+                                logger.warning(f"⚠️ Skipping statement due to error: {stmt_error}")
+                                continue
+        
+        logger.info("✅ Database tables created successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create tables: {e}")
+        raise
+
+@asynccontextmanager
+async def get_timescale_connection():
+    """Get TimescaleDB connection for vitals data"""
+    global timescale_pool
+    
+    if timescale_pool is None:
+        # Create TimescaleDB connection pool
+        timescale_pool = await asyncpg.create_pool(
+            host=settings.timescaledb_host,
+            port=settings.timescaledb_port,
+            database=settings.timescaledb_name,
+            user=settings.timescaledb_user,
+            password=settings.timescaledb_password,
+            min_size=5,
+            max_size=20,
+            command_timeout=30
+        )
+        logger.info("✅ TimescaleDB connection pool created for vitals")
+    
+    async with timescale_pool.acquire() as conn:
+        yield conn
+
+async def create_timescale_tables():
+    """Create TimescaleDB hypertables for vitals data"""
+    
+    # TimescaleDB SQL for vitals hypertable
+    timescale_sql = """
+    -- Enable TimescaleDB extension
+    CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+    
+    -- Vitals time-series table
+    CREATE TABLE IF NOT EXISTS vitals_timeseries (
+        time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        patientId TEXT NOT NULL,
+        deviceId TEXT NOT NULL,
+        vitalType TEXT NOT NULL, -- 'heartRate', 'bloodPressure', 'temperature', etc.
+        value DOUBLE PRECISION NOT NULL,
+        unit TEXT NOT NULL, -- 'bpm', 'mmHg', '°F', '%', etc.
+        quality INTEGER DEFAULT 100, -- Signal quality 0-100
+        rawData JSONB, -- Store raw sensor data
+        metadata JSONB -- Additional metadata like device calibration
+    );
+    
+    -- Create hypertable (only if not already created)
+    SELECT create_hypertable('vitals_timeseries', 'time', 
+                            chunk_time_interval => INTERVAL '1 hour',
+                            if_not_exists => TRUE);
+    
+    -- Patient alerts time-series table
+    CREATE TABLE IF NOT EXISTS patient_alerts (
+        time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        patientId TEXT NOT NULL,
+        alertType TEXT NOT NULL, -- 'critical', 'warning', 'info'
+        alertCode TEXT NOT NULL, -- 'HR_HIGH', 'BP_LOW', etc.
+        message TEXT NOT NULL,
+        acknowledged BOOLEAN DEFAULT FALSE,
+        acknowledgedBy TEXT,
+        acknowledgedAt TIMESTAMPTZ,
+        resolved BOOLEAN DEFAULT FALSE,
+        resolvedAt TIMESTAMPTZ,
+        severity INTEGER DEFAULT 1, -- 1-5 severity scale
+        sourceDevice TEXT,
+        rawTriggerData JSONB
+    );
+    
+    -- Create hypertable for alerts
+    SELECT create_hypertable('patient_alerts', 'time', 
+                            chunk_time_interval => INTERVAL '6 hours',
+                            if_not_exists => TRUE);
+    
+    -- Device status time-series table
+    CREATE TABLE IF NOT EXISTS device_status (
+        time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deviceId TEXT NOT NULL,
+        batteryLevel INTEGER,
+        signalStrength INTEGER,
+        temperature DOUBLE PRECISION, -- Device temperature
+        lastSync TIMESTAMPTZ,
+        status TEXT NOT NULL, -- 'online', 'offline', 'error'
+        errorCode TEXT,
+        location TEXT,
+        metadata JSONB
+    );
+    
+    -- Create hypertable for device status
+    SELECT create_hypertable('device_status', 'time', 
+                            chunk_time_interval => INTERVAL '2 hours',
+                            if_not_exists => TRUE);
+    """
+    
+    # TimescaleDB indexes for optimal query performance
+    timescale_indexes_sql = """
+    -- Indexes for vitals_timeseries
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals_timeseries (patientId, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_vitals_device_time ON vitals_timeseries (deviceId, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_vitals_type_time ON vitals_timeseries (vitalType, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient_type_time ON vitals_timeseries (patientId, vitalType, time DESC);
+    
+    -- Indexes for patient_alerts
+    CREATE INDEX IF NOT EXISTS idx_alerts_patient_time ON patient_alerts (patientId, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_alerts_type_time ON patient_alerts (alertType, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_alerts_unacknowledged ON patient_alerts (patientId, acknowledged, time DESC);
+    
+    -- Indexes for device_status
+    CREATE INDEX IF NOT EXISTS idx_device_status_time ON device_status (deviceId, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_device_status_online ON device_status (deviceId, status, time DESC);
+    """
+    
+    try:
+        async with get_timescale_connection() as conn:
+            # PostgreSQL only - removed SQLite support
+                logger.info("⚠️ Using SQLite - TimescaleDB features disabled")
+                return
+            else:
+                # Execute TimescaleDB schema
+                for statement in timescale_sql.split(';'):
+                    if statement.strip():
+                        await conn.execute(statement.strip())
+                        
+                # Execute TimescaleDB indexes
+                for statement in timescale_indexes_sql.split(';'):
+                    if statement.strip():
+                        await conn.execute(statement.strip())
+        
+        logger.info("✅ TimescaleDB hypertables created successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create TimescaleDB tables: {e}")
+        raise
+
+async def close_connection_pool():
+    """Close database connection pools"""
+    global _connection_pool, _timescaledb_pool
+    
+    if _connection_pool:
+        await _connection_pool.close()
+        _connection_pool = None
+        
+    if _timescaledb_pool:
+        await _timescaledb_pool.close()
+        _timescaledb_pool = None

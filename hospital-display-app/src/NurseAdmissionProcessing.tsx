@@ -7,24 +7,26 @@ import { User as UserType } from './types';
 
 interface AdmissionRecommendation {
   id: string;
-  patientName: string;
+  firstName: string;
+  lastName: string;
   age: number;
+  dateofbirth?: string;
   gender: string;
   diagnosis: string;
   priority: string;
-  recommendedWard?: string;
-  recommendedDepartment: string;
+  recommendedward?: string;
+  department: string;
   estimatedLengthOfStay?: number;
   specialRequirements?: string;
-  insuranceType?: string;
-  emergencyContact?: string;
+  insurancetype?: string;
+  emergencycontact?: string;
   allergies?: string;
   weight?: number;
-  performedBy: string;
-  createdAt: string;
+  assigneddoctor: string;
+  assigneddoctorname?: string;
+  recommendedby: string;
+  createdat: string;
   status: string;
-  doctorName?: string;
-  doctorRole?: string;
 }
 
 interface AvailableBed {
@@ -63,7 +65,9 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
   const [availableBeds, setAvailableBeds] = useState<AvailableBed[]>([]);
   const [availableDevices, setAvailableDevices] = useState<AvailableDevice[]>([]);
   const [selectedRecommendation, setSelectedRecommendation] = useState<AdmissionRecommendation | null>(null);
-  const [selectedBed, setSelectedBed] = useState<string>('');
+  const [bedNumber, setBedNumber] = useState<string>('');
+  const [roomNumber, setRoomNumber] = useState<string>('');
+  const [wardType, setWardType] = useState<string>('General Ward');
   const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [processingNotes, setProcessingNotes] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -80,17 +84,21 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
       setLoading(true);
       
       // Load pending recommendations
-      const recResponse = await fetch('/api/v1/admission/recommendations?status=pending');
+      const recResponse = await fetch('http://localhost:8001/api/v1/admission/recommendations?status=pending');
       const recData = await recResponse.json();
-      setRecommendations(recData.recommendations || []);
+      // Transform name fields from lowercase to camelCase for admission recommendations
+      const transformedRecommendations = (recData.recommendations || []).map((rec: any) => ({
+        ...rec,
+        firstName: rec.firstname || rec.firstName,
+        lastName: rec.lastname || rec.lastName
+      }));
+      setRecommendations(transformedRecommendations);
 
-      // Load available beds
-      const bedsResponse = await fetch('/api/v1/admission/available-beds');
-      const bedsData = await bedsResponse.json();
-      setAvailableBeds(bedsData.availableBeds || []);
+      // Skip loading beds - manual entry only
+      setAvailableBeds([]);
 
       // Load available devices
-      const devicesResponse = await fetch('/api/v1/admission/available-devices?deviceType=watch');
+      const devicesResponse = await fetch('http://localhost:8001/api/v1/admission/available-devices?deviceType=watch');
       const devicesData = await devicesResponse.json();
       setAvailableDevices(devicesData.availableDevices || []);
 
@@ -103,42 +111,52 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
   };
 
   const handleProcessAdmission = async () => {
-    if (!selectedRecommendation || !selectedBed) {
-      setError('Please select a recommendation and bed');
+    if (!selectedRecommendation || !bedNumber || !roomNumber) {
+      setError('Please select a recommendation and enter bed/room numbers');
       return;
     }
 
     try {
       setProcessing(true);
       
-      const selectedBedInfo = availableBeds.find(b => b.bedId === selectedBed);
-      
-      const response = await fetch('/api/v1/admission/process-admission', {
+      const response = await fetch('http://localhost:8001/api/v1/admission/process-admission', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           recommendationId: selectedRecommendation.id,
-          assignedWard: selectedBedInfo?.wardId,
-          assignedRoom: selectedBedInfo?.roomId,
-          assignedBed: selectedBed,
-          assignedDevice: selectedDevice || null,
-          processingNotes: processingNotes
+          bedNumber: bedNumber,
+          roomNumber: roomNumber,
+          wardType: wardType,
+          selectedDevice: selectedDevice || null,
+          processingNotes: processingNotes,
+          processedBy: currentUser.name || 'Nursing Staff'
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(`Patient ${selectedRecommendation.patientName} successfully admitted to ${data.assignedBed}`);
+        setSuccess(`Patient ${(() => {
+          const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
+          // Filter out placeholder words from individual name parts
+          const validNames = [selectedRecommendation.firstName, selectedRecommendation.lastName]
+            .filter(Boolean)
+            .filter(name => !placeholders.includes(name.trim()));
+
+          const cleanName = validNames.join(' ').trim();
+          return cleanName || 'Unknown Patient';
+        })()} successfully admitted to Bed ${bedNumber}, Room ${roomNumber}`);
         setSelectedRecommendation(null);
-        setSelectedBed('');
+        setBedNumber('');
+        setRoomNumber('');
+        setWardType('General Ward');
         setSelectedDevice('');
         setProcessingNotes('');
         await loadData(); // Refresh data
       } else {
-        setError('Failed to process admission');
+        setError(data.message || 'Failed to process admission');
       }
 
     } catch (err) {
@@ -244,7 +262,18 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{rec.patientName}</h3>
+                      <h3 className="font-semibold text-gray-900">
+                        {(() => {
+                          const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
+                          // Filter out placeholder words from individual name parts
+                          const validNames = [rec.firstName, rec.lastName]
+                            .filter(Boolean)
+                            .filter(name => !placeholders.includes(name.trim()));
+
+                          const cleanName = validNames.join(' ').trim();
+                          return cleanName || 'Unknown Patient';
+                        })()}
+                      </h3>
                       <p className="text-sm text-gray-600">{rec.age} years old, {rec.gender}</p>
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(rec.priority)}`}>
@@ -259,15 +288,21 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                     </div>
                     <div className="flex items-center">
                       <MapPin className="w-4 h-4 mr-1" />
-                      {rec.recommendedDepartment}
+                      {rec.department}
                     </div>
                     <div className="flex items-center">
                       <User className="w-4 h-4 mr-1" />
-                      Dr. {rec.doctorName || 'Unknown'}
+                      {rec.assigneddoctorname || rec.assigneddoctor}
                     </div>
                     <div className="flex items-center">
                       <Calendar className="w-4 h-4 mr-1" />
-                      {new Date(rec.createdAt).toLocaleString()}
+                      {rec.createdat ? (() => {
+                      try {
+                        return new Date(rec.createdat).toLocaleString();
+                      } catch {
+                        return 'Date not available';
+                      }
+                    })() : 'Date not available'}
                     </div>
                     {rec.specialRequirements && (
                       <div className="flex items-center">
@@ -275,10 +310,10 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                         {rec.specialRequirements}
                       </div>
                     )}
-                    {rec.emergencyContact && (
+                    {rec.emergencycontact && (
                       <div className="flex items-center">
                         <Phone className="w-4 h-4 mr-1" />
-                        {rec.emergencyContact}
+                        {rec.emergencycontact}
                       </div>
                     )}
                   </div>
@@ -305,33 +340,72 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
               <div className="space-y-4">
                 {/* Patient Info */}
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">Patient: {selectedRecommendation.patientName}</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    Patient: {(() => {
+                      const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
+                      // Filter out placeholder words from individual name parts
+                      const validNames = [selectedRecommendation.firstName, selectedRecommendation.lastName]
+                        .filter(Boolean)
+                        .filter(name => !placeholders.includes(name.trim()));
+
+                      const cleanName = validNames.join(' ').trim();
+                      return cleanName || 'Unknown Patient';
+                    })()}
+                  </h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>Age: {selectedRecommendation.age}</div>
                     <div>Gender: {selectedRecommendation.gender}</div>
-                    <div>Department: {selectedRecommendation.recommendedDepartment}</div>
+                    <div>Department: {selectedRecommendation.department}</div>
                     <div>Priority: <span className={`px-1 rounded ${getPriorityColor(selectedRecommendation.priority)}`}>
                       {selectedRecommendation.priority}
                     </span></div>
                   </div>
                 </div>
 
-                {/* Bed Selection */}
+                {/* Manual Bed/Room Entry */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bed Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bedNumber}
+                      onChange={(e) => setBedNumber(e.target.value)}
+                      placeholder="e.g., 101A"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Room Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={roomNumber}
+                      onChange={(e) => setRoomNumber(e.target.value)}
+                      placeholder="e.g., 201"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                
+                {/* Ward Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assign Bed <span className="text-red-500">*</span>
+                    Ward Type
                   </label>
                   <select
-                    value={selectedBed}
-                    onChange={(e) => setSelectedBed(e.target.value)}
+                    value={wardType}
+                    onChange={(e) => setWardType(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="">Select a bed...</option>
-                    {availableBeds.map((bed) => (
-                      <option key={bed.bedId} value={bed.bedId}>
-                        {getBedTypeIcon(bed.bedType)} {bed.wardName} - {bed.bedNumber} ({bed.bedType})
-                      </option>
-                    ))}
+                    <option value="General Ward">General Ward</option>
+                    <option value="ICU">ICU</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Cardiac">Cardiac</option>
+                    <option value="Pediatric">Pediatric</option>
+                    <option value="Maternity">Maternity</option>
                   </select>
                 </div>
 
@@ -372,7 +446,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                 <div className="flex space-x-3">
                   <button
                     onClick={handleProcessAdmission}
-                    disabled={processing || !selectedBed}
+                    disabled={processing || !bedNumber || !roomNumber}
                     className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
                   >
                     {processing ? (

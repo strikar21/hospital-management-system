@@ -122,24 +122,24 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
   // Sync local states with props
   useEffect(() => {
-    setCaseSheet(patient.caseSheet);
+    setCaseSheet(patient.caseSheet || []);
     setMedications(patient.medications || []);
     setInvestigations(patient.investigations || []);
     setTherapies(patient.therapies || []);
-    setNotes(patient.notes);
-    setAlerts(patient.alerts);
+    setNotes(patient.notes || []);
+    setAlerts(patient.alerts || []);
   }, [patient.caseSheet, patient.medications, patient.investigations, patient.therapies, patient.notes, patient.alerts]);
 
   useEffect(() => {
-    setIsECGMode(patient.vitals.isECGMode);
-  }, [patient.vitals.isECGMode]);
+    setIsECGMode(patient.vitals?.isECGMode || false);
+  }, [patient.vitals?.isECGMode]);
 
   // Sync alerts and auto-hide acknowledged ones after 3 seconds
   useEffect(() => {
-    setAlerts(patient.alerts);
+    setAlerts(patient.alerts || []);
     
     // Auto-hide acknowledged alerts after 3 seconds
-    const acknowledgedAlerts = patient.alerts.filter(alert => alert.isAcknowledged);
+    const acknowledgedAlerts = (patient.alerts || []).filter(alert => alert.isAcknowledged);
     if (acknowledgedAlerts.length > 0) {
       const timer = setTimeout(() => {
         setAlerts(prev => prev.filter(alert => !alert.isAcknowledged));
@@ -384,18 +384,16 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     if (window.confirm(`Request discharge for ${patient.name}?\n\nThis will:\n• Send request to Hospital Administration for approval\n• Patient will remain active until fully processed\n\nConfirm discharge request?`)) {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/v1/discharge-workflow/doctor-request', {
+        const response = await fetch(`/api/v1/patients/${patient.id}/discharge-request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            patientId: patient.id,
-            dischargeReason: 'Medical discharge - patient condition stable',
-            dischargeNotes: 'Patient ready for discharge per clinical assessment',
-            requestedBy: currentUser.id
+            doctorId: currentUser.id,
+            reason: 'Medical discharge - patient condition stable'
           })
         });
         if (response.ok) {
-          alert(`Discharge request submitted for ${patient.name}. Waiting for admin approval.`);
+          // Success - no second popup needed, user will see status change
         } else {
           throw new Error('Request failed');
         }
@@ -411,17 +409,16 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     if (window.confirm(`Approve discharge for ${patient.name}?\n\nThis confirms:\n• Insurance/billing clearance\n• Administrative approval\n• Ready for nurse to complete discharge\n\nApprove discharge?`)) {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/v1/discharge-workflow/admin-approval', {
+        const response = await fetch(`/api/v1/patients/${patient.id}/discharge-approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            patientId: patient.id,
-            approvalNotes: 'Insurance cleared, billing completed, discharge approved',
-            approvedBy: currentUser.id
+            adminId: currentUser.id,
+            approvalNote: 'Insurance cleared, billing completed, discharge approved'
           })
         });
         if (response.ok) {
-          alert(`Discharge approved for ${patient.name}. Ready for nurse to complete.`);
+          // Success - no second popup needed, user will see status change
         } else {
           throw new Error('Approval failed');
         }
@@ -437,13 +434,14 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     if (window.confirm(`Complete discharge for ${patient.name}?\n\nThis will:\n• Remove patient from active list\n• Free up bed and equipment\n• Generate discharge summary\n• Complete the discharge process\n\nComplete discharge?`)) {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/v1/discharge-workflow/nurse-discharge', {
+        const response = await fetch(`/api/v1/patients/${patient.id}/discharge-complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            patientId: patient.id,
-            dischargedBy: currentUser.id,
-            finalNotes: 'Patient education completed, discharge instructions provided'
+            nurseId: currentUser.id,
+            followUpInstructions: 'Follow up with primary care in 1 week',
+            activityLevel: 'Resume normal activities',
+            dietInstructions: 'Patient education completed, discharge instructions provided'
           })
         });
         if (response.ok) {
@@ -463,7 +461,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
             onPatientDischarge(patient.id);
           }
           setTimeout(() => onClose(), 1000);
-          alert(`${patient.name} has been successfully discharged!`);
+          // Success - patient discharged, detail will close automatically
         } else {
           throw new Error('Discharge failed');
         }
@@ -476,9 +474,8 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   };
 
   const renderDischargeWorkflowButton = () => {
-    // For now, assume patient dischargeStatus from props or default to 'active'
-    const dischargeStatus = (patient as any).dischargeStatus || 'active';
-    
+    const dischargeStatus = patient.status || 'active';
+
     if (currentUser.role === 'Doctor') {
       if (dischargeStatus === 'active') {
         return (
@@ -491,13 +488,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
             <span>Request Discharge</span>
           </button>
         );
-      } else if (dischargeStatus === 'requested') {
+      } else if (dischargeStatus === 'pending_discharge' || dischargeStatus === 'PENDING_DISCHARGE') {
         return <div className="text-xs text-yellow-600 px-2 py-1 bg-yellow-100 rounded">Discharge Requested - Awaiting Admin</div>;
       } else {
         return <div className="text-xs text-green-600 px-2 py-1 bg-green-100 rounded">Discharge in Progress</div>;
       }
     } else if (currentUser.role === 'Administrator') {
-      if (dischargeStatus === 'requested') {
+      if (dischargeStatus === 'pending_discharge' || dischargeStatus === 'PENDING_DISCHARGE') {
         return (
           <button
             onClick={handleAdminApproveDischarge}
@@ -508,13 +505,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
             <span>Approve Discharge</span>
           </button>
         );
-      } else if (dischargeStatus === 'adminApproved') {
+      } else if (dischargeStatus === 'ready_for_nurse' || dischargeStatus === 'DISCHARGE_APPROVED' || dischargeStatus === 'discharge_approved') {
         return <div className="text-xs text-green-600 px-2 py-1 bg-green-100 rounded">Approved - Awaiting Nurse</div>;
       } else {
         return <div className="text-xs text-gray-500">No pending requests</div>;
       }
     } else if (currentUser.role === 'Nurse') {
-      if (dischargeStatus === 'adminApproved') {
+      if (dischargeStatus === 'ready_for_nurse' || dischargeStatus === 'DISCHARGE_APPROVED' || dischargeStatus === 'discharge_approved') {
         return (
           <button
             onClick={handleNurseCompleteDischarge}

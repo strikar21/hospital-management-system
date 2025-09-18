@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for general hospital data
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: hospital_db
+      POSTGRES_USER: hospital_user
+      POSTGRES_PASSWORD: hospital_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hospital_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hospital_user -d hospital_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # TimescaleDB for vitals time-series data
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: hospital_timescale
+      POSTGRES_USER: hospital_user
+      POSTGRES_PASSWORD: hospital_pass
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"  # Use different port to avoid conflict
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./init-scripts-timescale:/docker-entrypoint-initdb.d
+    networks:
+      - hospital_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hospital_user -d hospital_timescale"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MQTT broker for ESP32 device communication
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"  # MQTT port
+      - "9001:9001"  # WebSockets port
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - hospital_network
+    restart: unless-stopped
+
+  # Optional: pgAdmin for database administration
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@hospital.com
+      PGADMIN_DEFAULT_PASSWORD: hospital_admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - hospital_network
+    depends_on:
+      - postgres
+      - timescaledb
+
+volumes:
+  postgres_data:
+  timescale_data:
+  pgadmin_data:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  hospital_network:
+    driver: bridge

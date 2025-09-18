@@ -1,14 +1,15 @@
 // api.ts - Backend Integration API
-import { User, Patient, VitalHistory, RoomProximity, TimeRange, Medication, Investigation, Therapy, CaseSheetEntry, ECGReading, MedicationHistoryEntry, Alert, NoteComment } from './types';
+import { User, Patient, VitalHistory, RoomProximity, TimeRange, Medication, Investigation, Therapy, ECGReading, NoteComment } from './types';
+import SecureStorage from './utils/secureStorage';
 
 // Backend configuration
-// For development with proxy, use empty string to make relative URLs
-// For production mobile app, this will be set to the actual backend URL
-const BACKEND_BASE_URL = process.env.NODE_ENV === 'development' ? '' : (process.env.REACT_APP_BACKEND_URL || 'https://localhost:8002');
-console.log('🔧 API Base URL:', BACKEND_BASE_URL || '(using relative URLs via proxy)');
-const BACKEND_WS_URL = process.env.REACT_APP_WS_URL || 'wss://localhost:8001';
+import { API_CONFIG, getApiUrl, getWsUrl } from './config/apiConfig';
 
-export class HospitalAPI {
+const BACKEND_BASE_URL = API_CONFIG.BACKEND_BASE_URL;
+console.log('🔧 API Base URL:', BACKEND_BASE_URL);
+const BACKEND_WS_URL = API_CONFIG.WS_BASE_URL;
+
+class HospitalAPI {
   
   // ================================
   // REQUEST SIGNING FOR SECURITY
@@ -63,8 +64,14 @@ export class HospitalAPI {
     const body = options.body as string || '';
     const timestamp = Math.floor(Date.now() / 1000).toString();
     
-    // Use a client-side secret key (in production, this should be from secure storage)
-    const secretKey = 'hospital-streaming-secret-key-change-in-production-2024';
+    // Use environment variable for secret key - fallback for development only
+    const secretKey = process.env.REACT_APP_HOSPITAL_SECRET_KEY || 
+      (process.env.NODE_ENV === 'development' ? 'dev-key-only-not-for-production' : '');
+    
+    if (!secretKey && process.env.NODE_ENV === 'production') {
+      console.error('🚨 CRITICAL: No secret key configured for production. Set REACT_APP_HOSPITAL_SECRET_KEY');
+      throw new Error('Authentication secret key not configured');
+    }
     
     const signature = await this.generateSignature(
       method,
@@ -89,8 +96,8 @@ export class HospitalAPI {
   // ================================
 
   static async fetchFromBackend(endpoint: string, options: RequestInit = {}): Promise<any> {
-    const url = `${BACKEND_BASE_URL}/api/v1${endpoint}`;
-    const token = localStorage.getItem('hospitalAccessToken');
+    const url = getApiUrl(endpoint);
+    const token = SecureStorage.getToken();
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -127,7 +134,7 @@ export class HospitalAPI {
 
   static createWebSocketConnection(endpoint: string): WebSocket | null {
     try {
-      return new WebSocket(`${BACKEND_WS_URL}/ws${endpoint}`);
+      return new WebSocket(getWsUrl(endpoint));
     } catch (error) {
       console.error('WebSocket connection failed:', error);
       return null;
@@ -148,7 +155,7 @@ export class HospitalAPI {
       console.log('✅ Backend NFC Authentication Success:', response.name);
       
       // Store the access token for future requests
-      localStorage.setItem('hospitalAccessToken', response.accessToken);
+      SecureStorage.setToken(response.accessToken);
       
       // Convert backend user format to frontend format
       const user: User = {
@@ -172,7 +179,10 @@ export class HospitalAPI {
     try {
       console.log('🔍 Attempting authentication for:', staffId, pin ? '(PIN)' : '(Password)');
       
-      const response = await fetch(`/api/v1/staff/login`, {
+      // Production authentication - backend only
+
+      // Try backend authentication
+      const response = await fetch(getApiUrl('/auth/simple-login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -195,18 +205,18 @@ export class HospitalAPI {
       
       // Store the access token for future API requests
       if (data.accessToken) {
-        localStorage.setItem('hospitalAccessToken', data.accessToken);
+        SecureStorage.setToken(data.accessToken);
         console.log('🔐 Access token stored for authenticated API calls');
       }
       
       // Convert backend user format to frontend format
       const user: User = {
-        id: data.staff.id,
-        name: data.staff.name,
-        role: data.staff.role,
-        nfcId: data.staff.nfcId || '',
-        staffId: data.staff.staffId,
-        department: data.staff.department
+        id: data.id,
+        name: data.name,
+        role: data.role,
+        nfcId: data.nfcCardId || '',
+        staffId: data.id, // Backend uses id as staffId
+        department: data.department || ''
       };
 
       return user;
@@ -218,7 +228,9 @@ export class HospitalAPI {
 
   static async checkAuthType(staffId: string): Promise<{ requiresPin: boolean, requiresPassword: boolean } | null> {
     try {
-      const response = await fetch(`/api/v1/staff/${staffId}`, {
+      // Production authentication type checking - backend only
+
+      const response = await fetch(getApiUrl(`/staff/${staffId}`), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -243,50 +255,84 @@ export class HospitalAPI {
     }
   }
 
+  /**
+   * Logout user and clear all secure storage
+   */
+  static logout(): void {
+    SecureStorage.clearAll();
+    console.log('🔐 User logged out, secure storage cleared');
+  }
+
   // ================================
   // PATIENT DATA METHODS
   // ================================
 
-  static async getPatients(ward?: string, department?: string, showAllDepts?: boolean): Promise<Patient[]> {
+  static async getPatient(patientId: string): Promise<Patient | null> {
     try {
-      let endpoint = '/patients?limit=100';
-      if (ward) endpoint += `&ward=${encodeURIComponent(ward)}`;
-      if (department) endpoint += `&department=${encodeURIComponent(department)}`;
+      console.log(`🔍 Fetching complete patient data for: ${patientId}`);
+      const backendData = await this.fetchFromBackend(`/patients/${patientId}`);
       
-      const backendData = await this.fetchFromBackend(endpoint);
-      
-      // Handle both array format and object format with patients array
-      const patientsArray = Array.isArray(backendData) ? backendData : backendData?.patients || [];
-      
-      if (patientsArray && Array.isArray(patientsArray)) {
-        console.log('✅ Using backend patient data', patientsArray.length, 'patients');
-        console.log('🔍 First patient sample:', patientsArray[0]);
+      if (backendData && backendData.id) {
+        console.log('✅ Got complete patient data:', backendData);
         
-        // Convert backend patient format to frontend format
-        return patientsArray.map((p: any) => ({
+        // Convert backend patient format to frontend format (same as in getPatients)
+        const p = backendData;
+        const patientObj = {
           id: p.id?.toString(),
-          name: p.name,
+          name: (() => {
+            const names = [p.firstName, p.lastName].filter(Boolean);
+            const fullName = names.join(' ');
+            // Only filter if the entire name is just placeholder words
+            if (['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'].includes(fullName.trim())) {
+              return p.firstName || p.lastName || 'Unknown Patient';
+            }
+            return fullName || 'Unknown Patient';
+          })(), // Handle missing/empty names and filter only complete placeholder names
           bedNumber: p.bedNumber,
-          ward: p.ward,
-          room: p.room,
-          department: p.department,
-          assignedDoctor: p.assignedDoctor,
-          // Enhanced clinical safety fields
+          ward: p.department || 'General Ward',
+          room: p.roomNumber,
+          department: p.department || 'General',
+          assignedDoctor: p.attendingphysicianname || p.attendingPhysician,
           codeStatus: p.codeStatus || 'fullCode',
           activeProblems: p.activeProblems || [],
           lastMedicationTime: p.lastMedicationTime,
           nextMedicationDue: p.nextMedicationDue,
-          allergies: (p.allergies || []).map((allergy: any) => ({
-            id: allergy.id,
-            allergen: allergy.allergen,
-            allergenType: allergy.allergenType,
-            reaction: allergy.reaction,
-            severity: allergy.severity,
-            onset: allergy.onset,
-            verificationStatus: allergy.verificationStatus,
-            recordedDate: allergy.recordedDate,
-            performedBy: allergy.performedBy
-          })),
+          allergies: (() => {
+            if (!p.allergies) return [];
+            
+            if (typeof p.allergies === 'string') {
+              if (!p.allergies.trim()) return [];
+              
+              const allergyStrings = p.allergies.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+              return allergyStrings.map((allergen: string, index: number) => ({
+                id: `allergy_${index}`,
+                allergen: allergen,
+                allergenType: 'unknown',
+                reaction: 'unknown',
+                severity: 'unknown',
+                onset: null,
+                verificationStatus: 'unverified',
+                recordedDate: null,
+                performedBy: null
+              }));
+            }
+            
+            if (Array.isArray(p.allergies)) {
+              return p.allergies.map((allergy: any) => ({
+                id: allergy.id,
+                allergen: allergy.allergen,
+                allergenType: allergy.allergenType,
+                reaction: allergy.reaction,
+                severity: allergy.severity,
+                onset: allergy.onset,
+                verificationStatus: allergy.verificationstatus, // Fixed: use backend field
+                recordedDate: allergy.recordeddate, // Fixed: use backend field
+                performedBy: allergy.performedbyname || allergy.performedby, // Fixed: use backend field
+              }));
+            }
+            
+            return [];
+          })(),
           vitals: p.vitals ? {
             heartRate: p.vitals.heartRate || 75,
             bloodPressure: p.vitals.bloodPressure || '120/80',
@@ -321,10 +367,10 @@ export class HospitalAPI {
           status: p.status || 'stable',
           alerts: p.alerts || [],
           admissionDate: p.admissionDate,
-          age: p.age,
-          gender: p.gender,
-          weight: p.weight,
-          diagnosis: p.diagnosis,
+          age: p.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : 0,
+          gender: p.gender || 'Unknown',
+          weight: p.weight || 70,
+          diagnosis: p.medicalHistory || p.diagnosis || 'Under evaluation',
           medications: (p.medications || []).map((med: any) => ({
             id: med.id,
             name: med.name,
@@ -332,72 +378,293 @@ export class HospitalAPI {
             frequency: med.frequency,
             route: med.route,
             status: med.status,
-            startDate: med.startDate,
-            endDate: med.endDate,
-            performedBy: med.performedBy,
-            createdAt: med.createdAt,
-            modifiedBy: med.modifiedBy,
-            updatedAt: med.updatedAt,
-            canEdit: med.canEdit,
-            history: med.history || []
+            startdate: med.startdate,
+            enddate: med.enddate,
+            duration: med.duration,
+            prescribedby: med.prescribedbyname || med.prescribedby,
+            createdat: med.createdat,
+            modifiedBy: med.modifiedby || null,
+            updatedat: med.updatedat,
+            canEdit: true,
+            history: []
           })),
           investigations: (p.investigations || []).map((inv: any) => ({
             id: inv.id,
             type: inv.type,
             name: inv.name,
-            createdAt: inv.createdAt,
-            scheduledAt: inv.scheduledAt,
-            completedAt: inv.completedAt,
+            createdat: inv.createdat,
+            scheduledat: inv.scheduledat,
+            completedat: inv.completedat,
             priority: inv.priority,
             status: inv.status,
-            performedBy: inv.performedBy,
+            performedby: inv.performedbyname || inv.performedby,
             results: inv.results,
             notes: inv.notes,
-            canEdit: inv.canEdit
+            canEdit: true
           })),
           therapies: (p.therapies || []).map((therapy: any) => ({
             id: therapy.id,
             type: therapy.type,
             description: therapy.description,
-            startDate: therapy.startDate,
-            endDate: therapy.endDate,
+            startdate: therapy.startdate,        // Fixed: use backend field
+            enddate: therapy.enddate,            // Fixed: use backend field
             frequency: therapy.frequency,
             duration: therapy.duration,
             status: therapy.status,
-            performedBy: therapy.performedBy,
-            createdAt: therapy.createdAt,
+            performedby: therapy.performedbyname || therapy.performedby, // Fixed: use backend field
+            createdat: therapy.createdat,        // Fixed: use backend field
             notes: therapy.notes,
-            canEdit: therapy.canEdit
+            sessions: [],
+            canEdit: true
           })),
           notes: (p.notes || []).map((note: any) => ({
             id: note.id,
             content: note.content,
+            authorId: note.authorid,             // Fixed: use backend field
+            authorName: note.authorname,         // Fixed: use backend field
+            authorRole: note.authorrole,         // Fixed: use backend field
             timestamp: note.timestamp,
-            authorName: note.authorName,
-            canEdit: note.canEdit
+            editedAt: note.editedat,             // Fixed: use backend field
+            isEdited: note.isedited || false,   // Fixed: use backend field
+            canEdit: this.canEditItem(note.timestamp)
           })),
-          caseSheet: (p.caseSheet || []).map((entry: any) => ({
-            id: entry.id,
-            timestamp: entry.timestamp,
-            type: entry.entryType,
-            description: entry.description,
-            performedBy: entry.performedBy,
-            canEdit: entry.canEdit,
-            details: entry.details
-          })),
+          caseSheet: [],
           handoffNotes: (p.handoffNotes || []).map((note: any) => ({
             id: note.id,
-            patientId: note.patientId,
+            patientId: note.patientid,           // Fixed: use backend field
             shift: note.shift,
-            fromNurse: note.fromNurse,
-            toNurse: note.toNurse,
+            fromNurse: note.fromnurse,           // Fixed: use backend field
+            toNurse: note.tonurse,               // Fixed: use backend field
             priority: note.priority,
             category: note.category,
             note: note.note,
             timestamp: note.timestamp,
             acknowledged: note.acknowledged,
-            performedBy: note.performedBy,
-            completedAt: note.completedAt
+            performedBy: note.performedby,       // Fixed: use backend field
+            completedAt: note.completedat        // Fixed: use backend field
+          }))
+        };
+        
+        // Add device assignment fields
+        (patientObj as any).assignedDeviceId = p.assignedDeviceId;
+        (patientObj as any).deviceStatus = p.deviceStatus;
+        (patientObj as any).deviceBattery = p.deviceBattery;
+        
+        // Load case sheet entries separately
+        try {
+          const caseSheetEntries = await this.getCaseEntries(patientId);
+          (patientObj as any).caseSheet = caseSheetEntries;
+        } catch (error) {
+          console.error('Failed to load case sheets:', error);
+          (patientObj as any).caseSheet = [];
+        }
+        
+        return patientObj;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`❌ Failed to fetch patient ${patientId}:`, error);
+      return null;
+    }
+  }
+
+  static async updatePatientVitals(patientId: string, vitals: any): Promise<boolean> {
+    try {
+      console.log(`🔄 Updating vitals for patient: ${patientId}`);
+      await this.fetchFromBackend(`/patients/${patientId}/vitals`, {
+        method: 'PUT',
+        body: JSON.stringify(vitals)
+      });
+      
+      console.log('✅ Patient vitals updated successfully');
+      return true;
+    } catch (error) {
+      console.warn('Failed to update patient vitals - ignoring error:', error);
+      return false; // Don't throw, just log and continue
+    }
+  }
+
+  static async getPatients(ward?: string, department?: string, showAllDepts?: boolean): Promise<Patient[]> {
+    try {
+      let endpoint = '/patients?limit=100';
+      if (ward) endpoint += `&ward=${encodeURIComponent(ward)}`;
+      if (department) endpoint += `&department=${encodeURIComponent(department)}`;
+
+      const backendData = await this.fetchFromBackend(endpoint);
+      
+      // Handle both array format and object format with patients array
+      const patientsArray = Array.isArray(backendData) ? backendData : backendData?.patients || [];
+      
+      if (patientsArray && Array.isArray(patientsArray)) {
+        // Filter out only fully discharged patients, keep active and pending_discharge
+        const activePatients = patientsArray.filter((p: any) => p.status !== 'discharged');
+
+        // Convert backend patient format to frontend format
+        return activePatients.map((p: any) => ({
+          id: p.id?.toString(),
+          name: (() => {
+            const names = [p.firstName, p.lastName].filter(Boolean);
+            const fullName = names.join(' ');
+            // Only filter if the entire name is just placeholder words
+            if (['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'].includes(fullName.trim())) {
+              return p.firstName || p.lastName || 'Unknown Patient';
+            }
+            return fullName || 'Unknown Patient';
+          })(), // Handle missing/empty names and filter only complete placeholder names
+          bedNumber: p.bedNumber,
+          ward: p.department || 'General Ward',
+          room: p.roomNumber,
+          department: p.department || 'General',
+          assignedDoctor: p.attendingphysicianname || p.attendingPhysician,
+          // Enhanced clinical safety fields
+          codeStatus: p.codeStatus || 'fullCode',
+          activeProblems: p.activeProblems || [],
+          lastMedicationTime: p.lastMedicationTime,
+          nextMedicationDue: p.nextMedicationDue,
+          allergies: (() => {
+            if (!p.allergies) return [];
+            
+            // Handle case where allergies might be a string
+            if (typeof p.allergies === 'string') {
+              if (!p.allergies.trim()) return [];
+              
+              // Parse common string formats
+              const allergyStrings = p.allergies.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+              return allergyStrings.map((allergen: string, index: number) => ({
+                id: `allergy_${index}`,
+                allergen: allergen,
+                allergenType: 'unknown',
+                reaction: 'unknown',
+                severity: 'unknown',
+                onset: null,
+                verificationStatus: 'unverified',
+                recordedDate: null,
+                performedBy: null
+              }));
+            }
+            
+            // Handle array format
+            if (Array.isArray(p.allergies)) {
+              return p.allergies.map((allergy: any) => ({
+                id: allergy.id,
+                allergen: allergy.allergen,
+                allergenType: allergy.allergenType,
+                reaction: allergy.reaction,
+                severity: allergy.severity,
+                onset: allergy.onset,
+                verificationStatus: allergy.verificationstatus, // Fixed: use backend field
+                recordedDate: allergy.recordeddate, // Fixed: use backend field
+                performedBy: allergy.performedbyname || allergy.performedby, // Fixed: use backend field
+              }));
+            }
+            
+            return [];
+          })(),
+          vitals: p.vitals ? {
+            heartRate: p.vitals.heartRate || 75,
+            bloodPressure: p.vitals.bloodPressure || '120/80',
+            bloodPressureValue: p.vitals.bloodPressureValue || 120,
+            temperature: p.vitals.temperature || 98.6,
+            respiratoryRate: p.vitals.respiratoryRate || 16,
+            oxygenSat: p.vitals.oxygenSat || 98,
+            ecg: p.vitals.ecg || 120,
+            eeg: p.vitals.eeg || 45,
+            isECGMode: p.vitals.isEcgMode !== undefined ? p.vitals.isEcgMode : true,
+            bioimpedance: p.vitals.bioimpedance || 500,
+            tremor: p.vitals.tremor || 0.0,
+            fallRisk: p.vitals.fallRisk || 'low',
+            lastUpdated: p.vitals.lastUpdated || new Date().toLocaleTimeString(),
+            lastSync: p.vitals.lastSync || new Date().toISOString()
+          } : {
+            heartRate: 75,
+            bloodPressure: '120/80',
+            bloodPressureValue: 120,
+            temperature: 98.6,
+            respiratoryRate: 16,
+            oxygenSat: 98,
+            ecg: 120,
+            eeg: 45,
+            isECGMode: true,
+            bioimpedance: 500,
+            tremor: 0.0,
+            fallRisk: 'low',
+            lastUpdated: new Date().toLocaleTimeString(),
+            lastSync: new Date().toISOString()
+          },
+          status: p.status || 'stable',
+          alerts: p.alerts || [],
+          admissionDate: p.admissionDate,
+          age: p.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : 0,
+          gender: p.gender || 'Unknown',
+          weight: p.weight || 70,
+          diagnosis: p.medicalHistory || p.diagnosis || 'Under evaluation',
+          medications: (p.medications || []).map((med: any) => ({
+            id: med.id,
+            name: med.name,
+            dosage: med.dosage,
+            frequency: med.frequency,
+            route: med.route,
+            status: med.status,
+            startDate: med.startdate,        // Fixed: use backend field
+            endDate: med.enddate,            // Fixed: use backend field
+            duration: med.duration,
+            prescribedby: med.prescribedbyname || med.prescribedby, // Fixed: use backend field
+            createdAt: med.createdat,        // Fixed: use backend field
+            modifiedBy: med.modifiedby || null, // Fixed: use backend field
+            updatedAt: med.updatedat,        // Fixed: use backend field
+            canEdit: true,
+            history: []
+          })),
+          investigations: (p.investigations || []).map((inv: any) => ({
+            id: inv.id,
+            type: inv.type,
+            name: inv.name,
+            createdAt: inv.createdat,        // Fixed: backend uses lowercase
+            scheduledAt: inv.scheduledat,    // Fixed: backend uses lowercase
+            completedAt: inv.completedat,    // Fixed: backend uses lowercase
+            priority: inv.priority,
+            status: inv.status,
+            performedBy: inv.performedbyname || inv.performedby, // Fixed: backend uses lowercase
+            results: inv.results,
+            notes: inv.notes,
+            canEdit: true
+          })),
+          therapies: (p.therapies || []).map((therapy: any) => ({
+            id: therapy.id,
+            type: therapy.type,
+            description: therapy.description,
+            startdate: therapy.startdate,
+            enddate: therapy.enddate,
+            frequency: therapy.frequency,
+            duration: therapy.duration,
+            status: therapy.status,
+            performedby: therapy.performedby,
+            createdat: therapy.createdat,
+            notes: therapy.notes,
+            canEdit: true
+          })),
+          notes: (p.notes || []).map((note: any) => ({
+            id: note.id,
+            content: note.content,
+            timestamp: note.timestamp,
+            authorName: note.authorname,     // Fixed: use backend field
+            canEdit: true
+          })),
+          caseSheet: [],
+          handoffNotes: (p.handoffNotes || []).map((note: any) => ({
+            id: note.id,
+            patientId: note.patientid,           // Fixed: use backend field
+            shift: note.shift,
+            fromNurse: note.fromnurse,           // Fixed: use backend field
+            toNurse: note.tonurse,               // Fixed: use backend field
+            priority: note.priority,
+            category: note.category,
+            note: note.note,
+            timestamp: note.timestamp,
+            acknowledged: note.acknowledged,
+            performedBy: note.performedby,       // Fixed: use backend field
+            completedAt: note.completedat        // Fixed: use backend field
           }))
         }));
       }
@@ -652,10 +919,39 @@ export class HospitalAPI {
   }
 
   static canEditItem(timestamp: string): boolean {
-    const itemTime = new Date(timestamp).getTime();
-    const now = new Date().getTime();
-    const minutesDiff = (now - itemTime) / (1000 * 60);
-    return minutesDiff <= 15; // Allow editing for 15 minutes only
+    try {
+      if (!timestamp) {
+        console.warn('🕒 Edit time check: No timestamp provided');
+        return false;
+      }
+
+      const itemTime = new Date(timestamp).getTime();
+      const now = new Date().getTime();
+      
+      // Handle invalid dates
+      if (isNaN(itemTime)) {
+        console.warn('🕒 Edit time check: Invalid timestamp format:', timestamp);
+        return false;
+      }
+      
+      const minutesDiff = (now - itemTime) / (1000 * 60);
+      const canEdit = minutesDiff >= 0 && minutesDiff <= 15; // Must be positive (not future) and within 15 minutes
+      
+      console.log('🕒 Edit time check:', {
+        timestamp,
+        itemTime: new Date(timestamp).toISOString(),
+        now: new Date(now).toISOString(),
+        minutesDiff: Math.round(minutesDiff * 100) / 100,
+        canEdit,
+        isFuture: minutesDiff < 0,
+        isValid: !isNaN(itemTime)
+      });
+      
+      return canEdit;
+    } catch (error) {
+      console.error('🕒 Edit time check error:', error, 'timestamp:', timestamp);
+      return false;
+    }
   }
 
   static canEditNote(note: NoteComment, userId: string): boolean {
@@ -688,9 +984,9 @@ export class HospitalAPI {
   // NOTE & COMMENT METHODS
   // ================================
 
-  static async addNoteComment(patientId: string, content: string, userId: string, userName?: string, userRole?: string): Promise<boolean> {
+  static async addNoteComment(patientId: string, content: string, userId: string, userName?: string, userRole?: string): Promise<any> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/notes`, {
+      const response = await this.fetchFromBackend(`/patients/${patientId}/notes?created_by=${encodeURIComponent(userId)}`, {
         method: 'POST',
         body: JSON.stringify({
           content: content,
@@ -700,8 +996,8 @@ export class HospitalAPI {
         })
       });
 
-      
-      return true;
+      // Return the created note data from backend
+      return response;
     } catch (error) {
       console.error('Failed to add note:', error);
       throw error;
@@ -710,7 +1006,7 @@ export class HospitalAPI {
 
   static async editNoteComment(patientId: string, noteId: string, newContent: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/notes/${noteId}`, {
+      await this.fetchFromBackend(`/patients/${patientId}/notes/${noteId}`, {
         method: 'PUT',
         body: JSON.stringify({
           content: newContent,
@@ -747,7 +1043,7 @@ export class HospitalAPI {
 
   static async addMedication(patientId: string, medication: Omit<Medication, 'id' | 'history'>, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/medications`, {
+      await this.fetchFromBackend(`/patients/${patientId}/medications?created_by=${encodeURIComponent(userId)}`, {
         method: 'POST',
         body: JSON.stringify({
           name: medication.name,
@@ -755,9 +1051,9 @@ export class HospitalAPI {
           frequency: medication.frequency,
           route: medication.route,
           status: medication.status,
-          startDate: medication.startDate,
-          performedBy: medication.performedBy,
-          userId: userId
+          startdate: medication.startdate,
+          duration: medication.duration,
+          prescribedby: medication.prescribedby
         })
       });
 
@@ -777,7 +1073,7 @@ export class HospitalAPI {
         ? { status: statusOrUpdates } 
         : statusOrUpdates;
 
-      await this.fetchFromBackend(`/patients/patients/${patientId}/medications/${medicationId}`, {
+      await this.fetchFromBackend(`/patients/${patientId}/medications/${medicationId}`, {
         method: 'PUT',
         body: JSON.stringify({
           ...updates,
@@ -804,6 +1100,23 @@ export class HospitalAPI {
       return true;
     } catch (error) {
       console.error('Failed to discontinue medication:', error);
+      throw error;
+    }
+  }
+
+  static async recordMedicationAdministration(patientId: string, medicationId: string, userId: string): Promise<boolean> {
+    try {
+      await this.fetchFromBackend(`/patients/${patientId}/medications/${medicationId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ 
+          status: 'administered',
+          updatedBy: userId
+        })
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to record medication administration:', error);
       throw error;
     }
   }
@@ -846,16 +1159,15 @@ export class HospitalAPI {
 
   static async addInvestigation(patientId: string, investigation: Omit<Investigation, 'id'>, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/investigations`, {
+      await this.fetchFromBackend(`/patients/${patientId}/investigations?created_by=${encodeURIComponent(userId)}`, {
         method: 'POST',
         body: JSON.stringify({
           type: investigation.type,
           name: investigation.name,
           priority: investigation.priority,
           notes: investigation.notes,
-          performedBy: investigation.performedBy,
-          createdAt: investigation.createdAt,
-          userId: userId
+          performedby: investigation.performedby,
+          createdat: investigation.createdat
         })
       });
 
@@ -867,9 +1179,9 @@ export class HospitalAPI {
     }
   }
 
-  static async updateInvestigation(patientId: string, investigationId: string, status: 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled', userId: string): Promise<boolean> {
+  static async updateInvestigation(patientId: string, investigationId: string, status: 'ordered' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled', userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/investigations/${investigationId}`, {
+      await this.fetchFromBackend(`/patients/${patientId}/investigations/${investigationId}`, {
         method: 'PUT',
         body: JSON.stringify({
           status: status,
@@ -887,7 +1199,7 @@ export class HospitalAPI {
 
   static async completeInvestigation(patientId: string, investigationId: string, results: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/investigations/${investigationId}/complete`, {
+      await this.fetchFromBackend(`/patients/${patientId}/investigations/${investigationId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
           results: results,
@@ -905,16 +1217,15 @@ export class HospitalAPI {
 
   static async addTherapy(patientId: string, therapy: Omit<Therapy, 'id'>, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/therapies`, {
+      await this.fetchFromBackend(`/patients/${patientId}/therapies?created_by=${encodeURIComponent(userId)}`, {
         method: 'POST',
         body: JSON.stringify({
           type: therapy.type,
           description: therapy.description,
           frequency: therapy.frequency,
           duration: therapy.duration,
-          performedBy: therapy.performedBy,
-          startDate: therapy.startDate,
-          userId: userId
+          performedby: therapy.performedby,
+          startdate: therapy.startdate
         })
       });
 
@@ -928,7 +1239,7 @@ export class HospitalAPI {
 
   static async updateTherapy(patientId: string, therapyId: string, status: 'active' | 'completed' | 'cancelled', userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/therapies/${therapyId}`, {
+      await this.fetchFromBackend(`/patients/${patientId}/therapies/${therapyId}`, {
         method: 'PUT',
         body: JSON.stringify({
           status: status,
@@ -946,7 +1257,7 @@ export class HospitalAPI {
 
   static async addTherapySession(patientId: string, therapyId: string, sessionData: { duration: number; notes: string; therapist: string; patientResponse: string }, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/patients/patients/${patientId}/therapies/${therapyId}/sessions`, {
+      await this.fetchFromBackend(`/patients/${patientId}/therapies/${therapyId}/sessions`, {
         method: 'POST',
         body: JSON.stringify({
           ...sessionData,
@@ -1019,12 +1330,8 @@ export class HospitalAPI {
 
   static async getFreeDevices(staffId: string, deviceType?: string, location?: string): Promise<any[]> {
     try {
-      const params = new URLSearchParams({ staffId: staffId });
-      if (deviceType) params.append('deviceType', deviceType);
-      if (location) params.append('location', location);
-      
-      const response = await this.fetchFromBackend(`/device-assignment/free-devices?${params}`);
-      return response || [];
+      const response = await this.fetchFromBackend(`/watch-management/available`);
+      return response?.availableWatches || [];
     } catch (error) {
       console.error('Failed to get free devices:', error);
       throw error;
@@ -1043,13 +1350,13 @@ export class HospitalAPI {
 
   static async assignDevice(staffId: string, deviceId: string, patientId: string, assignmentReason: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/device-assignment/assign?staffId=${staffId}`, {
+      const response = await this.fetchFromBackend(`/devices/assign`, {
         method: 'POST',
         body: JSON.stringify({
           deviceId: deviceId,
           patientId: patientId,
-          performedBy: staffId,
-          assignmentReason: assignmentReason
+          assignedBy: staffId,
+          notes: assignmentReason
         })
       });
       return response;
@@ -1060,13 +1367,12 @@ export class HospitalAPI {
   }
 
   static async unassignDevice(staffId: string, deviceId: string, unassignmentReason: string = 'patientDischarge'): Promise<boolean> {
+    const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
+    console.log('🌐 API.unassignDevice called:', { staffId, deviceId, unassignmentReason, caller });
+    console.trace('API unassign call stack');
     try {
-      const response = await this.fetchFromBackend(`/device-assignment/unassign/${deviceId}?staffId=${staffId}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          performedBy: staffId,
-          unassignmentReason: unassignmentReason
-        })
+      const response = await this.fetchFromBackend(`/devices/unassign/${deviceId}?unassigned_by=${staffId}`, {
+        method: 'POST'
       });
       return response.success;
     } catch (error) {
@@ -1077,15 +1383,9 @@ export class HospitalAPI {
 
   static async reassignDevice(staffId: string, oldDeviceId: string, newDeviceId: string, reassignmentReason: string = 'deviceMalfunction'): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/device-assignment/reassign?staffId=${staffId}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          oldDeviceId: oldDeviceId,
-          newDeviceId: newDeviceId,
-          performedBy: staffId,
-          reassignmentReason: reassignmentReason
-        })
-      });
+      // Backend doesn't have reassign endpoint, so we unassign then assign
+      await this.unassignDevice(staffId, oldDeviceId, reassignmentReason);
+      const response = await this.assignDevice(staffId, newDeviceId, '', reassignmentReason);
       return response;
     } catch (error) {
       console.error('Failed to reassign device:', error);
@@ -1095,8 +1395,8 @@ export class HospitalAPI {
 
   static async getPatientDevice(staffId: string, patientId: string): Promise<any | null> {
     try {
-      const response = await this.fetchFromBackend(`/device-assignment/patient/${patientId}/device?staffId=${staffId}`);
-      return response;
+      const response = await this.fetchFromBackend(`/devices/assignments/?patient_id=${patientId}&active_only=true`);
+      return response?.[0] || null; // Return first active assignment or null
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return null; // No device assigned
@@ -1132,6 +1432,70 @@ export class HospitalAPI {
     } catch (error) {
       console.error('Failed to bulk unassign patient devices:', error);
       throw error;
+    }
+  }
+
+  // ================================
+  // NFC INTERACTION LOGGING
+  // ================================
+
+  static async logNfcTap(patientWatchId: string, staffNfcId: string, location?: string): Promise<boolean> {
+    try {
+      // Send to backend for storage
+      await this.fetchFromBackend('/interactions/nfc-tap', {
+        method: 'POST',
+        body: JSON.stringify({
+          patientWatchId,
+          staffNfcId,
+          timestamp: new Date().toISOString(),
+          location: location || 'unknown',
+          deviceType: 'esp32_watch',
+          interactionType: 'staffPatientProximity'
+        })
+      });
+      
+      // Also log locally for audit trail
+      try {
+        const auditService = (await import('./services/auditService')).default;
+        await auditService.logNfcInteraction(
+          staffNfcId, 
+          patientWatchId.replace('WATCH-', ''), // Extract patient ID from watch ID
+          patientWatchId, 
+          location,
+          {
+            nfcTapLogged: true,
+            backendSynced: true
+          }
+        );
+      } catch (auditError) {
+        console.warn('Local audit logging failed for NFC interaction:', auditError);
+      }
+      
+      console.log('✅ NFC interaction logged successfully:', { patientWatchId, staffNfcId, location });
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to log NFC interaction:', error);
+      
+      // Try to log locally even if backend fails (for offline resilience)
+      try {
+        const auditService = (await import('./services/auditService')).default;
+        await auditService.logNfcInteraction(
+          staffNfcId,
+          patientWatchId.replace('WATCH-', ''),
+          patientWatchId,
+          location,
+          {
+            nfcTapLogged: true,
+            backendSynced: false,
+            offlineMode: true,
+            error: error instanceof Error ? error.message : String(error)
+          }
+        );
+      } catch (auditError) {
+        console.error('Both backend and local audit logging failed:', auditError);
+      }
+      
+      return false;
     }
   }
 
@@ -1186,7 +1550,189 @@ export class HospitalAPI {
       throw error;
     }
   }
+
+  // ================================
+  // CASE SHEET METHODS
+  // ================================
+
+  static async getCaseEntries(patientId: string): Promise<any[]> {
+    try {
+      const response = await this.fetchFromBackend(`/patients/${patientId}/case-entries`);
+      if (!response || !Array.isArray(response)) {
+        return [];
+      }
+      
+      // Apply field mappings for case sheet entries
+      return response.map((entry: any) => ({
+        id: entry.id,
+        timestamp: entry.timestamp,
+        type: entry.entryType || entry.entrytype || entry.type,  // Fixed: backend sends entryType (camelCase)
+        description: entry.description,
+        performedBy: entry.performedbyname || entry.performedby || entry.performedBy,
+        performedbyname: entry.performedbyname,  // Keep original field for CaseSheetBook component
+        details: entry.details,
+        canEdit: this.canEditItem(entry.timestamp)
+      }));
+    } catch (error) {
+      console.error('❌ Failed to fetch case entries:', error);
+      return [];
+    }
+  }
+
+  static async addCaseEntry(patientId: string, entryData: {
+    entryType: string;
+    description: string;
+    performedBy: string;
+  }): Promise<boolean> {
+    try {
+      await this.fetchFromBackend(`/patients/${patientId}/case-entries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(entryData)
+      });
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to add case entry:', error);
+      return false;
+    }
+  }
 }
+
 
 // Export the API class
 export default HospitalAPI;
+
+// ================================
+// EXPORTED CONVENIENCE FUNCTIONS
+// ================================
+
+export const fetchAvailableDevices = async () => {
+  try {
+    return await HospitalAPI.fetchFromBackend('/devices/available');
+  } catch (error) {
+    console.error('Failed to fetch available devices:', error);
+    return [];
+  }
+};
+
+export const assignDeviceToPatient = async (patientId: string, deviceId: string, reason: string) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/assign-device`, {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId,
+        reason,
+        assignedAt: new Date().toISOString()
+      })
+    });
+    return { success: true, ...response };
+  } catch (error) {
+    console.error('Failed to assign device:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Assignment failed' };
+  }
+};
+
+export const replacePatientDevice = async (patientId: string, newDeviceId: string, reason: string) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/replace-device`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        newDeviceId,
+        reason,
+        replacedAt: new Date().toISOString()
+      })
+    });
+    return { success: true, ...response };
+  } catch (error) {
+    console.error('Failed to replace device:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Replacement failed' };
+  }
+};
+
+export const detachDeviceFromPatient = async (patientId: string, reason: string) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/detach-device`, {
+      method: 'DELETE',
+      body: JSON.stringify({
+        reason,
+        detachedAt: new Date().toISOString()
+      })
+    });
+    return { success: true, ...response };
+  } catch (error) {
+    console.error('Failed to detach device:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Detachment failed' };
+  }
+};
+
+export const addMedication = async (patientId: string, medication: any) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/medications`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...medication,
+        addedAt: new Date().toISOString(),
+        status: 'active'
+      })
+    });
+    return { success: true, medication: response };
+  } catch (error) {
+    console.error('Failed to add medication:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to add medication' };
+  }
+};
+
+export const addInvestigation = async (patientId: string, investigation: any) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/investigations`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...investigation,
+        orderedDate: new Date().toISOString(),
+        status: investigation.status || 'pending'
+      })
+    });
+    return { success: true, investigation: response };
+  } catch (error) {
+    console.error('Failed to add investigation:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to add investigation' };
+  }
+};
+
+export const addTherapy = async (patientId: string, therapy: any) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/therapies`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...therapy,
+        orderedDate: new Date().toISOString(),
+        status: therapy.status || 'scheduled'
+      })
+    });
+    return { success: true, therapy: response };
+  } catch (error) {
+    console.error('Failed to add therapy:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to add therapy' };
+  }
+};
+
+export const addNote = async (patientId: string, content: string, noteType: string) => {
+  try {
+    const response = await HospitalAPI.fetchFromBackend(`/patients/${patientId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({
+        content,
+        noteType,
+        timestamp: new Date().toISOString(),
+        canEdit: true,
+        isEdited: false
+      })
+    });
+    return { success: true, note: response };
+  } catch (error) {
+    console.error('Failed to add note:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to add note' };
+  }
+};

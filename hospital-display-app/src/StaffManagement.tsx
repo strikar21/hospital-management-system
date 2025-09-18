@@ -60,7 +60,7 @@ const StaffManagement: React.FC = () => {
   ];
   
   const PASSWORD_ROLES = [
-    "Administrator", "Provisioner", "Admin"
+    "Administrator", "Provisioner"
   ];
   
   const requiresPin = (role: string) => PIN_ROLES.includes(role);

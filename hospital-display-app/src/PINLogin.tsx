@@ -34,18 +34,18 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
   };
 
   const handlePINDigit = (digit: string) => {
-    if (pin.length < 6) {
+    if (pin.length < 4) {
       const newPIN = pin + digit;
       setPIN(newPIN);
       
       // Auto-focus next input
       const nextIndex = newPIN.length;
-      if (nextIndex < 6 && inputRefs.current[nextIndex]) {
+      if (nextIndex < 4 && inputRefs.current[nextIndex]) {
         inputRefs.current[nextIndex]?.focus();
       }
       
-      // Auto-submit when 6 digits entered
-      if (newPIN.length === 6) {
+      // Auto-submit when 4 digits entered
+      if (newPIN.length === 4) {
         handleLogin(newPIN);
       }
     }
@@ -64,7 +64,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
   };
 
   const handleLogin = async (pinToUse: string = pin) => {
-    if (currentStaffId && pinToUse.length === 6) {
+    if (currentStaffId && pinToUse.length === 4) {
       const success = await onLogin(currentStaffId, pinToUse);
       if (!success) {
         setPIN('');
@@ -79,16 +79,16 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
     if (value.length <= 1 && /^\d*$/.test(value)) {
       const newPIN = pin.split('');
       newPIN[index] = value;
-      const updatedPIN = newPIN.join('').slice(0, 6);
+      const updatedPIN = newPIN.join('').slice(0, 4);
       setPIN(updatedPIN);
       
       // Auto-focus next input
-      if (value && index < 5 && inputRefs.current[index + 1]) {
+      if (value && index < 3 && inputRefs.current[index + 1]) {
         inputRefs.current[index + 1]?.focus();
       }
       
-      // Auto-submit when 6 digits
-      if (updatedPIN.length === 6) {
+      // Auto-submit when 4 digits
+      if (updatedPIN.length === 4) {
         handleLogin(updatedPIN);
       }
     }
@@ -116,7 +116,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
             PIN ({currentStaffId})
           </label>
           <div className="flex justify-center space-x-3">
-            {[0, 1, 2, 3, 4, 5].map((index) => (
+            {[0, 1, 2, 3].map((index) => (
               <input
                 key={index}
                 ref={(el) => { inputRefs.current[index] = el; }}
@@ -139,7 +139,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
             <button
               key={digit}
               onClick={() => handlePINDigit(digit.toString())}
-              disabled={loading || pin.length >= 6}
+              disabled={loading || pin.length >= 4}
               className="h-14 text-xl font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
             >
               {digit}
@@ -230,7 +230,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
           
           {/* PIN Display */}
           <div className="flex justify-center space-x-3">
-            {[0, 1, 2, 3, 4, 5].map((index) => (
+            {[0, 1, 2, 3].map((index) => (
               <input
                 key={index}
                 ref={(el) => { inputRefs.current[index] = el; }}
@@ -252,7 +252,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
               <button
                 key={digit}
                 onClick={() => handlePINDigit(digit.toString())}
-                disabled={loading || pin.length >= 6}
+                disabled={loading || pin.length >= 4}
                 className="h-14 text-xl font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
               >
                 {digit}
@@ -261,7 +261,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
             <div /> {/* Empty space */}
             <button
               onClick={() => handlePINDigit('0')}
-              disabled={loading || pin.length >= 6}
+              disabled={loading || pin.length >= 4}
               className="h-14 text-xl font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
             >
               0
