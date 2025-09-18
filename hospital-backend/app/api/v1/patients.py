@@ -175,6 +175,11 @@ async def get_all_patients(
                 transformed_dict = transform_patient_to_camel(patient_dict)
                 patients.append(transformed_dict)
             
+            # Debug logging to check device assignments
+            for patient in patients:
+                if patient.get('firstName') == 'Sarah' and patient.get('lastName') == 'Johnson':
+                    logger.info(f"🔍 Sarah Johnson patient data: assignedDeviceId={patient.get('assignedDeviceId')}")
+
             logger.info(f"📋 Retrieved {len(patients)} patients")
             return JSONResponse(content=patients)
             

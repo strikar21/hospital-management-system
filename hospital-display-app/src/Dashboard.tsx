@@ -182,6 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     try {
       // TEMPORARILY BYPASS ALL FILTERING - JUST GET ALL PATIENTS
       let patientsData: Patient[] = await HospitalAPI.getPatients(undefined, undefined, true);
+      console.log('👥 Dashboard loaded patients with device assignments:', patientsData.map((p: any) => `${p.firstName} ${p.lastName} - Device: ${p.assignedDeviceId || 'None'}`));
       setPatients(patientsData);
       setLastSync(new Date());
     } catch (error) {

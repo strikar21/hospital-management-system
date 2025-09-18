@@ -170,7 +170,9 @@ def transform_patient_to_camel(patient_data: Dict[str, Any]) -> Dict[str, Any]:
         'ipaddress': 'ipAddress',
         'useragent': 'userAgent',
         'userid': 'userId',
-        'dischargerstatus': 'dischargeStatus'
+        'dischargerstatus': 'dischargeStatus',
+        'assignedat': 'assignedAt',
+        'unassignedat': 'unassignedAt'
     }
     
     # Apply specific mappings

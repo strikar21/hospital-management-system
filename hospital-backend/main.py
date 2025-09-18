@@ -17,7 +17,6 @@ from app.core.config import settings
 from app.core.database import create_tables, create_timescale_tables, get_db_connection
 from app.api.v1.auth import router as auth_router
 from app.api.v1.patients import router as patients_router
-from app.api.v1.devices import router as devices_router
 from app.api.v1.staff import router as staff_router
 from app.api.v1.admission import router as admission_router
 from app.api.v1.websocket import router as websocket_router
@@ -54,7 +53,6 @@ app.add_middleware(
 # Include API routers - Use settings for consistent API versioning
 app.include_router(auth_router, prefix=f"{settings.api_v1_str}/auth", tags=["Authentication"])
 app.include_router(patients_router, prefix=f"{settings.api_v1_str}/patients", tags=["Patients"])
-app.include_router(devices_router, prefix=f"{settings.api_v1_str}/devices", tags=["Devices"])
 app.include_router(staff_router, prefix=f"{settings.api_v1_str}/staff", tags=["Staff"])
 app.include_router(admission_router, prefix=f"{settings.api_v1_str}/admission", tags=["Admissions"])
 app.include_router(websocket_router, prefix=f"{settings.api_v1_str}/ws", tags=["WebSocket"])

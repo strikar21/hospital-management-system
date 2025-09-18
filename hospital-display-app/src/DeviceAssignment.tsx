@@ -54,6 +54,8 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const [assignments, setAssignments] = useState<DeviceAssignment[]>([]);
   const [assignedDevices, setAssignedDevices] = useState<any[]>([]);
   const [poolStatus, setPoolStatus] = useState<any>(null);
+  const [availableWatches, setAvailableWatches] = useState<any[]>([]);
+  const [assignedWatches, setAssignedWatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<string>('');
@@ -61,6 +63,8 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const [assignmentReason, setAssignmentReason] = useState('patientAdmission');
   const [deviceFilter, setDeviceFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
+  const [patientFilter, setPatientFilter] = useState('all');
+  const [wardFilter, setWardFilter] = useState('all');
   const [showSuccess, setShowSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +104,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
     try {
       const data = await HospitalAPI.getPatients();
       setPatients(data);
+      console.log('👥 Loaded patients with device assignments:', data.map((p: any) => `${p.name || p.firstName + ' ' + p.lastName} - Device: ${p.assignedDeviceId || 'None'}`));
     } catch (error) {
       console.error('Error loading patients:', error);
       showMessage('Failed to load patient list', true);
@@ -108,8 +113,47 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
   const loadPoolStatus = async () => {
     try {
-      const data = await HospitalAPI.getDevicePoolStatus(currentUser.staffId);
-      setPoolStatus(data);
+      // Get available and assigned watches
+      const [availableData, assignedData] = await Promise.all([
+        HospitalAPI.getDevicePoolStatus(currentUser.staffId), // /watch-management/available
+        HospitalAPI.getAssignmentHistory(currentUser.staffId) // /watch-management/assigned
+      ]);
+
+      const availableWatchesList = availableData.availableWatches || [];
+      const assignedWatchesList = assignedData || [];
+
+      // Store the actual device lists
+      setAvailableWatches(availableWatchesList);
+      setAssignedWatches(assignedWatchesList);
+
+      // Create pool status summary
+      const totalDevices = availableWatchesList.length + assignedWatchesList.length;
+      const availableDevices = availableWatchesList.length;
+      const assignedDevices = assignedWatchesList.length;
+      const offlineDevices = availableWatchesList.filter((w: any) => w.connectionStatus === 'offline').length;
+      const lowBatteryDevices = availableWatchesList.filter((w: any) => w.batteryLevel && w.batteryLevel <= 20).length;
+
+      const poolStatusData = {
+        summary: {
+          totalDevices,
+          availableDevices,
+          assignedDevices,
+          offlineDevices,
+          lowBatteryDevices
+        },
+        byType: {
+          watch: {
+            total: totalDevices,
+            available: availableDevices,
+            assigned: assignedDevices,
+            offline: offlineDevices,
+            lowBattery: lowBatteryDevices
+          }
+        }
+      };
+
+      setPoolStatus(poolStatusData);
+      console.log('🔍 Pool status loaded:', { available: availableWatchesList.length, assigned: assignedWatchesList.length });
     } catch (error) {
       console.error('Error loading pool status:', error);
     }
@@ -126,21 +170,21 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
   const loadAssignedDevices = async () => {
     try {
-      // Get all active assignments - backend already includes patient names
-      const allAssignments = await HospitalAPI.getAssignmentHistory(currentUser.staffId, undefined, undefined, 100);
-      const activeAssignments = allAssignments.filter(assignment => assignment.status === 'active');
-      
+      // Use the same data source as pool status for consistency
+      const assignedData = await HospitalAPI.getAssignmentHistory(currentUser.staffId);
+      const activeAssignments = assignedData || [];
+
       // Backend already includes patient names - use them directly
-      const assignedWithPatients = activeAssignments.map((assignment) => ({
+      const assignedWithPatients = activeAssignments.map((assignment: any) => ({
         ...assignment,
         // Use backend-provided patient data, with fallbacks only if truly missing
         patientName: assignment.patientName || 'Unknown Patient',
-        patientBed: assignment.patientBed || 'N/A',
-        patientWard: assignment.patientWard || 'N/A'
+        location: assignment.location || 'N/A',
+        deviceName: assignment.watchDisplay || `Watch ${assignment.serialNumber}`
       }));
-      
+
       setAssignedDevices(assignedWithPatients);
-      console.log('🔍 Loaded assigned devices with patient names:', assignedWithPatients.map(a => `${a.deviceId} -> ${a.patientName}`));
+      console.log('🔍 Loaded assigned devices with patient names:', assignedWithPatients.map((a: any) => `${a.deviceId || a.id} -> ${a.patientName}`));
     } catch (error) {
       console.error('Error loading assigned devices:', error);
     }
@@ -209,11 +253,26 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
     setLoading(false);
   };
 
-  const filteredPatients = patients.filter(patient =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.bedNumber.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPatients = patients.filter(patient => {
+    // Text search filter
+    const matchesSearch = !searchTerm ||
+      patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.bedNumber.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Ward filter
+    const matchesWard = wardFilter === 'all' || patient.ward === wardFilter;
+
+    // Assignment status filter
+    const hasDevice = patient.assignedDeviceId != null;
+    const matchesAssignment =
+      patientFilter === 'all' ||
+      (patientFilter === 'assigned' && hasDevice) ||
+      (patientFilter === 'unassigned' && !hasDevice);
+
+
+    return matchesSearch && matchesWard && matchesAssignment;
+  });
 
   const getDeviceIcon = (deviceType: string) => {
     switch (deviceType) {
@@ -361,9 +420,22 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <DeviceIcon className="w-5 h-5 text-gray-600" />
+                          <div className="relative">
+                            <DeviceIcon className="w-5 h-5 text-gray-600" />
+                            {/* Device Status Dot */}
+                            <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                              device.status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                            }`} title={`Status: ${device.status}`}></div>
+                          </div>
                           <div>
-                            <div className="font-medium text-gray-900">{device.serialNumber}</div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-gray-900">{device.serialNumber}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                device.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {device.status}
+                              </span>
+                            </div>
                             <div className="text-sm text-gray-600">{device.id}</div>
                           </div>
                         </div>
@@ -372,11 +444,6 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                             <MapPin className="w-4 h-4 text-gray-400" />
                             <span className="text-xs text-gray-600">{device.location}</span>
                           </div>
-                          {device.status === 'online' ? (
-                            <Wifi className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <WifiOff className="w-4 h-4 text-red-500" />
-                          )}
                           {device.batteryLevel && (
                             <div className="flex items-center space-x-1">
                               <Battery className={`w-4 h-4 ${getBatteryColor(device.batteryLevel)}`} />
@@ -401,11 +468,11 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
             {/* Patient Selection & Assignment */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Select Patient
+                Select Patient ({filteredPatients.length})
               </h2>
               
-              {/* Patient Search */}
-              <div className="mb-4">
+              {/* Patient Search and Filters */}
+              <div className="mb-4 space-y-3">
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
                   <input
@@ -415,6 +482,30 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                     placeholder="Search patients by name, ID, or bed..."
                     className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md"
                   />
+                </div>
+
+                {/* Patient Filters */}
+                <div className="flex space-x-2">
+                  <select
+                    value={patientFilter}
+                    onChange={(e) => setPatientFilter(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Patients</option>
+                    <option value="unassigned">No Device Assigned</option>
+                    <option value="assigned">Has Device Assigned</option>
+                  </select>
+                  <select
+                    value={wardFilter}
+                    onChange={(e) => setWardFilter(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Wards</option>
+                    <option value="ICU">ICU</option>
+                    <option value="General Ward">General Ward</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Cardiology">Cardiology</option>
+                  </select>
                 </div>
               </div>
 
@@ -454,20 +545,35 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
-                        <User className="w-5 h-5 text-gray-600" />
+                        <div className="relative">
+                          <User className="w-5 h-5 text-gray-600" />
+                          {/* Device Assignment Status Dot */}
+                          <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                            patient.assignedDeviceId ? 'bg-green-500' : 'bg-gray-300'
+                          }`} title={patient.assignedDeviceId ? 'Has device assigned' : 'No device assigned'}></div>
+                        </div>
                         <div>
-                          <div className="font-medium text-gray-900">{patient.name}</div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium text-gray-900">{patient.name}</span>
+                            {patient.assignedDeviceId && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                Device Assigned
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-gray-600">
                             {patient.id} • Bed {patient.bedNumber} • {patient.ward}
                           </div>
                         </div>
                       </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${
-                        patient.status === 'stable' ? 'bg-green-100 text-green-800' :
-                        patient.status === 'critical' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {patient.status}
+                      <div className="flex items-center space-x-2">
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${
+                          patient.status === 'stable' ? 'bg-green-100 text-green-800' :
+                          patient.status === 'critical' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {patient.status}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -486,15 +592,12 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
         {/* Pool Status Tab */}
         {activeTab === 'pool' && (
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Device Pool Overview</h2>
-            </div>
-            
+          <div className="space-y-6">
+            {/* Summary Cards */}
             {poolStatus && (
-              <div className="p-6">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Device Pool Overview</h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">
                       {poolStatus.summary?.totalDevices || 0}
@@ -526,35 +629,146 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                     <div className="text-sm text-gray-600">Low Battery</div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Device Type Breakdown */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">By Device Type</h3>
-                  {Object.entries(poolStatus.byType || {}).map(([deviceType, stats]: [string, any]) => (
-                    <div key={deviceType} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium capitalize">{deviceType.replace('_', ' ')}s</h4>
-                        <div className="text-sm text-gray-600">
-                          {stats.available} of {stats.total} available
+            {/* Available Devices */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Available Devices ({availableWatches.length})</h2>
+                <p className="text-sm text-gray-600 mt-1">Click on a device to view details or assign to a patient</p>
+              </div>
+
+              {availableWatches.length > 0 ? (
+                <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                  {availableWatches.map((watch) => (
+                    <div
+                      key={watch.id}
+                      onClick={() => {
+                        setSelectedDevice(watch.id);
+                        setActiveTab('assign'); // Switch to assignment tab
+                      }}
+                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <Watch className="w-6 h-6 text-blue-600" />
+                            {/* Connection Status Dot */}
+                            <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                              (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-500' :
+                              (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} title={`Status: ${watch.connectionStatus || watch.status}`}></div>
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-gray-900">{watch.displayName || `Watch ${watch.serialNumber}`}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-100 text-green-800' :
+                                (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {watch.connectionStatus || watch.status}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600">ID: {watch.id}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-500 h-2 rounded-full"
-                          style={{ width: `${(stats.available / stats.total) * 100}%` }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-600 mt-1">
-                        <span>Available: {stats.available}</span>
-                        <span>Assigned: {stats.assigned}</span>
-                        <span>Offline: {stats.offline}</span>
-                        <span>Low Battery: {stats.lowBattery}</span>
+                        <div className="flex items-center space-x-4">
+                          {watch.batteryLevel && (
+                            <div className="flex items-center space-x-1">
+                              <Battery className={`w-4 h-4 ${
+                                watch.batteryLevel >= 60 ? 'text-green-500' :
+                                watch.batteryLevel >= 30 ? 'text-yellow-500' : 'text-red-500'
+                              }`} />
+                              <span className="text-xs text-gray-600">{watch.batteryLevel}%</span>
+                            </div>
+                          )}
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            Available
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Watch className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p className="text-gray-500 text-lg">No available devices</p>
+                  <p className="text-gray-400 text-sm">All devices are currently assigned</p>
+                </div>
+              )}
+            </div>
+
+            {/* Assigned Devices */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Assigned Devices ({assignedWatches.length})</h2>
+                <p className="text-sm text-gray-600 mt-1">Currently assigned to patients</p>
               </div>
-            )}
+
+              {assignedWatches.length > 0 ? (
+                <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                  {assignedWatches.map((watch) => (
+                    <div
+                      key={watch.id}
+                      onClick={() => {
+                        setActiveTab('assigned'); // Switch to assignment management tab
+                      }}
+                      className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <Watch className="w-6 h-6 text-green-600" />
+                            {/* Connection Status Dot */}
+                            <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                              (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-500' :
+                              (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} title={`Status: ${watch.connectionStatus || watch.status}`}></div>
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium text-gray-900">{watch.watchDisplay || `Watch ${watch.serialNumber}`}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-100 text-green-800' :
+                                (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {watch.connectionStatus || watch.status}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600">Patient: {watch.patientName}</div>
+                            <div className="text-sm text-gray-600">{watch.location}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          {watch.batteryLevel && (
+                            <div className="flex items-center space-x-1">
+                              <Battery className={`w-4 h-4 ${
+                                watch.batteryLevel >= 60 ? 'text-green-500' :
+                                watch.batteryLevel >= 30 ? 'text-yellow-500' : 'text-red-500'
+                              }`} />
+                              <span className="text-xs text-gray-600">{watch.batteryLevel}%</span>
+                            </div>
+                          )}
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            Assigned
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p className="text-gray-500 text-lg">No assigned devices</p>
+                  <p className="text-gray-400 text-sm">All devices are available in the pool</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -592,10 +806,10 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           <span className="font-medium text-gray-900">{assignment.patientName}</span>
                         </div>
                         <div className="text-sm text-gray-600">
-                          Bed {assignment.patientBed} • {assignment.patientWard}
+                          {assignment.location || 'Ward N/A'}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Assigned: {new Date(assignment.assignedAt).toLocaleDateString()} at {new Date(assignment.assignedAt).toLocaleTimeString()}
+                          Assigned: {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) + ' • ' + new Date(assignment.assignedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Unknown date'}
                         </div>
                       </div>
                       

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 
 from ...core.database import get_db_connection
-from ...utils.transformers import transform_dict_to_camel, serialize_dates_in_dict
+from ...utils.transformers import transform_dict_to_camel, serialize_dates_in_dict, transform_patient_to_camel
 from ...services.websocket_manager import connection_manager
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ async def get_assigned_watches():
             for row in rows:
                 assignment_dict = dict(row)
                 serialized_assignment = serialize_dates_in_dict(assignment_dict)
-                transformed_assignment = transform_dict_to_camel(serialized_assignment)
+                transformed_assignment = transform_patient_to_camel(serialized_assignment)
 
                 # Add display information
                 transformed_assignment['patientName'] = f"{assignment_dict['firstname']} {assignment_dict['lastname']}"

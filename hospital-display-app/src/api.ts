@@ -517,6 +517,7 @@ class HospitalAPI {
           room: p.roomNumber,
           department: p.department || 'General',
           assignedDoctor: p.attendingphysicianname || p.attendingPhysician,
+          assignedDeviceId: p.assignedDeviceId || null,
           // Enhanced clinical safety fields
           codeStatus: p.codeStatus || 'fullCode',
           activeProblems: p.activeProblems || [],
@@ -1340,7 +1341,7 @@ class HospitalAPI {
 
   static async getDevicePoolStatus(staffId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/device-assignment/pool-status?staffId=${staffId}`);
+      const response = await this.fetchFromBackend(`/watch-management/available`);
       return response;
     } catch (error) {
       console.error('Failed to get device pool status:', error);
@@ -1350,7 +1351,7 @@ class HospitalAPI {
 
   static async assignDevice(staffId: string, deviceId: string, patientId: string, assignmentReason: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/devices/assign`, {
+      const response = await this.fetchFromBackend(`/watch-management/assign`, {
         method: 'POST',
         body: JSON.stringify({
           deviceId: deviceId,
@@ -1371,8 +1372,13 @@ class HospitalAPI {
     console.log('🌐 API.unassignDevice called:', { staffId, deviceId, unassignmentReason, caller });
     console.trace('API unassign call stack');
     try {
-      const response = await this.fetchFromBackend(`/devices/unassign/${deviceId}?unassigned_by=${staffId}`, {
-        method: 'POST'
+      const response = await this.fetchFromBackend(`/watch-management/unassign`, {
+        method: 'POST',
+        body: JSON.stringify({
+          deviceId: deviceId,
+          unassignedBy: staffId,
+          reason: unassignmentReason
+        })
       });
       return response.success;
     } catch (error) {
@@ -1395,8 +1401,9 @@ class HospitalAPI {
 
   static async getPatientDevice(staffId: string, patientId: string): Promise<any | null> {
     try {
-      const response = await this.fetchFromBackend(`/devices/assignments/?patient_id=${patientId}&active_only=true`);
-      return response?.[0] || null; // Return first active assignment or null
+      const response = await this.fetchFromBackend(`/watch-management/assigned`);
+      const assignments = response.assignedWatches || [];
+      return assignments.find((assignment: any) => assignment.patientId === patientId) || null;
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return null; // No device assigned
@@ -1408,15 +1415,8 @@ class HospitalAPI {
 
   static async getAssignmentHistory(staffId: string, patientId?: string, deviceId?: string, limit: number = 50): Promise<any[]> {
     try {
-      const params = new URLSearchParams({ 
-        staffId: staffId,
-        limit: limit.toString()
-      });
-      if (patientId) params.append('patientId', patientId);
-      if (deviceId) params.append('deviceId', deviceId);
-      
-      const response = await this.fetchFromBackend(`/device-assignment/history?${params}`);
-      return response.history || [];
+      const response = await this.fetchFromBackend(`/watch-management/assigned`);
+      return response.assignedWatches || [];
     } catch (error) {
       console.error('Failed to get assignment history:', error);
       throw error;
@@ -1425,10 +1425,13 @@ class HospitalAPI {
 
   static async bulkUnassignPatientDevices(staffId: string, patientId: string, unassignmentReason: string = 'patientDischarge'): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(
-        `/device-assignment/bulk-operations/unassign-patient/${patientId}?staffId=${staffId}&performedBy=${staffId}&unassignmentReason=${unassignmentReason}`
-      );
-      return response;
+      // Get patient's assigned device and unassign it
+      const patientDevice = await this.getPatientDevice(staffId, patientId);
+      if (patientDevice) {
+        await this.unassignDevice(staffId, patientDevice.deviceId, unassignmentReason);
+        return { success: true, message: `Unassigned watch from patient ${patientId}` };
+      }
+      return { success: true, message: 'No devices to unassign' };
     } catch (error) {
       console.error('Failed to bulk unassign patient devices:', error);
       throw error;

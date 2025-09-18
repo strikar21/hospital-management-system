@@ -1,7 +1,7 @@
 // PatientCard.tsx - Fixed Complete File with Proper Scrolling
 
 import React, { useState, useEffect } from 'react';
-import { Heart, Activity, Thermometer, Droplets, AlertTriangle, Eye, CheckCircle, Zap, Brain, Wind, Waves } from 'lucide-react';
+import { Heart, Activity, Thermometer, Droplets, AlertTriangle, Eye, CheckCircle, Zap, Brain, Wind, Waves, Watch, WifiOff } from 'lucide-react';
 import { Patient, User } from './types';
 import { getVitalStatus, getStatusColor, getVitalStatusColor, detectArrhythmia, detectSeizureActivity, assessFallRisk, formatTimeOnly } from './utils';
 import auditService from './services/auditService';
@@ -251,9 +251,28 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       <div className="px-3 pt-6 pb-2 border-b flex-shrink-0 h-[90px]">
         <div className="flex items-start justify-between h-full">
           <div className="flex-1">
-            <h3 className="font-semibold text-base text-gray-900 truncate">{patient.name}</h3>
+            <div className="flex items-center space-x-2">
+              <h3 className="font-semibold text-base text-gray-900 truncate">{patient.name}</h3>
+              {/* Watch Status Indicator */}
+              {patient.assignedDeviceId ? (
+                <div className="flex items-center space-x-1" title="Watch assigned and monitoring">
+                  <Watch className="w-3 h-3 text-green-600" />
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-1" title="No watch assigned">
+                  <WifiOff className="w-3 h-3 text-gray-400" />
+                  <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                </div>
+              )}
+            </div>
             <p className="text-xs text-gray-600">
               {patient.age}y, {patient.gender}
+              {patient.assignedDeviceId && (
+                <span className="ml-2 text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">
+                  Watch Monitoring
+                </span>
+              )}
             </p>
             <p className="text-xs text-gray-600 truncate">
               {patient.department}
