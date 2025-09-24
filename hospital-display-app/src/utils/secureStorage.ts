@@ -129,10 +129,51 @@ class SecureStorage {
   }
 
   /**
+   * Store user data securely
+   */
+  static setUser(user: any): void {
+    if (!user) {
+      console.warn('Attempting to store empty user data');
+      return;
+    }
+
+    try {
+      const userJson = JSON.stringify(user);
+      const encrypted = this.encrypt(userJson);
+      localStorage.setItem('hospital_user', encrypted);
+      console.log('🔐 User data stored securely');
+    } catch (error) {
+      console.error('Failed to store user data securely:', error);
+    }
+  }
+
+  /**
+   * Retrieve user data securely
+   */
+  static getUser(): any | null {
+    try {
+      const encrypted = localStorage.getItem('hospital_user');
+      if (!encrypted) {
+        return null;
+      }
+
+      const decrypted = this.decrypt(encrypted);
+      return decrypted ? JSON.parse(decrypted) : null;
+    } catch (error) {
+      console.error('Failed to retrieve user data:', error);
+      localStorage.removeItem('hospital_user');
+      return null;
+    }
+  }
+
+  /**
    * Clear all secure storage (for logout)
    */
   static clearAll(): void {
     this.removeToken();
+    localStorage.removeItem('hospital_user');
+    localStorage.removeItem('currentUser');
+
     // Remove any other sensitive data
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -141,11 +182,11 @@ class SecureStorage {
         keysToRemove.push(key);
       }
     }
-    
+
     keysToRemove.forEach(key => {
       localStorage.removeItem(key);
     });
-    
+
     console.log('🧹 All secure storage cleared');
   }
 }

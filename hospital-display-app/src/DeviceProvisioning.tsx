@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  Watch, Save, X, Activity, MapPin, Battery, 
-  CheckCircle, AlertCircle, Wifi, Settings, Plus
+import {
+  Watch, Save, X, Activity,
+  CheckCircle, AlertCircle, Settings, Plus
 } from 'lucide-react';
-import { User as UserType } from './types';
-import HospitalAPI from './api';
-import { canManageDevices, canManageNFC } from './utils';
+import { user as UserType } from './types';
+import { canManageDevices } from './utils';
+import { getApiUrl } from './config/apiConfig';
+// Removed unused HospitalAPI import
 
 interface DeviceProvisioningProps {
   currentUser: UserType;
@@ -19,11 +20,11 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
   const [formData, setFormData] = useState({
     deviceId: '',
     name: '',
-    deviceType: 'watch',
+    devicetype: 'watch',
     location: 'ICU',
-    macAddress: '',
-    ipAddress: '',
-    firmwareVersion: ''
+    macaddress: '',
+    ipaddress: '',
+    firmwareversion: ''
   });
   
   const [loading, setLoading] = useState(false);
@@ -64,15 +65,15 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
       
       const deviceData = {
         // Backend will generate deviceId and name
-        deviceType: formData.deviceType,
+        devicetype: formData.devicetype,
         location: formData.location,
-        macAddress: formData.macAddress || undefined,
-        ipAddress: formData.ipAddress || undefined,
-        firmwareVersion: formData.firmwareVersion || undefined,
+        macaddress: formData.macaddress || undefined,
+        ipaddress: formData.ipaddress || undefined,
+        firmwareversion: formData.firmwareversion || undefined,
         provisionedBy: currentUser.staffId
       };
 
-      const response = await fetch(`http://localhost:8001/api/v1/provisioning/devices?staffId=${currentUser.staffId}`, {
+      const response = await fetch(getApiUrl(`/esp32/provision`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deviceData)
@@ -87,11 +88,11 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
         setFormData({
           deviceId: '',
           name: '',
-          deviceType: 'watch',
+          devicetype: 'watch',
           location: 'ICU',
-          macAddress: '',
-          ipAddress: '',
-          firmwareVersion: ''
+          macaddress: '',
+          ipaddress: '',
+          firmwareversion: ''
         });
       } else {
         const errorData = await response.json();
@@ -104,7 +105,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
     setLoading(false);
   };
 
-  const deviceTypes = [
+  const devicetypes = [
     { value: 'watch', label: 'Patient Watch', icon: Watch },
     { value: 'vitalMonitor', label: 'Vital Monitor', icon: Activity },
     { value: 'doorScanner', label: 'Door Scanner', icon: Settings },
@@ -117,14 +118,14 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
     'Neurology Ward', 'Orthopedic Ward', 'Oncology Ward'
   ];
 
-  const getDeviceIcon = (deviceType: string) => {
+  const getDeviceIcon = (devicetype: string) => {
     const iconMap = {
       'watch': Watch,
       'vitalMonitor': Activity,
       'doorScanner': Settings,
       'tablet': Settings
     };
-    return iconMap[deviceType as keyof typeof iconMap] || Activity;
+    return iconMap[devicetype as keyof typeof iconMap] || Activity;
   };
 
   // Role-based access control
@@ -213,24 +214,24 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
                   Device Type *
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {deviceTypes.map((type) => {
+                  {devicetypes.map((type) => {
                     const IconComponent = type.icon;
                     return (
                       <div
                         key={type.value}
-                        onClick={() => handleInputChange('deviceType', type.value)}
+                        onClick={() => handleInputChange('devicetype', type.value)}
                         className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:border-blue-300 ${
-                          formData.deviceType === type.value
+                          formData.devicetype === type.value
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex flex-col items-center space-y-2">
                           <IconComponent className={`w-8 h-8 ${
-                            formData.deviceType === type.value ? 'text-blue-600' : 'text-gray-500'
+                            formData.devicetype === type.value ? 'text-blue-600' : 'text-gray-500'
                           }`} />
                           <span className={`text-sm font-medium text-center ${
-                            formData.deviceType === type.value ? 'text-blue-900' : 'text-gray-700'
+                            formData.devicetype === type.value ? 'text-blue-900' : 'text-gray-700'
                           }`}>
                             {type.label}
                           </span>
@@ -294,8 +295,8 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.macAddress}
-                  onChange={(e) => handleInputChange('macAddress', e.target.value)}
+                  value={formData.macaddress}
+                  onChange={(e) => handleInputChange('macaddress', e.target.value)}
                   placeholder="00:11:22:33:44:55"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
@@ -308,8 +309,8 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.ipAddress}
-                  onChange={(e) => handleInputChange('ipAddress', e.target.value)}
+                  value={formData.ipaddress}
+                  onChange={(e) => handleInputChange('ipaddress', e.target.value)}
                   placeholder="192.168.1.100"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
@@ -322,8 +323,8 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.firmwareVersion}
-                  onChange={(e) => handleInputChange('firmwareVersion', e.target.value)}
+                  value={formData.firmwareversion}
+                  onChange={(e) => handleInputChange('firmwareversion', e.target.value)}
                   placeholder="v1.0.0"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
@@ -335,7 +336,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
               <div className="mt-8 p-4 bg-gray-50 rounded-lg border">
                 <h3 className="text-sm font-medium text-gray-900 mb-3">Device Preview</h3>
                 <div className="flex items-center space-x-4">
-                  {React.createElement(getDeviceIcon(formData.deviceType), {
+                  {React.createElement(getDeviceIcon(formData.devicetype), {
                     className: "w-8 h-8 text-blue-600"
                   })}
                   <div>
@@ -346,7 +347,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
                       ID: {formData.deviceId || 'ID will be assigned by backend'}
                     </div>
                     <div className="text-sm text-gray-500">
-                      Type: {formData.deviceType} • Location: {formData.location}
+                      Type: {formData.devicetype} • Location: {formData.location}
                     </div>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Plus, Edit, Trash2, Users, Shield, Building } from 'lucide-react';
+import { getApiUrl } from './config/apiConfig';
 
 interface Staff {
   id: string;
@@ -26,8 +27,8 @@ interface NewStaff {
 }
 
 interface CreatedStaff extends Staff {
-  tempPin?: string;
-  tempPassword?: string;
+  temppin?: string;
+  temppassword?: string;
 }
 
 const StaffManagement: React.FC = () => {
@@ -75,7 +76,7 @@ const StaffManagement: React.FC = () => {
   const fetchStaff = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/staff/');
+      const response = await fetch(getApiUrl('/staff/'));
       const data = await response.json();
       setStaff(data.staff || []);
     } catch (error) {
@@ -87,7 +88,7 @@ const StaffManagement: React.FC = () => {
 
   const fetchRoles = async () => {
     try {
-      const response = await fetch('/api/v1/staff/roles/list');
+      const response = await fetch(getApiUrl('/staff/roles/list'));
       const data = await response.json();
       setRoles(data.roles || []);
     } catch (error) {
@@ -97,7 +98,7 @@ const StaffManagement: React.FC = () => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('/api/v1/staff/departments/list');
+      const response = await fetch(getApiUrl('/staff/departments/list'));
       const data = await response.json();
       setDepartments(data.departments || []);
     } catch (error) {
@@ -111,7 +112,7 @@ const StaffManagement: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch(`/api/v1/staff/generate-id/${encodeURIComponent(role)}`);
+      const response = await fetch(getApiUrl(`/staff/generate-id/${encodeURIComponent(role)}`));
       const data = await response.json();
       setPreviewStaffId(data.nextStaffId || '');
     } catch (error) {
@@ -125,7 +126,7 @@ const StaffManagement: React.FC = () => {
     setLoading(true);
     
     try {
-      const response = await fetch('/api/v1/staff/', {
+      const response = await fetch(getApiUrl('/staff/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,13 +141,13 @@ const StaffManagement: React.FC = () => {
         // Auto-send WhatsApp message if phone number exists
         if (createdStaff.phone) {
           const message = `🏥 *Hospital Login Credentials*\n\nHi ${createdStaff.name}!\n\nYour login details:\n👤 *Staff ID:* ${createdStaff.staffId}\n${
-            createdStaff.tempPin 
-              ? `🔐 *PIN:* ${createdStaff.tempPin}` 
-              : `🔐 *Password:* ${createdStaff.tempPassword}`
+            createdStaff.temppin 
+              ? `🔐 *PIN:* ${createdStaff.temppin}` 
+              : `🔐 *Password:* ${createdStaff.temppassword}`
           }\n\nPlease keep these credentials secure.\n\nWelcome to the team! 👨‍⚕️👩‍⚕️`;
           
-          const phoneNumber = (createdStaff.phone || '').replace(/[^\d]/g, '');
-          const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+          const phonenumber = (createdStaff.phone || '').replace(/[^\d]/g, '');
+          const whatsappUrl = `https://wa.me/${phonenumber}?text=${encodeURIComponent(message)}`;
           window.open(whatsappUrl, '_blank');
         }
         
@@ -180,7 +181,7 @@ const StaffManagement: React.FC = () => {
     
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/staff/${staffId}`, {
+      const response = await fetch(getApiUrl(`/staff/${staffId}`), {
         method: 'DELETE',
       });
 
@@ -203,7 +204,7 @@ const StaffManagement: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/staff/${editingStaff.staffId}`, {
+      const response = await fetch(getApiUrl(`/staff/${editingStaff.staffId}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -603,7 +604,7 @@ const StaffManagement: React.FC = () => {
                     <span className="ml-2">{createdStaffInfo.role}</span>
                   </div>
                   
-                  {createdStaffInfo.tempPin && (
+                  {createdStaffInfo.temppin && (
                     <div className="border-t pt-2 mt-3">
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
                         <div className="flex items-center mb-1">
@@ -613,7 +614,7 @@ const StaffManagement: React.FC = () => {
                           <span className="font-medium text-yellow-800">Login PIN</span>
                         </div>
                         <div className="text-2xl font-mono font-bold text-center text-yellow-800">
-                          {createdStaffInfo.tempPin}
+                          {createdStaffInfo.temppin}
                         </div>
                         <p className="text-xs text-yellow-600 mt-1 text-center">
                           Please share this PIN securely with the staff member
@@ -622,7 +623,7 @@ const StaffManagement: React.FC = () => {
                     </div>
                   )}
                   
-                  {createdStaffInfo.tempPassword && (
+                  {createdStaffInfo.temppassword && (
                     <div className="border-t pt-2 mt-3">
                       <div className="bg-blue-50 border border-blue-200 rounded p-3">
                         <div className="flex items-center mb-1">
@@ -632,7 +633,7 @@ const StaffManagement: React.FC = () => {
                           <span className="font-medium text-blue-800">Login Password</span>
                         </div>
                         <div className="text-lg font-mono font-bold text-center text-blue-800">
-                          {createdStaffInfo.tempPassword}
+                          {createdStaffInfo.temppassword}
                         </div>
                         <p className="text-xs text-blue-600 mt-1 text-center">
                           Staff can change this password after first login
@@ -652,13 +653,13 @@ const StaffManagement: React.FC = () => {
                       <button
                         onClick={() => {
                           const message = `🏥 *Hospital Login Credentials*\n\nHi ${createdStaffInfo.name}!\n\nYour login details:\n👤 *Staff ID:* ${createdStaffInfo.staffId}\n${
-                            createdStaffInfo.tempPin 
-                              ? `🔐 *PIN:* ${createdStaffInfo.tempPin}` 
-                              : `🔐 *Password:* ${createdStaffInfo.tempPassword}`
+                            createdStaffInfo.temppin 
+                              ? `🔐 *PIN:* ${createdStaffInfo.temppin}` 
+                              : `🔐 *Password:* ${createdStaffInfo.temppassword}`
                           }\n\nPlease keep these credentials secure.\n\nWelcome to the team! 👨‍⚕️👩‍⚕️`;
                           
-                          const phoneNumber = (createdStaffInfo.phone || '').replace(/[^\d]/g, '');
-                          const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+                          const phonenumber = (createdStaffInfo.phone || '').replace(/[^\d]/g, '');
+                          const whatsappUrl = `https://wa.me/${phonenumber}?text=${encodeURIComponent(message)}`;
                           window.open(whatsappUrl, '_blank');
                         }}
                         className="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm flex items-center justify-center"
@@ -678,7 +679,7 @@ const StaffManagement: React.FC = () => {
                   onClick={() => {
                     navigator.clipboard.writeText(
                       `Hospital Login Credentials\nStaff ID: ${createdStaffInfo.staffId}\n${
-                        createdStaffInfo.tempPin ? `PIN: ${createdStaffInfo.tempPin}` : `Password: ${createdStaffInfo.tempPassword}`
+                        createdStaffInfo.temppin ? `PIN: ${createdStaffInfo.temppin}` : `Password: ${createdStaffInfo.temppassword}`
                       }`
                     );
                     alert('Credentials copied to clipboard!');

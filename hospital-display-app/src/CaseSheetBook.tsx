@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  ChevronLeft, ChevronRight, History, CheckCircle, XCircle, UserIcon, 
-  Book, BookOpen
+import {
+  ChevronLeft, ChevronRight, CheckCircle, XCircle,
+  BookOpen
 } from 'lucide-react';
-import { CaseSheetEntry } from './types';
-import { formatDateTime } from './utils';
+import { caseSheetEntry } from './types';
 
 interface CaseSheetBookProps {
-  caseSheet: CaseSheetEntry[];
+  caseSheet: caseSheetEntry[];
 }
 
 const ENTRIES_PER_PAGE = 6; // Number of entries per page (3 rows x 2 columns)
@@ -196,7 +195,7 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
 
                     {/* Performer - compact */}
                     <div className="text-xs text-gray-600 truncate">
-                      by {entry.performedbyname || entry.performedBy || 'Unknown'}
+                      by {entry.performedByName || entry.performedBy || 'Unknown'}
                     </div>
                   </div>
                 </div>

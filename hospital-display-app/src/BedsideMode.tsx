@@ -2,17 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Settings, Monitor, Wifi, WifiOff, AlertTriangle, Heart, Activity, Thermometer, Droplets, Zap, CreditCard, Volume2, VolumeX } from 'lucide-react';
-import { Patient, User, AppSettings } from './types';
+import { patient, user, appsettings } from './types';
 import { getVitalStatus, detectArrhythmia } from './utils';
-import HospitalAPI from './api';
+// Removed unused HospitalAPI import
 
 interface BedsideModeProps {
-  patients: Patient[];
+  patients: patient[];
   displayCount: 1 | 2;
   onClose: () => void;
   onDisplayCountChange: (count: 1 | 2) => void;
-  onNFCTap?: (user: User) => void;
-  settings?: AppSettings;
+  onNFCTap?: (user: user) => void;
+  settings?: appsettings;
 }
 
 export const BedsideMode: React.FC<BedsideModeProps> = ({
@@ -27,8 +27,8 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showSettings, setShowSettings] = useState(false);
   const [showNFCLogin, setShowNFCLogin] = useState(false);
-  const [nfcScanning, setNfcScanning] = useState(false);
-  const [audioAlarmsEnabled, setAudioAlarmsEnabled] = useState<boolean>(settings?.audioAlarms || true);
+  // NFC scanning managed by backend
+  const [audioAlarmsEnabled, setAudioAlarmsEnabled] = useState<boolean>(settings?.audioalarms || true);
   const [isECGMode, setIsECGMode] = useState<boolean>(true);
   const [currentPatientIndex, setCurrentPatientIndex] = useState<number>(0);
 
@@ -61,7 +61,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
     setShowNFCLogin(false);
   };
 
-  const PatientMonitor = ({ patient, position }: { patient: Patient, position: 'left' | 'right' | 'single' }) => {
+  const PatientMonitor = ({ patient, position }: { patient: patient, position: 'left' | 'right' | 'single' }) => {
     const [ecgData, setEcgData] = useState<{x: number, y: number}[]>([]);
     
     useEffect(() => {
@@ -79,7 +79,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
       generateData();
       const interval = setInterval(generateData, 1000);
       return () => clearInterval(interval);
-    }, [patient.vitals.heartRate, patient.vitals.ecg, patient.vitals.eeg, isECGMode]);
+    }, [patient.vitals.heartRate, patient.vitals.ecg, patient.vitals.eeg]);
 
     const pathData = ecgData.map((point, index) => 
       `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
@@ -89,10 +89,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
     const hasCriticalAlert = unacknowledgedAlerts.some(alert => alert.severity === 'critical');
     const arrhythmiaDetected = detectArrhythmia(patient.vitals.heartRate, patient.vitals.ecg);
 
-    const getVitalStatusColor = (value: number, type: string) => {
-      const status = getVitalStatus(value, type as any);
-      return status === 'critical' ? '#EF4444' : status === 'warning' ? '#F59E0B' : '#10B981';
-    };
+    // Vital status color handled by existing getVitalStatus utility
 
     return (
       <div className={`h-full ${displayCount === 2 ? 'w-1/2' : 'w-full'} bg-black text-white flex flex-col border-r border-gray-800`}>
@@ -521,9 +518,9 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
               <CreditCard className="w-16 h-16 text-blue-400 mx-auto mb-4" />
               <h3 className="text-xl font-bold text-white mb-3">NFC Authentication</h3>
               <p className="text-gray-300 mb-6 text-sm">
-                {nfcScanning ? 'Scanning for NFC card...' : 'Tap NFC card to login'}
+                Tap NFC card to login
               </p>
-              {nfcScanning ? (
+              {false ? (
                 <div className="flex items-center justify-center space-x-2 text-blue-400">
                   <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
                   <span className="text-sm">Scanning...</span>

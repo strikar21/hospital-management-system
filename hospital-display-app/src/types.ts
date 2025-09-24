@@ -1,6 +1,6 @@
 // types.ts - Complete Type definitions with Extended Vitals Support
 
-export interface User {
+export interface user {
   id: string;
   name: string;
   role: 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
@@ -9,7 +9,7 @@ export interface User {
   department: string;
 }
 
-export interface Alert {
+export interface alert {
   id: string;
   message: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -21,7 +21,7 @@ export interface Alert {
   isAcknowledged: boolean;
 }
 
-export interface Patient {
+export interface patient {
   id: string;
   name: string;
   bedNumber: string;
@@ -29,13 +29,13 @@ export interface Patient {
   room: string;
   department: string;
   assignedDoctor: string;
-  attendingphysicianname?: string;
+  attendingPhysicianName?: string;
   assignedDeviceId?: string;  // ID of assigned ESP32 watch device
-  deviceStatus?: 'connected' | 'disconnected' | 'offline' | 'low_battery';  // Real-time device status
+  deviceStatus?: 'connected' | 'disconnected' | 'offline' | 'lowBattery';  // Real-time device status
   deviceBattery?: number;  // Device battery level (0-100)
   // Enhanced patient safety fields
-  allergies?: Allergy[];
-  codeStatus?: 'fullCode' | 'dnr' | 'dnrCca' | 'comfortCare';
+  allergies?: allergy[];
+  codeStatus?: 'fullcode' | 'dnr' | 'dnrcca' | 'comfortcare';
   activeProblems?: string[];
   lastMedicationTime?: string;
   nextMedicationDue?: string;
@@ -44,50 +44,49 @@ export interface Patient {
     heartRate: number; // Always integer - BPM
     bloodPressure: string; // Formatted string "120/80"
     bloodPressureValue: number; // Always integer - systolic pressure
-    
+
     // Respiratory
     respiratoryRate: number; // Always integer - breaths per minute
     oxygenSat: number; // Always integer - percentage
-    
+
     // Temperature
     temperature: number; // Can have decimals - Fahrenheit
-    
+
     // Neurological/Cardiac Monitoring
     ecg: number; // Always integer - mV * 100 (so 120 = 1.2mV)
     eeg: number; // Always integer - μV (microvolts)
-    isECGMode: boolean; // true = ECG, false = EEG
-    
+    isEcgMode: boolean; // true = ECG, false = EEG
+
     // Advanced Monitoring
-    bioimpedance: number; // Ohms - bioelectrical impedance
+    bioImpedance: number; // Ohms - bioelectrical impedance
     tremor: number; // 0-10 scale tremor intensity
     fallRisk: 'low' | 'medium' | 'high'; // Fall risk assessment
-    
+
     // Metadata
     lastUpdated: string;
     lastSync: string;
   };
-  status: 'stable' | 'critical' | 'emergency' | 'active' | 'pending_discharge' | 'ready_for_nurse' | 'discharged' | 'PENDING_DISCHARGE' | 'DISCHARGE_APPROVED' | 'discharge_approved';
+  status: 'stable' | 'critical' | 'emergency' | 'active' | 'pendingDischarge' | 'readyForNurse' | 'discharged' | 'dischargeApproved';
   dischargeStatus?: 'active' | 'requested' | 'adminapproved' | 'discharged';
-  alerts: Alert[];
+  alerts: alert[];
   admissionDate: string;
   age: number;
   gender: string;
   weight: number; // in kg
   diagnosis: string;
-  medications: Medication[];
-  investigations: Investigation[];
-  therapies: Therapy[];
-  notes: NoteComment[];
-  caseSheet: CaseSheetEntry[];
-  handoffNotes?: HandoffNote[];
+  medications: medication[];
+  investigations: investigation[];
+  therapies: therapy[];
+  notes: noteComment[];
+  caseSheet: caseSheetEntry[];
+  handoffNotes?: handoffNote[];
 }
 
-export interface NoteComment {
+export interface noteComment {
   id: string;
   content: string;
   authorId: string;
-  authorName: string;
-  authorname?: string;  // Backend provides lowercase version with resolved name
+  authorName: string;  // Backend provides lowercase version with resolved name
   authorRole: string;
   timestamp: string;
   editedAt?: string;
@@ -95,7 +94,7 @@ export interface NoteComment {
   isEdited: boolean;
 }
 
-export interface HandoffNote {
+export interface handoffNote {
   id: string;
   patientId: string;
   shift: 'day' | 'evening' | 'night';
@@ -107,30 +106,30 @@ export interface HandoffNote {
   timestamp: string;
   acknowledged: boolean;
   performedBy?: string;
-  performedbyname?: string;
+  performedByName?: string;
   completedAt?: string;
 }
 
-export interface Medication {
+export interface medication {
   id: string;
   name: string;
   dosage: string;
   frequency: string;
   route: string;
   status: 'active' | 'stopped' | 'held' | 'administered';
-  startdate: string;
-  enddate?: string;
+  startDate: string;
+  endDate?: string;
   duration?: string;
-  prescribedby: string;
-  prescribedbyname?: string;
-  createdat: string;
+  prescribedBy: string;
+  prescribedByName?: string;
+  createdAt: string;
   modifiedBy?: string;
-  updatedat?: string;
+  updatedAt?: string;
   canEdit?: boolean;
-  history?: MedicationHistoryEntry[];
+  history?: medicationHistoryEntry[];
 }
 
-export interface MedicationHistoryEntry {
+export interface medicationHistoryEntry {
   id: string;
   action: 'prescribed' | 'held' | 'resumed' | 'stopped' | 'modified' | 'administered';
   timestamp: string;
@@ -140,41 +139,43 @@ export interface MedicationHistoryEntry {
   newState?: any;
 }
 
-export interface Investigation {
+export interface investigation {
   id: string;
   type: 'lab' | 'imaging' | 'biopsy' | 'culture';
   name: string;
-  createdat: string;
-  scheduledat?: string;
-  completedat?: string;
-  status: 'ordered' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  createdAt: string;
+  scheduledAt?: string;
+  completedAt?: string;
+  status: 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
   results?: string;
-  labResults?: LabResult[]; // Detailed lab results
-  performedby: string;
-  performedbyname?: string;
+  labResults?: labresult[]; // Detailed lab results
+  performedBy: string;
+  performedByName?: string;
   priority: 'routine' | 'urgent' | 'stat';
+  urgency: 'STAT' | 'Emergency' | 'Urgent' | 'Routine'; // Added urgency field
   notes?: string;
   canEdit: boolean;
 }
 
-export interface Therapy {
+export interface therapy {
   id: string;
   type: 'physiotherapy' | 'occupational' | 'speech' | 'respiratory';
+  name: string; // Added name field
   description: string;
   frequency: string;
   duration: string;
-  startdate: string;
-  enddate?: string;
+  startDate: string;
+  endDate?: string;
   status: 'active' | 'completed' | 'cancelled';
-  performedby: string;
-  performedbyname?: string;
+  performedBy: string;
+  performedByName?: string;
   therapist?: string;
   notes?: string;
-  sessions: TherapySession[];
+  sessions: therapySession[];
   canEdit: boolean;
 }
 
-export interface TherapySession {
+export interface therapySession {
   id: string;
   date: string;
   duration: number; // minutes
@@ -183,18 +184,18 @@ export interface TherapySession {
   patientResponse: string;
 }
 
-export interface CaseSheetEntry {
+export interface caseSheetEntry {
   id: string;
   timestamp: string;
   type: 'admission' | 'medication' | 'investigation' | 'therapy' | 'vitalAlert' | 'statusChange' | 'alertAcknowledged' | 'discharge' | 'doctorNotes' | 'nursingNotes' | 'therapistNotes' | 'technicianNotes' | 'pharmacyNotes' | 'otherNotes' | 'handoffNote' | 'medicationAdministration';
   description: string;
   performedBy: string;
-  performedbyname?: string;
+  performedByName?: string;
   details?: any;
   canEdit: boolean;
 }
 
-export interface VitalHistory {
+export interface vitalhistory {
   time: string;
   heartRate: number;
   temperature: number;
@@ -204,46 +205,46 @@ export interface VitalHistory {
   bloodPressureDiastolic?: number;
   ecg: number;
   eeg: number;
-  bioimpedance: number;
+  bioImpedance: number;
   tremor: number;
 }
 
-export interface ECGReading {
+export interface ecgreading {
   timestamp: string;
   duration: number;
-  sampleRate: number;
+  samplerate: number;
   data: number[];
   interpretation: string;
   performedBy: string;
-  arrhythmiaDetected?: boolean;
-  arrhythmiaType?: string;
+  arrhythmiadetected?: boolean;
+  arrhythmiatype?: string;
 }
 
-export interface EEGReading {
+export interface eegreading {
   timestamp: string;
   duration: number;
-  sampleRate: number;
+  samplerate: number;
   data: number[];
   channels: string[]; // ['F3', 'F4', 'C3', 'C4'] etc
   interpretation: string;
   performedBy: string;
-  seizureActivity?: boolean;
-  abnormalPatterns?: string[];
+  seizureactivity?: boolean;
+  abnormalpatterns?: string[];
 }
 
-export interface ECGPoint {
+export interface ecgpoint {
   x: number;
   y: number;
 }
 
-export interface RoomProximity {
+export interface roomproximity {
   tabletLocation: string;
   roomNumber: string;
   patientsInRoom: string[];
   lastDetection: string;
 }
 
-export interface AuditLog {
+export interface auditlog {
   id: string;
   timestamp: string;
   userId: string;
@@ -256,44 +257,44 @@ export interface AuditLog {
   deviceInfo: string;
 }
 
-export interface AppSettings {
-  autoLogoutMinutes: number;
-  enableAutoLogout: boolean;
-  bedsideMode: boolean;
+export interface appsettings {
+  autologoutminutes: number;
+  enableautologout: boolean;
+  bedsidemode: boolean;
   // New settings for extended monitoring
-  arrhythmiaDetection?: boolean;
-  eegMonitoring?: boolean;
-  tremorDetection?: boolean;
-  fallDetection?: boolean;
-  audioAlarms?: boolean;
-  privacyMode?: boolean;
-  autoScrollSpeed?: number; // pixels per second for auto-scroll
-  enableAutoScroll?: boolean;
+  arrhythmiadetection?: boolean;
+  eegmonitoring?: boolean;
+  tremordetection?: boolean;
+  falldetection?: boolean;
+  audioalarms?: boolean;
+  privacymode?: boolean;
+  autoscrollspeed?: number; // pixels per second for auto-scroll
+  enableautoscroll?: boolean;
 }
 
 // Enhanced vital sign monitoring types
-export interface VitalTrend {
+export interface vitaltrend {
   timestamp: string;
   value: number;
-  status: VitalStatus;
+  status: vitalstatus;
   trend: 'rising' | 'falling' | 'stable';
 }
 
-export interface ArrhythmiaEvent {
+export interface arrhythmiaevent {
   id: string;
   timestamp: string;
   patientId: string;
-  type: 'bradycardia' | 'tachycardia' | 'atrialFibrillation' | 'ventricularTachycardia' | 'pvc' | 'irregularRhythm';
+  type: 'bradycardia' | 'tachycardia' | 'atrialfibrillation' | 'ventriculartachycardia' | 'pvc' | 'irregularrhythm';
   severity: 'low' | 'medium' | 'high' | 'critical';
   heartRate: number;
-  ecgValue: number;
+  ecgvalue: number;
   description: string;
   acknowledged: boolean;
   performedBy?: string;
   completedAt?: string;
 }
 
-export interface TremorEvent {
+export interface tremorevent {
   id: string;
   timestamp: string;
   patientId: string;
@@ -304,18 +305,18 @@ export interface TremorEvent {
   acknowledged: boolean;
 }
 
-export interface FallEvent {
+export interface fallevent {
   id: string;
   timestamp: string;
   patientId: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  accelerometerData: number[];
+  risklevel: 'low' | 'medium' | 'high';
+  accelerometerdata: number[];
   location: string;
   acknowledged: boolean;
-  falseAlarm?: boolean;
+  falsealarm?: boolean;
 }
 
-export interface BackendUser {
+export interface backenduser {
   id: string;
   name: string;
   role: 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
@@ -327,15 +328,15 @@ export interface BackendUser {
   passwordHash?: string;
 }
 
-export interface AuthenticationResponse {
+export interface authenticationresponse {
   success: boolean;
-  user?: User;
+  user?: user;
   token?: string;
   message?: string;
   auditLogId?: string;
 }
 
-export interface SystemStatus {
+export interface systemstatus {
   online: boolean;
   lastSync: string;
   serverHealth: 'healthy' | 'degraded' | 'down';
@@ -344,20 +345,20 @@ export interface SystemStatus {
 }
 
 // Extended vital types
-export type VitalType = 'heartRate' | 'oxygenSat' | 'temperature' | 'skinTemperature' | 'ecg' | 'eeg' | 'bloodPressure' | 'respiratoryRate' | 'bioimpedance' | 'tremor';
-export type VitalStatus = 'normal' | 'warning' | 'critical';
-export type TimeRange = '1h' | '6h' | '24h' | '7d';
-export type AuthMethod = 'nfc' | 'credentials';
-export type UserRole = 'Doctor' | 'Nurse' | 'Administrator' | 'Technician' | 'Provisioner';
-export type PatientStatus = 'stable' | 'critical' | 'emergency';
-export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
-export type MedicationStatus = 'active' | 'stopped' | 'held';
-export type InvestigationStatus = 'ordered' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-export type TherapyStatus = 'active' | 'completed' | 'cancelled';
+export type vitaltype = 'heartRate' | 'oxygenSat' | 'temperature' | 'skintemperature' | 'ecg' | 'eeg' | 'bloodPressure' | 'respiratoryRate' | 'bioImpedance' | 'tremor';
+export type vitalstatus = 'normal' | 'warning' | 'critical';
+export type timerange = '1h' | '6h' | '24h' | '7d';
+export type authmethod = 'nfc' | 'credentials';
+export type userRole = 'doctor' | 'nurse' | 'administrator' | 'technician' | 'provisioner';
+export type patientstatus = 'stable' | 'critical' | 'emergency';
+export type alertseverity = 'low' | 'medium' | 'high' | 'critical';
+export type medicationstatus = 'active' | 'stopped' | 'held';
+export type investigationstatus = 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+export type therapystatus = 'active' | 'completed' | 'cancelled';
 export type MonitoringMode = 'ecg' | 'eeg';
 
 // Enhanced monitoring configuration
-export interface MonitoringConfig {
+export interface monitoringconfig {
   vitalSignThresholds: {
     heartRate: { min: number; max: number; criticalMin: number; criticalMax: number };
     bloodPressure: { min: number; max: number; criticalMin: number; criticalMax: number };
@@ -367,7 +368,7 @@ export interface MonitoringConfig {
     respiratoryRate: { min: number; max: number; criticalMin: number; criticalMax: number };
     ecg: { min: number; max: number; criticalMin: number; criticalMax: number };
     eeg: { min: number; max: number; criticalMin: number; criticalMax: number };
-    bioimpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
+    bioImpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
     tremor: { maxIntensity: number; maxDuration: number };
   };
   arrhythmiaDetection: {
@@ -399,11 +400,11 @@ export interface MonitoringConfig {
 }
 
 // Clinical decision support types
-export interface ClinicalAlert {
+export interface clinicalalert {
   id: string;
   patientId: string;
   type: 'drugInteraction' | 'allergyWarning' | 'dosageAlert' | 'vitalThreshold' | 'arrhythmia' | 'seizure' | 'tremor' | 'fallRisk' | 'clinicalGuideline';
-  severity: AlertSeverity;
+  severity: alertseverity;
   message: string;
   details: string;
   actionRequired: boolean;
@@ -415,7 +416,7 @@ export interface ClinicalAlert {
 }
 
 // Drug Interaction System
-export interface DrugInteraction {
+export interface druginteraction {
   id: string;
   drug1: string;
   drug2: string;
@@ -427,33 +428,33 @@ export interface DrugInteraction {
 }
 
 // Allergy System
-export interface Allergy {
+export interface allergy {
   id: string;
   patientId: string;
   allergen: string;
-  allergenType: 'medication' | 'food' | 'environmental' | 'other';
+  allergentype: 'medication' | 'food' | 'environmental' | 'other';
   reaction: string;
   severity: 'mild' | 'moderate' | 'severe' | 'life-threatening';
   onset: string;
-  verificationStatus: 'confirmed' | 'unconfirmed' | 'entered-in-error';
-  recordedDate: string;
+  verificationstatus: 'confirmed' | 'unconfirmed' | 'entered-in-error';
+  recordeddate: string;
   performedBy: string;
 }
 
 // Clinical Protocols
-export interface ClinicalProtocol {
+export interface clinicalprotocol {
   id: string;
   name: string;
   condition: string;
   department: string;
-  steps: ProtocolStep[];
+  steps: protocolstep[];
   triggers: string[];
   isActive: boolean;
   version: string;
   lastUpdated: string;
 }
 
-export interface ProtocolStep {
+export interface protocolstep {
   id: string;
   stepNumber: number;
   action: string;
@@ -464,7 +465,7 @@ export interface ProtocolStep {
 }
 
 // Barcode System
-export interface BarcodeData {
+export interface barcodedata {
   type: 'patient' | 'medication' | 'equipment' | 'staff';
   id: string;
   data: string;
@@ -472,7 +473,7 @@ export interface BarcodeData {
   scannedBy: string;
 }
 
-export interface MedicationBarcode {
+export interface medicationbarcode {
   ndc: string;
   lotNumber: string;
   expirationDate: string;
@@ -482,7 +483,7 @@ export interface MedicationBarcode {
 }
 
 // Lab Integration
-export interface LabResult {
+export interface labresult {
   id: string;
   patientId: string;
   testName: string;
@@ -493,30 +494,30 @@ export interface LabResult {
   status: 'pending' | 'preliminary' | 'final' | 'corrected' | 'cancelled';
   abnormalFlag: 'normal' | 'high' | 'low' | 'criticalHigh' | 'criticalLow';
   createdAt: string;
-  completedAt: string;
+  completedat: string;
   performingLab: string;
   performedBy: string;
-  performedbyname?: string;
+  performedByName?: string;
 }
 
 // Imaging/PACS
-export interface ImagingStudy {
+export interface imagingstudy {
   id: string;
   patientId: string;
   studyType: 'xray' | 'ct' | 'mri' | 'ultrasound' | 'mammography' | 'pet' | 'nuclear';
   bodyPart: string;
-  createdat: string;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-  images: ImagingImage[];
-  report?: ImagingReport;
-  performedby: string;
-  performedbyname?: string;
+  createdAt: string;
+  status: 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+  images: imagingimage[];
+  report?: imagingreport;
+  performedBy: string;
+  performedByName?: string;
   technologist?: string;
   radiologist?: string;
   urgency: 'routine' | 'urgent' | 'stat';
 }
 
-export interface ImagingImage {
+export interface imagingimage {
   id: string;
   url: string;
   thumbnail: string;
@@ -525,18 +526,18 @@ export interface ImagingImage {
   viewPosition?: string;
 }
 
-export interface ImagingReport {
+export interface imagingreport {
   id: string;
   findings: string;
   impression: string;
   recommendations: string;
-  performedby: string;
-  createdat: string;
+  performedBy: string;
+  createdAt: string;
   status: 'preliminary' | 'final' | 'addendum';
 }
 
 // Pharmacy Integration
-export interface PharmacyOrder {
+export interface pharmacyorder {
   id: string;
   patientId: string;
   medicationId: string;
@@ -551,7 +552,7 @@ export interface PharmacyOrder {
 }
 
 // Analytics/Reporting
-export interface QualityMetric {
+export interface qualitymetric {
   id: string;
   name: string;
   value: number;
@@ -560,10 +561,10 @@ export interface QualityMetric {
   period: string;
   department?: string;
   trend: 'improving' | 'stable' | 'declining';
-  lastCalculated: string;
+  lastcalculated: string;
 }
 
-export interface PatientOutcome {
+export interface patientoutcome {
   id: string;
   patientId: string;
   measureType: 'lengthOfStay' | 'readmission' | 'mortality' | 'infection' | 'satisfaction';
@@ -575,13 +576,18 @@ export interface PatientOutcome {
 }
 
 // Integration APIs
-export interface ExternalSystem {
+export interface externalsystem {
   id: string;
   name: string;
   type: 'lab' | 'pharmacy' | 'imaging' | 'billing' | 'ehr' | 'other';
   endpoint: string;
-  authType: 'apiKey' | 'oauth' | 'basic' | 'certificate';
+  authtype: 'apiKey' | 'oauth' | 'basic' | 'certificate';
   status: 'active' | 'inactive' | 'error';
   lastSync?: string;
   version?: string;
 }
+
+// Type aliases for backward compatibility
+export type clinicalAlert = clinicalalert;
+export type labResult = labresult;
+export type imagingStudy = imagingstudy;

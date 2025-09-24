@@ -1,9 +1,9 @@
 // Dashboard.tsx - Main Dashboard
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, RefreshCw, Activity, Settings, X, Monitor } from 'lucide-react';
-import { User, Patient, RoomProximity, VitalHistory, TimeRange, AppSettings } from './types';
-import HospitalAPI from './api';
+import { Users, RefreshCw, Activity, X, Monitor } from 'lucide-react';
+import { user, patient, roomproximity, appsettings } from './types';
+import { PatientService, VitalService } from './services';
 import { isNurseOrTechnician } from './utils';
 import { Header } from './Header';
 import { PatientCard } from './PatientCard';
@@ -18,11 +18,11 @@ import StaffManagement from './StaffManagement';
 import auditService from './services/auditService';
 
 interface DashboardProps {
-  currentUser: User;
+  currentUser: user;
   onLogout: () => void;
-  settings: AppSettings;
-  onUpdateSettings: (settings: AppSettings) => void;
-  onBedsideMode: (patients: Patient[], displayCount?: 1 | 2) => void;
+  settings: appsettings;
+  onUpdateSettings: (settings: appsettings) => void;
+  onBedsideMode: (patients: patient[], displayCount?: 1 | 2) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ 
@@ -33,17 +33,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onBedsideMode
 }) => {
   // Dashboard component for ${currentUser.name}
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patients, setPatients] = useState<patient[]>([]);
   const [selectedWard, setSelectedWard] = useState<string>('My Patients');
-  const [roomProximity, setRoomProximity] = useState<RoomProximity | null>(null);
+  const [roomProximity, setRoomProximity] = useState<roomproximity | null>(null);
   const [proximityScanning, setProximityScanning] = useState(false);
   const [showAllDepartments, setShowAllDepartments] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSync, setLastSync] = useState(new Date());
   const [loading, setLoading] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showVitalChart, setShowVitalChart] = useState<{patient: Patient, vital: string} | null>(null);
-  const [showECGViewer, setShowECGViewer] = useState<Patient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<patient | null>(null);
+  const [showVitalChart, setShowVitalChart] = useState<{patient: patient, vital: string} | null>(null);
+  const [showECGViewer, setShowECGViewer] = useState<patient | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showDeviceAssignment, setShowDeviceAssignment] = useState(false);
   const [showPatientAdmission, setShowPatientAdmission] = useState(false);
@@ -94,7 +94,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Auto-logout timer management
   useEffect(() => {
-    if (!settings.enableAutoLogout || settings.bedsideMode) {
+    if (!settings.enableautologout || settings.bedsidemode) {
       if (autoLogoutTimerRef.current) {
         clearTimeout(autoLogoutTimerRef.current);
         autoLogoutTimerRef.current = null;
@@ -104,7 +104,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const checkForAutoLogout = () => {
       const timeSinceLastActivity = Date.now() - lastActivity;
-      const timeoutMs = settings.autoLogoutMinutes * 60 * 1000;
+      const timeoutMs = settings.autologoutminutes * 60 * 1000;
       
       if (timeSinceLastActivity >= timeoutMs) {
         console.log('Auto-logout triggered due to inactivity');
@@ -120,7 +120,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       clearTimeout(autoLogoutTimerRef.current);
     }
 
-    const timeoutMs = settings.autoLogoutMinutes * 60 * 1000;
+    const timeoutMs = settings.autologoutminutes * 60 * 1000;
     autoLogoutTimerRef.current = setTimeout(checkForAutoLogout, timeoutMs);
 
     return () => {
@@ -128,7 +128,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         clearTimeout(autoLogoutTimerRef.current);
       }
     };
-  }, [lastActivity, settings.enableAutoLogout, settings.autoLogoutMinutes, settings.bedsideMode, onLogout]);
+  }, [lastActivity, settings.enableautologout, settings.autologoutminutes, settings.bedsidemode, onLogout]);
 
   // Clean up alert timeouts on unmount
   useEffect(() => {
@@ -181,8 +181,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setLoading(true);
     try {
       // TEMPORARILY BYPASS ALL FILTERING - JUST GET ALL PATIENTS
-      let patientsData: Patient[] = await HospitalAPI.getPatients(undefined, undefined, true);
-      console.log('👥 Dashboard loaded patients with device assignments:', patientsData.map((p: any) => `${p.firstName} ${p.lastName} - Device: ${p.assignedDeviceId || 'None'}`));
+      let patientsData: patient[] = await PatientService.getPatients(undefined, undefined, true);
+      console.log('👥 Dashboard loaded patients with device assignments:', patientsData.map((p: any) => `${p.name} - Device: ${p.assignedDeviceId || 'None'}`));
       setPatients(patientsData);
       setLastSync(new Date());
     } catch (error) {
@@ -197,7 +197,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     
     setProximityScanning(true);
     try {
-      const proximity = await HospitalAPI.detectRoomProximity();
+      const proximity = await VitalService.detectRoomProximity();
       setRoomProximity(proximity);
       setLastSync(new Date());
     } catch (error) {
@@ -207,16 +207,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleToggleECGMode = (patient: Patient) => {
+  const handleToggleECGMode = (patient: patient) => {
     setPatients(prev => prev.map(p => 
       p.id === patient.id ? {
         ...p,
-        vitals: { ...p.vitals, isECGMode: !p.vitals.isECGMode }
+        vitals: { ...p.vitals, isEcgMode: !p.vitals.isEcgMode }
       } : p
     ));
   };
 
-  const handleVitalClick = async (patient: Patient, vitalType: string) => {
+  const handleVitalClick = async (patient: patient, vitalType: string) => {
     if (vitalType === 'ecg' || vitalType === 'eeg') {
       setShowECGViewer(patient);
     } else {
@@ -236,9 +236,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   // Alert acknowledgment using API
-  const handleAcknowledgeAlert = async (patient: Patient, alertId: string) => {
+  const handleAcknowledgeAlert = async (patient: patient, alertId: string) => {
     try {
-      await HospitalAPI.acknowledgeAlert(patient.id, alertId, currentUser.id);
+      await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
       
       // Update the patients state to remove the acknowledged alert
       setPatients(prev => prev.map(p => 
@@ -248,10 +248,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             alert.id === alertId ? {
               ...alert,
               isAcknowledged: true,
-              performedBy: currentUser.id,
-              performedByName: currentUser.name,
-              performedByRole: currentUser.role,
-              completedAt: new Date().toISOString()
+              performedby: currentUser.id,
+              performedbyName: currentUser.name,
+              performedbyRole: currentUser.role,
+              completedat: new Date().toISOString()
             } : alert
           ).filter(alert => {
             // Remove acknowledged alerts from the patient card display after 2 seconds
@@ -287,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleSingleBedsideMode = (patient: Patient) => {
+  const handleSingleBedsideMode = (patient: patient) => {
     onBedsideMode([patient], 1);
   };
 
@@ -303,10 +303,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setShowAllDepartments(!showAllDepartments);
   };
 
-  const handlePatientSelection = async (patient: Patient) => {
+  const handlePatientSelection = async (patient: patient) => {
     try {
       console.log(`🔍 Fetching complete details for patient: ${patient.id}`);
-      const fullPatientData = await HospitalAPI.getPatient(patient.id);
+      const fullPatientData = await PatientService.getPatient(patient.id);
       if (fullPatientData) {
         console.log(`✅ Got complete patient data with ${fullPatientData.medications?.length || 0} medications, ${fullPatientData.investigations?.length || 0} investigations, ${fullPatientData.therapies?.length || 0} therapies`);
         setSelectedPatient(fullPatientData);
@@ -358,7 +358,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Get CSS animation speed based on settings with patient count consideration
   const getScrollSpeed = () => {
-    const speed = settings.autoScrollSpeed || 30;
+    const speed = settings.autoscrollspeed || 30;
     const baseSpeed = Math.max(20, 100 - speed); // 20-70 seconds range
     
     // Adjust speed based on patient count to prevent insane scrolling
@@ -406,26 +406,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.enableAutoScroll || false}
+                  checked={settings.enableautoscroll || false}
                   onChange={(e) => onUpdateSettings({ 
                     ...settings, 
-                    enableAutoScroll: e.target.checked 
+                    enableautoscroll: e.target.checked 
                   })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">Enable auto-scroll for patient rows</span>
               </label>
               
-              {settings.enableAutoScroll && (
+              {settings.enableautoscroll && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Scroll speed (pixels/second):
                   </label>
                   <select
-                    value={settings.autoScrollSpeed || 30}
+                    value={settings.autoscrollspeed || 30}
                     onChange={(e) => onUpdateSettings({ 
                       ...settings, 
-                      autoScrollSpeed: parseInt(e.target.value) 
+                      autoscrollspeed: parseInt(e.target.value) 
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -447,26 +447,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.enableAutoLogout}
+                  checked={settings.enableautologout}
                   onChange={(e) => onUpdateSettings({ 
                     ...settings, 
-                    enableAutoLogout: e.target.checked 
+                    enableautologout: e.target.checked 
                   })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">Enable auto-logout after inactivity</span>
               </label>
               
-              {settings.enableAutoLogout && (
+              {settings.enableautologout && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Auto-logout after (minutes):
                   </label>
                   <select
-                    value={settings.autoLogoutMinutes}
+                    value={settings.autologoutminutes}
                     onChange={(e) => onUpdateSettings({ 
                       ...settings, 
-                      autoLogoutMinutes: parseInt(e.target.value) 
+                      autologoutminutes: parseInt(e.target.value) 
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -505,8 +505,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <h4 className="font-medium mb-2">Current Status</h4>
             <div className="text-sm space-y-1">
               <p><strong>User:</strong> {currentUser.name} ({currentUser.role})</p>
-              <p><strong>Auto-logout:</strong> {settings.enableAutoLogout ? `Enabled (${settings.autoLogoutMinutes}min)` : 'Disabled'}</p>
-              <p><strong>Auto-scroll:</strong> {settings.enableAutoScroll ? `Enabled (${settings.autoScrollSpeed || 30}px/s)` : 'Disabled'}</p>
+              <p><strong>Auto-logout:</strong> {settings.enableautologout ? `Enabled (${settings.autologoutminutes}min)` : 'Disabled'}</p>
+              <p><strong>Auto-scroll:</strong> {settings.enableautoscroll ? `Enabled (${settings.autoscrollspeed || 30}px/s)` : 'Disabled'}</p>
               <p><strong>Layout:</strong> 2 cards per row (same direction scrolling)</p>
               <p><strong>Patients:</strong> {patients.length} loaded</p>
             </div>
@@ -595,7 +595,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           currentUser={currentUser}
           onLogout={onLogout}
           isOnline={isOnline}
-          lastSync={lastSync}
+          lastsync={lastSync}
           roomProximity={null}
           proximityScanning={false}
           showAllDepartments={false}
@@ -632,8 +632,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         currentUser={currentUser}
         onClose={() => setSelectedPatient(null)}
         onVitalClick={handleVitalClick}
-        onECGView={(patient: Patient) => setShowECGViewer(patient)}
-        onToggleECGMode={(patient: Patient) => {
+        onECGView={(patient: patient) => setShowECGViewer(patient)}
+        onToggleECGMode={(patient: patient) => {
           // Toggle ECG mode for the patient
           console.log('Toggle ECG mode for patient:', patient.name);
         }}
@@ -647,7 +647,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <Header
         currentUser={currentUser}
         isOnline={isOnline}
-        lastSync={lastSync}
+        lastsync={lastSync}
         roomProximity={roomProximity}
         proximityScanning={proximityScanning}
         showAllDepartments={showAllDepartments}
@@ -758,20 +758,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
         ) : (
           <div className="h-full flex flex-col gap-1.5 relative">
             {/* Auto-scroll indicator */}
-            {settings.enableAutoScroll && paginatedPatients.length > 4 && (
+            {settings.enableautoscroll && paginatedPatients.length > 4 && (
               <div className="absolute top-2 right-2 z-10 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-                Auto-scroll: {settings.autoScrollSpeed || 30}px/s • Page {currentPage}/{totalPages} • {paginatedPatients.length} patients
+                Auto-scroll: {settings.autoscrollspeed || 30}px/s • Page {currentPage}/{totalPages} • {paginatedPatients.length} patients
               </div>
             )}
 
             {/* Top Row - 2 Cards with Manual + Auto scroll */}
             <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
               <div 
-                className={`h-full flex gap-1.5 ${settings.enableAutoScroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
+                className={`h-full flex gap-1.5 ${settings.enableautoscroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
                 style={{ 
                   minWidth: 'max-content',
-                  animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
-                  animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
+                  animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
+                  animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
                 }}
               >
                 {/* Original patients */}
@@ -789,7 +789,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))}
                 {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-                {settings.enableAutoScroll && paginatedPatients.length > 4 && topRowPatients.map((patient) => (
+                {settings.enableautoscroll && paginatedPatients.length > 4 && topRowPatients.map((patient) => (
                   <div key={`top-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
                     <PatientCard
                       patient={patient}
@@ -808,11 +808,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Bottom Row - 2 Cards with Manual + Auto scroll */}
             <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
               <div 
-                className={`h-full flex gap-1.5 ${settings.enableAutoScroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
+                className={`h-full flex gap-1.5 ${settings.enableautoscroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
                 style={{ 
                   minWidth: 'max-content',
-                  animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
-                  animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
+                  animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
+                  animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
                 }}
               >
                 {/* Original patients */}
@@ -830,7 +830,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))}
                 {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-                {settings.enableAutoScroll && paginatedPatients.length > 4 && bottomRowPatients.map((patient) => (
+                {settings.enableautoscroll && paginatedPatients.length > 4 && bottomRowPatients.map((patient) => (
                   <div key={`bottom-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
                     <PatientCard
                       patient={patient}

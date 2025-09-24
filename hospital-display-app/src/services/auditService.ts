@@ -27,7 +27,7 @@ class AuditService {
   private static instance: AuditService;
   private userId: string | null = null;
   private sessionId: string;
-  
+
   constructor() {
     // Generate a unique session ID for this browser session
     this.sessionId = this.generateSessionId();
@@ -288,11 +288,11 @@ class AuditService {
         body: JSON.stringify({
           userId: this.userId || 'anonymous',
           action: data.action,
-          resourceType: data.eventCategory || 'frontend',
+          resourcetype: data.eventCategory || 'frontend',
           resourceId: data.patientId,
           details: data.description,
-          ipAddress: null, // Will be filled by backend
-          userAgent: navigator.userAgent
+          ipaddress: null, // Will be filled by backend
+          useragent: navigator.userAgent
         })
       });
       

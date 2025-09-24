@@ -43,14 +43,14 @@ class MedicalErrorBoundary extends Component<Props, State> {
     console.error('🚨 MEDICAL ERROR BOUNDARY TRIGGERED:', error, errorInfo);
     
     // Log to audit service for medical compliance
-    auditService.logError(error, 'critical_medical_component', this.props.patientId, {
+    auditService.logError(error, 'criticalMedicalComponent', this.props.patientId, {
       componentStack: errorInfo.componentStack,
-      medicalContext: this.props.medicalContext || 'unknown_medical_context',
-      patientSafety: 'critical_error_occurred',
+      medicalContext: this.props.medicalContext || 'unknownMedicalContext',
+      patientSafety: 'criticalErrorOccurred',
       errorBoundary: 'MedicalErrorBoundary',
       errorId: this.state.errorId,
       timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
+      useragent: navigator.userAgent,
       url: window.location.href,
       patientId: this.props.patientId
     });

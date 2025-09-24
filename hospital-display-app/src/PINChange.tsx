@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Shield, Lock, Eye, EyeOff, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { getApiUrl } from './config/apiConfig';
 
 interface PINChangeProps {
   staffId: string;
@@ -68,7 +69,7 @@ const PINChange: React.FC<PINChangeProps> = ({ staffId, onClose, onPINChanged })
 
     try {
       // Note: This endpoint would need to be implemented in the backend
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001'}/api/v1/staff/${staffId}/change-pin`, {
+      const response = await fetch(getApiUrl(`/staff/${staffId}/change-pin`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

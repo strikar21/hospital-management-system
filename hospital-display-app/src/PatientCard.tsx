@@ -1,19 +1,19 @@
 // PatientCard.tsx - Fixed Complete File with Proper Scrolling
 
 import React, { useState, useEffect } from 'react';
-import { Heart, Activity, Thermometer, Droplets, AlertTriangle, Eye, CheckCircle, Zap, Brain, Wind, Waves, Watch, WifiOff } from 'lucide-react';
-import { Patient, User } from './types';
-import { getVitalStatus, getStatusColor, getVitalStatusColor, detectArrhythmia, detectSeizureActivity, assessFallRisk, formatTimeOnly } from './utils';
+import { Heart, Activity, Thermometer, Droplets, AlertTriangle, Eye, CheckCircle, Brain, Wind, Waves, Watch, WifiOff } from 'lucide-react';
+import { patient, user } from './types';
+import { getStatusColor, detectArrhythmia, detectSeizureActivity, assessFallRisk, formatTimeOnly } from './utils';
 import auditService from './services/auditService';
 
 interface PatientCardProps {
-  patient: Patient;
-  currentUser: User;
-  onPatientClick: (patient: Patient) => void;
-  onVitalClick: (patient: Patient, vitalType: string) => void;
-  onAcknowledgeAlert: (patient: Patient, alertId: string) => void;
-  onBedsideMode: (patient: Patient) => void;
-  onToggleECGMode: (patient: Patient) => void;
+  patient: patient;
+  currentUser: user;
+  onPatientClick: (patient: patient) => void;
+  onVitalClick: (patient: patient, vitalType: string) => void;
+  onAcknowledgeAlert: (patient: patient, alertId: string) => void;
+  onBedsideMode: (patient: patient) => void;
+  onToggleECGMode: (patient: patient) => void;
 }
 
 export const PatientCard: React.FC<PatientCardProps> = ({
@@ -25,15 +25,15 @@ export const PatientCard: React.FC<PatientCardProps> = ({
   onBedsideMode,
   onToggleECGMode
 }) => {
-  const [displayedAlerts, setDisplayedAlerts] = useState(patient.alerts);
-  const [selectedLead, setSelectedLead] = useState<string>(patient.vitals.isECGMode ? 'II' : 'C3-C4');
+  const [displayedAlerts, setDisplayedAlerts] = useState(patient.alerts || []);
+  const [selectedLead, setSelectedLead] = useState<string>(patient.vitals?.isEcgMode ? 'II' : 'C3-C4');
 
   // Auto-hide acknowledged alerts after 3 seconds (reduced from 5 for faster disappear)
   useEffect(() => {
-    const acknowledgedAlerts = patient.alerts.filter(alert => alert.isAcknowledged);
+    const acknowledgedAlerts = (patient.alerts || []).filter(alert => alert.isAcknowledged);
     if (acknowledgedAlerts.length > 0) {
       const timer = setTimeout(() => {
-        setDisplayedAlerts(prev => prev.filter(alert => !alert.isAcknowledged));
+        setDisplayedAlerts(prev => (prev || []).filter(alert => !alert.isAcknowledged));
       }, 3000); // Reduced timeout
       return () => clearTimeout(timer);
     }
@@ -41,26 +41,26 @@ export const PatientCard: React.FC<PatientCardProps> = ({
 
   // Update displayed alerts when patient alerts change
   useEffect(() => {
-    setDisplayedAlerts(patient.alerts);
+    setDisplayedAlerts(patient.alerts || []);
   }, [patient.alerts]);
 
   // Update selected lead when ECG/EEG mode changes
   useEffect(() => {
-    setSelectedLead(patient.vitals.isECGMode ? 'II' : 'C3-C4');
-  }, [patient.vitals.isECGMode]);
+    setSelectedLead(patient.vitals?.isEcgMode ? 'II' : 'C3-C4');
+  }, [patient.vitals?.isEcgMode]);
 
   // ECG/EEG waveform generation removed - now uses backend API
-  const isECGMode: boolean = patient.vitals.isECGMode !== undefined ? patient.vitals.isECGMode : true;
+  const isECGMode: boolean = patient.vitals?.isEcgMode !== undefined ? patient.vitals?.isEcgMode : true;
   // TODO: Replace with backend API call for waveform data
   const pathData = "M 0 25 L 250 25"; // Flat line placeholder
 
   // Detect various conditions
-  const arrhythmiaDetected = detectArrhythmia(patient.vitals.heartRate, patient.vitals.ecg);
-  const seizureActivity = patient.vitals.eeg ? detectSeizureActivity(patient.vitals.eeg, patient.vitals.heartRate) : false;
-  const fallRisk = assessFallRisk(patient.vitals.tremor || 0, patient.vitals.heartRate, patient.age);
+  const arrhythmiaDetected = detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecg);
+  const seizureActivity = patient.vitals?.eeg ? detectSeizureActivity(patient.vitals?.eeg, patient.vitals?.heartRate || 0) : false;
+  const fallRisk = assessFallRisk(patient.vitals?.tremor || 0, patient.vitals?.heartRate || 0, patient.age);
 
   // Add fall risk alert to displayed alerts if high or medium risk
-  const alertsWithFallRisk = [...displayedAlerts];
+  const alertsWithFallRisk = [...(displayedAlerts || [])];
   if (fallRisk === 'high') {
     alertsWithFallRisk.push({
       id: `fall-risk-${patient.id}`,
@@ -81,7 +81,6 @@ export const PatientCard: React.FC<PatientCardProps> = ({
 
   // Get unacknowledged alerts from displayed alerts including fall risk
   const unacknowledgedAlerts = alertsWithFallRisk.filter(alert => !alert.isAcknowledged);
-  const acknowledgedAlerts = alertsWithFallRisk.filter(alert => alert.isAcknowledged);
 
   const handleAcknowledgeClick = (e: React.MouseEvent, alertId: string) => {
     e.stopPropagation();
@@ -107,7 +106,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
         (vitalKey === 'temperature' && (message.includes('temp') || message.includes('fever'))) ||
         (vitalKey === 'bloodPressure' && (message.includes('pressure') || message.includes('bp') || message.includes('hyper') || message.includes('hypo'))) ||
         (vitalKey === 'respiratoryRate' && (message.includes('respiratory') || message.includes('breathing') || message.includes('rr'))) ||
-        (vitalKey === 'bioimpedance' && message.includes('bioimpedance')) ||
+        (vitalKey === 'bioImpedance' && message.includes('bioimpedance')) ||
         (vitalKey === 'tremor' && message.includes('tremor'))
       );
     });
@@ -130,7 +129,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       key: 'heartRate',
       icon: Heart,
       label: 'HR',
-      value: patient.vitals.heartRate,
+      value: patient.vitals?.heartRate || 0,
       unit: '',
       alertStatus: getVitalAlertStatus('heartRate')
     },
@@ -138,7 +137,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       key: 'oxygenSat',
       icon: Activity,
       label: 'SpO2',
-      value: patient.vitals.oxygenSat,
+      value: patient.vitals?.oxygenSat || 0,
       unit: '%',
       alertStatus: getVitalAlertStatus('oxygenSat')
     },
@@ -146,7 +145,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       key: 'temperature',
       icon: Thermometer,
       label: 'Temp',
-      value: patient.vitals.temperature.toFixed(1),
+      value: (patient.vitals?.temperature || 0).toFixed(1),
       unit: '°F',
       alertStatus: getVitalAlertStatus('temperature')
     },
@@ -154,7 +153,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       key: 'bloodPressure',
       icon: Droplets,
       label: 'BP',
-      value: patient.vitals.bloodPressure,
+      value: patient.vitals?.bloodPressure || '0/0',
       unit: '',
       alertStatus: getVitalAlertStatus('bloodPressure')
     },
@@ -162,23 +161,23 @@ export const PatientCard: React.FC<PatientCardProps> = ({
       key: 'respiratoryRate',
       icon: Wind,
       label: 'RR',
-      value: patient.vitals.respiratoryRate || 16,
+      value: patient.vitals?.respiratoryRate || 16,
       unit: '/min',
       alertStatus: getVitalAlertStatus('respiratoryRate')
     },
     {
-      key: 'bioimpedance',
+      key: 'bioImpedance',
       icon: Waves,
       label: 'BioZ',
-      value: patient.vitals.bioimpedance || 500,
+      value: patient.vitals?.bioImpedance || 500,
       unit: 'Ω',
-      alertStatus: getVitalAlertStatus('bioimpedance')
+      alertStatus: getVitalAlertStatus('bioImpedance')
     },
     {
       key: 'tremor',
       icon: Activity,
       label: 'Tremor',
-      value: (patient.vitals.tremor || 0).toFixed(1),
+      value: (patient.vitals?.tremor || 0).toFixed(1),
       unit: '/10',
       alertStatus: getVitalAlertStatus('tremor')
     }
@@ -353,7 +352,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
               Bed {patient.bedNumber} • {patient.ward}
             </div>
             <div className="text-xs text-gray-500">
-              Updated: {formatTimeOnly(patient.vitals.lastSync)}
+              Updated: {formatTimeOnly((patient.vitals?.lastSync || new Date()).toString())}
             </div>
           </div>
         </div>
@@ -425,7 +424,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
                     {isECGMode ? <Brain className="w-3 h-3" /> : <Heart className="w-3 h-3" />}
                     <span className="text-sm font-medium">{isECGMode ? 'EEG' : 'ECG'}</span>
                   </div>
-                  <span className="text-sm font-bold">{isECGMode ? (patient.vitals.eeg || 45) : patient.vitals.ecg}</span>
+                  <span className="text-sm font-bold">{isECGMode ? (patient.vitals?.eeg || 45) : (patient.vitals?.ecg || 0)}</span>
                   <div className={`w-1.5 h-1.5 rounded-full mt-1 ${
                     isECGMode ? (seizureActivity ? 'bg-red-500 animate-pulse' : 'bg-green-500') :
                     (arrhythmiaDetected ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')
@@ -456,7 +455,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
                 <span className={`text-[10px] ${
                   isECGMode ? 'text-green-400' : 'text-blue-400'
                 }`}>
-                  {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? patient.vitals.ecg : patient.vitals.eeg || 45}{isECGMode ? 'mV' : 'μV'}
+                  {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecg || 0) : (patient.vitals?.eeg || 45)}{isECGMode ? 'mV' : 'μV'}
                 </span>
                 <span className="text-green-300 text-[10px]">25mm/s</span>
                 <select 
@@ -504,7 +503,7 @@ export const PatientCard: React.FC<PatientCardProps> = ({
                 )}
               </div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-[10px] text-gray-400">{patient.vitals.heartRate} BPM</span>
+                <span className="text-[10px] text-gray-400">{patient.vitals?.heartRate || 0} BPM</span>
                 {/* Compact ECG/EEG Toggle */}
                 <button
                   onClick={(e) => {

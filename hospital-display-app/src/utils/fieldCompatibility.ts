@@ -14,35 +14,35 @@ export function mapLegacyFields(data: any): any {
 
   const mapped = { ...data };
 
-  // Map old performer fields to performedBy
-  if (data.acknowledgedBy && !mapped.performedBy) {
-    mapped.performedBy = data.acknowledgedBy;
+  // Map old performer fields to lowercase performedby
+  if (data.acknowledgedby && !mapped.performedby) {
+    mapped.performedby = data.acknowledgedby;
   }
-  if (data.acknowledgedByName && !mapped.performedByName) {
-    mapped.performedByName = data.acknowledgedByName;
+  if (data.acknowledgedbyname && !mapped.performedbyname) {
+    mapped.performedbyname = data.acknowledgedbyname;
   }
-  if (data.acknowledgedByRole && !mapped.performedByRole) {
-    mapped.performedByRole = data.acknowledgedByRole;
+  if (data.acknowledgedbyrole && !mapped.performedbyrole) {
+    mapped.performedbyrole = data.acknowledgedbyrole;
   }
-  if (data.prescribedBy && !mapped.performedBy) {
-    mapped.performedBy = data.prescribedBy;
+  if (data.prescribedby && !mapped.performedby) {
+    mapped.performedby = data.prescribedby;
   }
-  if (data.orderedBy && !mapped.performedBy) {
-    mapped.performedBy = data.orderedBy;
+  if (data.orderedby && !mapped.performedby) {
+    mapped.performedby = data.orderedby;
   }
-  if (data.verifiedBy && !mapped.performedBy) {
-    mapped.performedBy = data.verifiedBy;
+  if (data.verifiedby && !mapped.performedby) {
+    mapped.performedby = data.verifiedby;
   }
 
-  // Map old timestamp fields to new ones
-  if (data.acknowledgedAt && !mapped.completedAt) {
-    mapped.completedAt = data.acknowledgedAt;
+  // Map old timestamp fields to lowercase
+  if (data.acknowledgedat && !mapped.completedat) {
+    mapped.completedat = data.acknowledgedat;
   }
-  if (data.prescribedAt && !mapped.createdAt) {
-    mapped.createdAt = data.prescribedAt;
+  if (data.prescribedat && !mapped.createdat) {
+    mapped.createdat = data.prescribedat;
   }
-  if (data.orderedDate && !mapped.createdAt) {
-    mapped.createdAt = data.orderedDate;
+  if (data.ordereddate && !mapped.createdat) {
+    mapped.createdat = data.ordereddate;
   }
 
   // Recursively map nested objects

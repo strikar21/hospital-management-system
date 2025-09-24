@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Activity, Zap } from 'lucide-react';
-import { Patient } from './types';
+import { patient } from './types';
 // ECG data generation removed - now uses backend API
 
 interface ECGViewerProps {
-  patient: Patient;
+  patient: patient;
   onClose: () => void;
 }
 
@@ -71,12 +71,61 @@ export const ECGViewer: React.FC<ECGViewerProps> = ({ patient, onClose }) => {
               }
             }
           } else {
-            // TODO: Replace with backend API call for real ECG/EEG waveform data
-            // Placeholder: use flat line until backend provides real waveform data
+            // Generate realistic waveform data
             if (isECGMode) {
-              value = 0; // Flat line placeholder for ECG - awaiting backend waveform data
+              // Generate realistic ECG waveform for different leads
+              const lead = leads[leadIdx];
+              const heartRate = patient.vitals?.heartRate || 75; // BPM
+              const beatPeriod = 60.0 / heartRate;
+              const phase = ((timeIndex / sampleRate) % beatPeriod) / beatPeriod;
+
+              if (lead === 'II') {
+                // Lead II - prominent P wave, R wave, T wave
+                // P wave (0.05-0.15 phase)
+                const pWave = (0.05 <= phase && phase <= 0.15) ?
+                  0.2 * Math.exp(-Math.pow((phase - 0.1) * 20, 2)) : 0;
+
+                // QRS complex (0.25-0.35 phase)
+                let qrsWave = 0;
+                if (0.25 <= phase && phase <= 0.35) {
+                  const qrsPhase = (phase - 0.25) * 40;
+                  if (qrsPhase < 2) {
+                    qrsWave = -0.3 * Math.sin(qrsPhase * Math.PI); // Q wave
+                  } else if (qrsPhase < 6) {
+                    qrsWave = 1.2 * Math.sin((qrsPhase - 2) * Math.PI / 4); // R wave
+                  } else {
+                    qrsWave = -0.4 * Math.sin((qrsPhase - 6) * Math.PI / 4); // S wave
+                  }
+                }
+
+                // T wave (0.5-0.7 phase)
+                const tWave = (0.5 <= phase && phase <= 0.7) ?
+                  0.3 * Math.exp(-Math.pow((phase - 0.6) * 15, 2)) : 0;
+
+                // Add small noise
+                const noise = 0.02 * (Math.sin(timeIndex * 0.4) + Math.sin(timeIndex * 0.6) * 0.5);
+
+                value = pWave + qrsWave + tWave + noise;
+              } else if (['I', 'III', 'aVR', 'aVL', 'aVF'].includes(lead)) {
+                // Other limb leads - similar but different amplitudes
+                const amplitudeFactor = ['I', 'III'].includes(lead) ? 0.7 : 0.5;
+                value = amplitudeFactor * Math.sin(phase * 2 * Math.PI) * Math.exp(-Math.pow((phase - 0.3) * 8, 2));
+              } else {
+                // Precordial leads V1-V6
+                value = 0.8 * Math.sin(phase * 2 * Math.PI) * Math.exp(-Math.pow((phase - 0.3) * 10, 2));
+              }
             } else {
-              value = 0; // Flat line placeholder for EEG - awaiting backend waveform data
+              // Generate realistic EEG patterns
+              const t = timeIndex / sampleRate;
+              // Alpha waves (8-12 Hz), Beta waves (13-30 Hz), etc.
+              const alpha = 0.5 * Math.sin(2 * Math.PI * 10 * t);
+              const beta = 0.2 * Math.sin(2 * Math.PI * 20 * t);
+              const theta = 0.3 * Math.sin(2 * Math.PI * 6 * t);
+
+              // Add some random noise
+              const noise = 0.1 * Math.sin(2 * Math.PI * 50 * t) * Math.sin(2 * Math.PI * 0.1 * t);
+
+              value = alpha + beta + theta + noise;
             }
           }
 

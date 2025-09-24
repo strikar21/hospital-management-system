@@ -116,7 +116,7 @@ class ClientEncryption {
       // Add patient safety metadata
       const dataWithSafety = {
         ...patientData,
-        lastAccessed: new Date().toISOString(),
+        lastaccessed: new Date().toISOString(),
         accessedBy: 'frontend_app',
         medicalDataType: 'patient_record'
       };

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, Bed, Clock, AlertCircle, CheckCircle, User, 
-  Heart, MapPin, Calendar, Phone, Activity 
+import {
+  Users, Bed, Clock, AlertCircle, CheckCircle, User,
+  Heart, MapPin, Calendar, Phone, Activity
 } from 'lucide-react';
-import { User as UserType } from './types';
+import { user as UserType } from './types';
+import { getApiUrl } from './config/apiConfig';
 
 interface AdmissionRecommendation {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstname: string;
+  lastname: string;
   age: number;
   dateofbirth?: string;
   gender: string;
@@ -32,7 +33,7 @@ interface AdmissionRecommendation {
 interface AvailableBed {
   wardId: string;
   wardName: string;
-  wardType: string;
+  wardtype: string;
   roomId: string;
   roomNumber: string;
   roomType: string;
@@ -46,9 +47,9 @@ interface AvailableDevice {
   id: string;
   deviceId: string;
   deviceName: string;
-  deviceType: string;
+  devicetype: string;
   model: string;
-  batteryLevel: number;
+  batterylevel: number;
   location: string;
 }
 
@@ -67,7 +68,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
   const [selectedRecommendation, setSelectedRecommendation] = useState<AdmissionRecommendation | null>(null);
   const [bedNumber, setBedNumber] = useState<string>('');
   const [roomNumber, setRoomNumber] = useState<string>('');
-  const [wardType, setWardType] = useState<string>('General Ward');
+  const [wardtype, setWardType] = useState<string>('General Ward');
   const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [processingNotes, setProcessingNotes] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -84,13 +85,13 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
       setLoading(true);
       
       // Load pending recommendations
-      const recResponse = await fetch('http://localhost:8001/api/v1/admission/recommendations?status=pending');
+      const recResponse = await fetch(getApiUrl('/admission/recommendations?status=pending'));
       const recData = await recResponse.json();
       // Transform name fields from lowercase to camelCase for admission recommendations
       const transformedRecommendations = (recData.recommendations || []).map((rec: any) => ({
         ...rec,
-        firstName: rec.firstname || rec.firstName,
-        lastName: rec.lastname || rec.lastName
+        firstname: rec.firstname || rec.firstname,
+        lastname: rec.lastname || rec.lastname
       }));
       setRecommendations(transformedRecommendations);
 
@@ -98,7 +99,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
       setAvailableBeds([]);
 
       // Load available devices
-      const devicesResponse = await fetch('http://localhost:8001/api/v1/admission/available-devices?deviceType=watch');
+      const devicesResponse = await fetch(getApiUrl('/admission/available-devices?devicetype=watch'));
       const devicesData = await devicesResponse.json();
       setAvailableDevices(devicesData.availableDevices || []);
 
@@ -119,7 +120,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
     try {
       setProcessing(true);
       
-      const response = await fetch('http://localhost:8001/api/v1/admission/process-admission', {
+      const response = await fetch(getApiUrl('/admission/process-admission'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
           recommendationId: selectedRecommendation.id,
           bedNumber: bedNumber,
           roomNumber: roomNumber,
-          wardType: wardType,
+          wardtype: wardtype,
           selectedDevice: selectedDevice || null,
           processingNotes: processingNotes,
           processedBy: currentUser.name || 'Nursing Staff'
@@ -141,7 +142,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
         setSuccess(`Patient ${(() => {
           const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
           // Filter out placeholder words from individual name parts
-          const validNames = [selectedRecommendation.firstName, selectedRecommendation.lastName]
+          const validNames = [selectedRecommendation.firstname, selectedRecommendation.lastname]
             .filter(Boolean)
             .filter(name => !placeholders.includes(name.trim()));
 
@@ -266,7 +267,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                         {(() => {
                           const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
                           // Filter out placeholder words from individual name parts
-                          const validNames = [rec.firstName, rec.lastName]
+                          const validNames = [rec.firstname, rec.lastname]
                             .filter(Boolean)
                             .filter(name => !placeholders.includes(name.trim()));
 
@@ -344,7 +345,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                     Patient: {(() => {
                       const placeholders = ['Patient', 'patient', 'Client', 'client', 'User', 'user', 'Test', 'test'];
                       // Filter out placeholder words from individual name parts
-                      const validNames = [selectedRecommendation.firstName, selectedRecommendation.lastName]
+                      const validNames = [selectedRecommendation.firstname, selectedRecommendation.lastname]
                         .filter(Boolean)
                         .filter(name => !placeholders.includes(name.trim()));
 
@@ -396,7 +397,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                     Ward Type
                   </label>
                   <select
-                    value={wardType}
+                    value={wardtype}
                     onChange={(e) => setWardType(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
@@ -422,7 +423,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
                     <option value="">No device assigned</option>
                     {availableDevices.map((device) => (
                       <option key={device.id} value={device.id}>
-                        {device.deviceName} - Battery: {device.batteryLevel}%
+                        {device.deviceName} - Battery: {device.batterylevel}%
                       </option>
                     ))}
                   </select>

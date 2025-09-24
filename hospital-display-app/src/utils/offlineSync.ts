@@ -1,5 +1,5 @@
 // offlineSync.ts - Offline resilience for critical medical actions
-import HospitalAPI from '../api';
+import { PatientService, MedicationService, InvestigationService, TherapyService } from '../services';
 import auditService from '../services/auditService';
 import ClientEncryption from './clientEncryption';
 
@@ -200,37 +200,34 @@ class OfflineSync {
     try {
       switch (action.type) {
         case 'nfc_interaction':
-          return await HospitalAPI.logNfcTap(
-            action.data.patientWatchId,
-            action.data.staffNfcId,
-            action.data.location
-          );
+          // Note: logNfcTap needs to be implemented in a service
+          console.warn('NFC tap logging not yet migrated to services');
+          return false;
 
         case 'vital_alert_acknowledgment':
-          return await HospitalAPI.acknowledgeAlert(
+          return await PatientService.acknowledgeAlert(
             action.data.patientId,
             action.data.alertId,
             action.data.userId
           );
 
         case 'medication_administration':
-          return await HospitalAPI.updateMedication(
+          return await MedicationService.updateMedication(
             action.data.patientId,
             action.data.medicationId,
-            { status: 'active', ...action.data.updates },
+            'active',
             action.data.userId
           );
 
         case 'investigation_update':
-          return await HospitalAPI.updateInvestigation(
-            action.data.patientId,
+          return await InvestigationService.updateInvestigationStatus(
             action.data.investigationId,
             action.data.status,
             action.data.userId
           );
 
         case 'therapy_update':
-          return await HospitalAPI.updateTherapy(
+          return await TherapyService.updateTherapy(
             action.data.patientId,
             action.data.therapyId,
             action.data.status,
@@ -238,11 +235,11 @@ class OfflineSync {
           );
 
         case 'patient_note':
-          return await HospitalAPI.addNoteComment(
+          return await PatientService.addNoteComment(
             action.data.patientId,
             action.data.content,
             action.data.userId,
-            action.data.userName,
+            action.data.username,
             action.data.userRole
           );
 
@@ -385,7 +382,7 @@ class OfflineSync {
   /**
    * Manually trigger sync (for testing or user-initiated sync)
    */
-  async forcSync(): Promise<SyncResult> {
+  async forceSync(): Promise<SyncResult> {
     return await this.syncPendingActions();
   }
 }

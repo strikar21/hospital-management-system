@@ -2,20 +2,20 @@
 
 import React from 'react';
 import { Tablet, MapPin, Wifi, WifiOff, Clock, RefreshCw, LogOut, Activity, Settings, Watch, UserPlus, Plus, Users } from 'lucide-react';
-import { User, RoomProximity, Patient, AppSettings } from './types';
+import { user, roomproximity, patient, appsettings } from './types';
 import { isNurseOrTechnician } from './utils';
 
 interface HeaderProps {
-  currentUser: User;
+  currentUser: user;
   isOnline: boolean;
-  lastSync: Date;
-  roomProximity: RoomProximity | null;
+  lastsync: Date;
+  roomProximity: roomproximity | null;
   proximityScanning: boolean;
   showAllDepartments: boolean;
   loading: boolean;
   selectedWard: string;
-  patients: Patient[];
-  settings: AppSettings;
+  patients: patient[];
+  settings: appsettings;
   getWardOptions: () => string[];
   onWardChange: (ward: string) => void;
   onDetectProximity: () => void;
@@ -33,7 +33,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
   isOnline,
-  lastSync,
+  lastsync,
   roomProximity,
   proximityScanning,
   showAllDepartments,
@@ -74,7 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">
-                  {settings.bedsideMode ? 'Bedside Monitor Mode' : 'Hospital Display System'}
+                  {settings.bedsidemode ? 'Bedside Monitor Mode' : 'Hospital Display System'}
                 </h1>
                 <p className="text-xs text-gray-600">
                   Welcome, {currentUser.name} ({currentUser.role}) - {currentUser.department}
@@ -128,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div className="flex items-center space-x-3">
             {/* Bedside Mode Indicator */}
-            {settings.bedsideMode && (
+            {settings.bedsidemode && (
               <div className="flex items-center space-x-1.5 text-xs px-2 py-1 rounded-lg bg-purple-100 border border-purple-300 text-purple-700">
                 <div className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-pulse"></div>
                 <span className="font-medium">Bedside Active</span>
@@ -194,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Last Sync */}
             <div className="text-xs text-gray-500">
               <Clock className="w-3 h-3 inline mr-1" />
-              Synced: {lastSync.toLocaleTimeString()}
+              Synced: {lastsync.toLocaleTimeString()}
             </div>
 
             {/* Referral Mode Toggle (Doctors only) */}

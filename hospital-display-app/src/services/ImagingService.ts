@@ -1,184 +1,57 @@
-// PACS/Imaging Service - Handles medical imaging integration
-import { ImagingStudy, ImagingImage, ImagingReport } from '../types';
-import HospitalAPI from '../api';
+import { BaseService } from './BaseService';
 
-export class ImagingService {
-  // Get imaging studies for a patient
+export interface ImagingStudy {
+  id: string;
+  studyType: string;
+  studyDate: string;
+  description: string;
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+  urgency: 'routine' | 'urgent' | 'stat';
+  findings: string;
+  abnormalFindings: boolean;
+  images: any[];
+}
+
+export class ImagingService extends BaseService {
   static async getPatientImagingStudies(patientId: string): Promise<ImagingStudy[]> {
-    try {
-      // Will be implemented when backend is ready
-      console.log('Fetching imaging studies for patient:', patientId);
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch imaging studies:', error);
-      return [];
-    }
+    // Placeholder implementation - returns empty array for now
+    // In production this would fetch imaging studies from PACS or other imaging systems
+    return [];
   }
 
-  // Get specific imaging study
-  static async getImagingStudy(studyId: string): Promise<ImagingStudy | null> {
-    try {
-      console.log('Fetching imaging study:', studyId);
-      return null;
-    } catch (error) {
-      console.error('Failed to fetch imaging study:', error);
-      return null;
-    }
-  }
-
-  // Get pending imaging studies awaiting radiologist review
-  static async getPendingStudies(): Promise<ImagingStudy[]> {
-    try {
-      console.log('Fetching pending imaging studies');
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch pending imaging studies:', error);
-      return [];
-    }
-  }
-
-  // Update imaging study status
-  static async updateStudyStatus(studyId: string, status: string, userId: string): Promise<boolean> {
-    try {
-      console.log('Updating imaging study status:', studyId, status);
-      return true;
-    } catch (error) {
-      console.error('Failed to update imaging study status:', error);
-      return false;
-    }
-  }
-
-  // Add radiologist report
-  static async addRadiologyReport(studyId: string, report: Partial<ImagingReport>, userId: string): Promise<boolean> {
-    try {
-      console.log('Adding radiology report:', studyId);
-      return true;
-    } catch (error) {
-      console.error('Failed to add radiology report:', error);
-      return false;
-    }
-  }
-
-  // Get imaging study priority color for UI
-  static getStudyPriorityColor(urgency: string): string {
-    switch (urgency) {
-      case 'stat':
-      case 'urgent':
-        return 'text-red-600 bg-red-50 border-red-200';
-      case 'asap':
-        return 'text-orange-600 bg-orange-50 border-orange-200';
-      case 'routine':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  }
-
-  // Get study status color for UI
-  static getStudyStatusColor(status: string): string {
-    switch (status) {
-      case 'completed':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'in_progress':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'pending':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'cancelled':
-        return 'text-red-600 bg-red-50 border-red-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  }
-
-  // Check if imaging study requires immediate attention
-  static requiresImmediateAttention(study: ImagingStudy): boolean {
-    return study.urgency === 'stat' || study.urgency === 'urgent';
-  }
-
-  // Get studies needing radiologist review
-  static needsRadiologistReview(studies: ImagingStudy[]): ImagingStudy[] {
-    return studies.filter(study => 
-      study.status === 'completed' && 
-      (!study.report || study.report.status !== 'final')
-    );
-  }
-
-  // Generate imaging report summary
-  static generateReportSummary(study: ImagingStudy): string {
-    if (!study.report) {
-      return `${study.studyType.toUpperCase()} ${study.bodyPart} - Awaiting radiologist report`;
-    }
-
-    const reportSummary = study.report.impression || study.report.findings || 'No findings documented';
-    return `${study.studyType.toUpperCase()} ${study.bodyPart}: ${reportSummary}`;
-  }
-
-  // Get image viewer URL for DICOM viewing
-  static getImageViewerUrl(studyId: string): string {
-    return `/imaging/viewer/${studyId}`;
-  }
-
-  // Export study for external sharing
-  static async exportStudy(studyId: string, format: 'dicom' | 'pdf' | 'jpg'): Promise<string | null> {
-    try {
-      console.log('Exporting imaging study:', studyId, format);
-      return null;
-    } catch (error) {
-      console.error('Failed to export imaging study:', error);
-      return null;
-    }
-  }
-
-  // Format study description for display
   static formatStudyDescription(study: ImagingStudy): string {
-    return `${study.studyType.toUpperCase()} - ${study.bodyPart}`;
+    return `${study.studyType} - ${study.description}`;
   }
 
-  // Get study type color for UI
   static getStudyTypeColor(studyType: string): string {
     switch (studyType.toLowerCase()) {
-      case 'xray':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'ct':
-        return 'text-purple-600 bg-purple-50 border-purple-200';
-      case 'mri':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'ultrasound':
-        return 'text-teal-600 bg-teal-50 border-teal-200';
-      case 'pet':
-        return 'text-red-600 bg-red-50 border-red-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
+      case 'ct': return 'bg-blue-100 border-blue-300 text-blue-800';
+      case 'mri': return 'bg-purple-100 border-purple-300 text-purple-800';
+      case 'xray': return 'bg-gray-100 border-gray-300 text-gray-800';
+      case 'ultrasound': return 'bg-green-100 border-green-300 text-green-800';
+      default: return 'bg-indigo-100 border-indigo-300 text-indigo-800';
     }
   }
 
-  // Alias for getStudyPriorityColor to match component usage
   static getUrgencyColor(urgency: string): string {
-    return this.getStudyPriorityColor(urgency);
+    switch (urgency) {
+      case 'stat': return 'bg-red-100 text-red-800';
+      case 'urgent': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-green-100 text-green-800';
+    }
   }
 
-  // Check if study has abnormal findings
   static hasAbnormalFindings(study: ImagingStudy): boolean {
-    if (!study.report) return false;
-    
-    const findings = study.report.findings?.toLowerCase() || '';
-    const impression = study.report.impression?.toLowerCase() || '';
-    
-    const abnormalKeywords = [
-      'abnormal', 'pathological', 'lesion', 'mass', 'tumor', 'fracture',
-      'infection', 'inflammation', 'abnormality', 'concerning', 'suspicious'
-    ];
-    
-    return abnormalKeywords.some(keyword => 
-      findings.includes(keyword) || impression.includes(keyword)
-    );
+    return study.abnormalFindings;
   }
 
-  // Open DICOM viewer for image
-  static openDicomViewer(imageId: string | ImagingImage): void {
-    // Open external DICOM viewer or navigate to internal viewer
-    const id = typeof imageId === 'string' ? imageId : imageId.id;
-    const viewerUrl = `/dicom-viewer/${id}`;
-    window.open(viewerUrl, '_blank', 'width=1200,height=800');
+  static openDicomViewer(image: any): void {
+    // Placeholder for DICOM viewer integration
+    console.log('Opening DICOM viewer for image:', image);
+  }
+
+  static generateReport(study: ImagingStudy): string {
+    // Placeholder for report generation
+    return `Imaging Report for ${study.studyType} study on ${study.studyDate}`;
   }
 }

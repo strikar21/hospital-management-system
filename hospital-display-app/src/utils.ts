@@ -1,8 +1,8 @@
 // utils.ts - Utility functions for Hospital Display App
 
-import { VitalType, VitalStatus } from './types';
+import { vitaltype, vitalstatus } from './types';
 
-export const getVitalStatus = (value: number, type: VitalType): VitalStatus => {
+export const getVitalStatus = (value: number, type: vitaltype): vitalstatus => {
   switch (type) {
     case 'heartRate':
       if (value < 60 || value > 100) return 'critical';
@@ -13,10 +13,6 @@ export const getVitalStatus = (value: number, type: VitalType): VitalStatus => {
       if (value < 95) return 'warning';
       return 'normal';
     case 'temperature':
-      if (value < 96 || value > 102) return 'critical';
-      if (value < 97 || value > 100) return 'warning';
-      return 'normal';
-    case 'skinTemperature':
       if (value < 95 || value > 103) return 'critical';
       if (value < 96 || value > 101) return 'warning';
       return 'normal';
@@ -38,7 +34,7 @@ export const getVitalStatus = (value: number, type: VitalType): VitalStatus => {
       if (value < 5 || value > 80) return 'critical';
       if (value < 10 || value > 60) return 'warning';
       return 'normal';
-    case 'bioimpedance':
+    case 'bioImpedance':
       // Bioimpedance in ohms
       if (value < 350 || value > 850) return 'critical';
       if (value < 400 || value > 750) return 'warning';
@@ -137,7 +133,7 @@ export const getStatusColor = (status: string): string => {
   }
 };
 
-export const getVitalStatusColor = (status: VitalStatus): string => {
+export const getVitalStatusColor = (status: vitalstatus): string => {
   switch (status) {
     case 'critical': return 'bg-red-100 text-red-600';
     case 'warning': return 'bg-yellow-100 text-yellow-600';
@@ -192,13 +188,12 @@ export const getVitalDisplayName = (vitalType: string): string => {
   switch (vitalType) {
     case 'heartRate': return 'Heart Rate';
     case 'temperature': return 'Temperature';
-    case 'skinTemperature': return 'Skin Temperature';
     case 'oxygenSat': return 'Oxygen Saturation';
     case 'respiratoryRate': return 'Respiratory Rate';
     case 'bloodPressure': return 'Blood Pressure';
     case 'ecg': return 'ECG';
     case 'eeg': return 'EEG';
-    case 'bioimpedance': return 'Bioimpedance';
+    case 'bioImpedance': return 'Bioimpedance';
     case 'tremor': return 'Tremor Intensity';
     default: return vitalType;
   }
@@ -208,13 +203,12 @@ export const getVitalUnit = (vitalType: string): string => {
   switch (vitalType) {
     case 'heartRate': return 'BPM';
     case 'temperature': return '°F';
-    case 'skinTemperature': return '°F';
     case 'oxygenSat': return '%';
     case 'respiratoryRate': return '/min';
     case 'bloodPressure': return 'mmHg';
     case 'ecg': return 'mV';
     case 'eeg': return 'μV';
-    case 'bioimpedance': return 'Ω';
+    case 'bioImpedance': return 'Ω';
     case 'tremor': return '/10';
     default: return '';
   }
@@ -255,10 +249,10 @@ export const canAdministerMedications = (userRole: string): boolean => {
  */
 export const canEditRecord = (record: any, userRole: string): boolean => {
   // Get creation timestamp (handle different field names)
-  const createdAt = record.createdAt || record.timestamp || record.createdat;
-  if (!createdAt) return false;
-  
-  const creationTime = new Date(createdAt);
+  const createdat = record.createdat || record.timestamp || record.createdat;
+  if (!createdat) return false;
+
+  const creationTime = new Date(createdat);
   const currentTime = new Date();
   const hoursElapsed = (currentTime.getTime() - creationTime.getTime()) / (1000 * 60 * 60);
   
@@ -275,10 +269,10 @@ export const canEditRecord = (record: any, userRole: string): boolean => {
  * Get remaining edit time in minutes for any record
  */
 export const getRemainingEditTime = (record: any): number => {
-  const createdAt = record.createdAt || record.timestamp || record.createdat;
-  if (!createdAt) return 0;
-  
-  const creationTime = new Date(createdAt);
+  const createdat = record.createdat || record.timestamp || record.createdat;
+  if (!createdat) return 0;
+
+  const creationTime = new Date(createdat);
   const currentTime = new Date();
   const minutesElapsed = (currentTime.getTime() - creationTime.getTime()) / (1000 * 60);
   const remainingMinutes = 120 - minutesElapsed; // 2 hours = 120 minutes
@@ -351,7 +345,7 @@ export const getOrderStatusColor = (status: string): string => {
     case 'pending':
     case 'ordered':
     case 'scheduled': return 'text-blue-600 bg-blue-50 border-blue-200';
-    case 'in_progress':
+    case 'inProgress':
     case 'processing': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
     case 'cancelled':
     case 'rejected': return 'text-red-600 bg-red-50 border-red-200';
@@ -462,25 +456,24 @@ export const getVitalInterpretation = (
 };
 
 // Vital trend analysis
-export const getVitalTrend = (currentValue: number, previousValue: number, vitalType: VitalType): 'rising' | 'falling' | 'stable' => {
-  const threshold = getVitalTrendThreshold(vitalType);
+export const getVitalTrend = (currentValue: number, previousValue: number, vitalType: vitaltype): 'rising' | 'falling' | 'stable' => {
+  const threshold = getvitaltrendthreshold(vitalType);
   const difference = Math.abs(currentValue - previousValue);
   
   if (difference <= threshold) return 'stable';
   return currentValue > previousValue ? 'rising' : 'falling';
 };
 
-const getVitalTrendThreshold = (vitalType: VitalType): number => {
+const getvitaltrendthreshold = (vitalType: vitaltype): number => {
   switch (vitalType) {
     case 'heartRate': return 5;
-    case 'temperature': return 0.5;
-    case 'skinTemperature': return 0.3;
+    case 'temperature': return 0.3;
     case 'oxygenSat': return 2;
     case 'respiratoryRate': return 2;
     case 'bloodPressure': return 10;
     case 'ecg': return 10;
     case 'eeg': return 5;
-    case 'bioimpedance': return 25;
+    case 'bioImpedance': return 25;
     case 'tremor': return 0.5;
     default: return 1;
   }

@@ -1,32 +1,32 @@
 // App.tsx - Main Application Component
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { User, AppSettings, Patient } from './types';
+import { user, appsettings, patient } from './types';
 import { Login } from './Login';
 import { Dashboard } from './Dashboard';
 import { BedsideMode } from './BedsideMode';
-import HospitalAPI from './api';
+// Removed unused HospitalAPI import
 import MedicalErrorBoundary from './components/MedicalErrorBoundary';
 
-const DEFAULT_SETTINGS: AppSettings = {
-  autoLogoutMinutes: 15,
-  enableAutoLogout: true,
-  bedsideMode: false,
+const DEFAULT_SETTINGS: appsettings = {
+  autologoutminutes: 15,
+  enableautologout: true,
+  bedsidemode: false,
   // Extended settings for advanced monitoring
-  arrhythmiaDetection: true,
-  eegMonitoring: true,
-  tremorDetection: true,
-  fallDetection: true,
-  audioAlarms: true,
-  privacyMode: false,
-  autoScrollSpeed: 30,
-  enableAutoScroll: true
+  arrhythmiadetection: true,
+  eegmonitoring: true,
+  tremordetection: true,
+  falldetection: true,
+  audioalarms: true,
+  privacymode: false,
+  autoscrollspeed: 30,
+  enableautoscroll: true
 };
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [bedsidePatients, setBedsidePatients] = useState<Patient[]>([]);
+  const [currentUser, setCurrentUser] = useState<user | null>(null);
+  const [settings, setSettings] = useState<appsettings>(DEFAULT_SETTINGS);
+  const [bedsidePatients, setBedsidePatients] = useState<patient[]>([]);
   const [bedsideDisplayCount, setBedsideDisplayCount] = useState<1 | 2>(1);
 
   // Load settings from localStorage on app start
@@ -55,12 +55,12 @@ const App: React.FC = () => {
       try {
         localStorage.setItem('hospitalDisplaySettings', JSON.stringify(settings));
         console.log('⚙️ Settings saved:', {
-          autoLogout: settings.enableAutoLogout,
-          autoScroll: settings.enableAutoScroll,
-          arrhythmiaDetection: settings.arrhythmiaDetection,
-          eegMonitoring: settings.eegMonitoring,
-          tremorDetection: settings.tremorDetection,
-          fallDetection: settings.fallDetection
+          autoLogout: settings.enableautologout,
+          autoScroll: settings.enableautoscroll,
+          arrhythmiaDetection: settings.arrhythmiadetection,
+          eegMonitoring: settings.eegmonitoring,
+          tremorDetection: settings.tremordetection,
+          fallDetection: settings.falldetection
         });
       } catch (error) {
         console.error('Failed to save settings:', error);
@@ -74,69 +74,69 @@ const App: React.FC = () => {
     };
   }, [settings]);
 
-  const handleLogin = (user: User) => {
+  const handleLogin = (user: user) => {
     setCurrentUser(user);
-    setSettings(prev => ({ ...prev, bedsideMode: false }));
+    setSettings(prev => ({ ...prev, bedsidemode: false }));
     setBedsidePatients([]);
     console.log('✅ User logged in:', user.name, user.role, '- Advanced monitoring enabled:', {
-      arrhythmia: settings.arrhythmiaDetection,
-      eeg: settings.eegMonitoring,
-      tremor: settings.tremorDetection,
-      fall: settings.fallDetection
+      arrhythmia: settings.arrhythmiadetection,
+      eeg: settings.eegmonitoring,
+      tremor: settings.tremordetection,
+      fall: settings.falldetection
     });
   };
 
   const handleLogout = () => {
     console.log('🔓 User logged out:', currentUser?.name);
     setCurrentUser(null);
-    setSettings(prev => ({ ...prev, bedsideMode: false }));
+    setSettings(prev => ({ ...prev, bedsidemode: false }));
     setBedsidePatients([]);
   };
 
-  const handleUpdateSettings = useCallback((newSettings: AppSettings) => {
+  const handleUpdateSettings = useCallback((newSettings: appsettings) => {
     setSettings(newSettings);
     console.log('⚙️ Settings updated:', {
-      autoLogout: `${newSettings.enableAutoLogout ? 'Enabled' : 'Disabled'} (${newSettings.autoLogoutMinutes}min)`,
-      autoScroll: `${newSettings.enableAutoScroll ? 'Enabled' : 'Disabled'} (${newSettings.autoScrollSpeed}px/s)`,
+      autoLogout: `${newSettings.enableautologout ? 'Enabled' : 'Disabled'} (${newSettings.autologoutminutes}min)`,
+      autoScroll: `${newSettings.enableautoscroll ? 'Enabled' : 'Disabled'} (${newSettings.autoscrollspeed}px/s)`,
       monitoring: {
-        arrhythmia: newSettings.arrhythmiaDetection,
-        eeg: newSettings.eegMonitoring,
-        tremor: newSettings.tremorDetection,
-        fall: newSettings.fallDetection,
-        audio: newSettings.audioAlarms,
-        privacy: newSettings.privacyMode
+        arrhythmia: newSettings.arrhythmiadetection,
+        eeg: newSettings.eegmonitoring,
+        tremor: newSettings.tremordetection,
+        fall: newSettings.falldetection,
+        audio: newSettings.audioalarms,
+        privacy: newSettings.privacymode
       }
     });
   }, []);
 
-  const handleBedsideMode = (patients: Patient[], displayCount: 1 | 2 = 1) => {
+  const handleBedsideMode = (patients: patient[], displayCount: 1 | 2 = 1) => {
     setBedsidePatients(patients);
     setBedsideDisplayCount(displayCount);
-    setSettings(prev => ({ ...prev, bedsideMode: true }));
+    setSettings(prev => ({ ...prev, bedsidemode: true }));
     
     // LOGOUT USER when entering bedside mode
     console.log('🏥 Entered bedside mode with', patients.length, 'patient(s) - User logged out');
     console.log('📊 Bedside monitoring configuration:', {
       displayCount,
-      arrhythmiaDetection: settings.arrhythmiaDetection,
-      eegMonitoring: settings.eegMonitoring,
-      tremorDetection: settings.tremorDetection,
-      fallDetection: settings.fallDetection,
-      audioAlarms: settings.audioAlarms,
-      privacyMode: settings.privacyMode
+      arrhythmiadetection: settings.arrhythmiadetection,
+      eegmonitoring: settings.eegmonitoring,
+      tremordetection: settings.tremordetection,
+      falldetection: settings.falldetection,
+      audioalarms: settings.audioalarms,
+      privacymode: settings.privacymode
     });
     setCurrentUser(null);
   };
 
   const handleExitBedsideMode = () => {
     setBedsidePatients([]);
-    setSettings(prev => ({ ...prev, bedsideMode: false }));
+    setSettings(prev => ({ ...prev, bedsidemode: false }));
     console.log('🚪 Exited bedside mode - Returning to login');
     // User remains logged out, will show login screen
   };
 
   // If in bedside mode, show bedside monitor
-  if (settings.bedsideMode && bedsidePatients.length > 0) {
+  if (settings.bedsidemode && bedsidePatients.length > 0) {
     return (
       <MedicalErrorBoundary 
         patientId={bedsidePatients[0]?.id}

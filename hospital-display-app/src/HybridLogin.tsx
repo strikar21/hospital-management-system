@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User as UserType } from './types';
-import HospitalAPI from './api';
+import { user as UserType } from './types';
+import { AuthService } from './services';
 import PINLogin from './PINLogin';
 import { 
-  Tablet, User, Lock, LogIn, RefreshCw, Wifi, WifiOff, 
+  Tablet, User, Lock, RefreshCw, Wifi, WifiOff, 
   Shield, AlertCircle, CheckCircle, Eye, EyeOff 
 } from 'lucide-react';
 
@@ -36,18 +36,18 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
     };
   }, []);
 
-  const checkAuthType = async (staffIdToCheck: string) => {
-    if (!staffIdToCheck.trim()) {
+  const checkAuthType = async (staffIdtocheck: string) => {
+    if (!staffIdtocheck.trim()) {
       setAuthType('unknown');
       return;
     }
-    
+
     setIsCheckingRole(true);
     setError('');
-    
+
     try {
-      const authInfo = await HospitalAPI.checkAuthType(staffIdToCheck);
-      
+      const authInfo = await AuthService.checkAuthType(staffIdtocheck);
+
       if (authInfo) {
         if (authInfo.requiresPin) {
           setAuthType('pin');
@@ -56,9 +56,9 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
         }
       } else {
         // If staff endpoint fails, default based on staff ID pattern
-        if (staffIdToCheck.startsWith('DOC') || staffIdToCheck.startsWith('NUR') || staffIdToCheck.startsWith('TEC')) {
+        if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
           setAuthType('pin');
-        } else if (staffIdToCheck.startsWith('ADM') || staffIdToCheck.startsWith('PRV')) {
+        } else if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
           setAuthType('password');
         } else {
           setError('Staff ID not found. Please check and try again.');
@@ -67,9 +67,9 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
       }
     } catch (err) {
       // If staff endpoint fails, default based on staff ID pattern
-      if (staffIdToCheck.startsWith('DOC') || staffIdToCheck.startsWith('NUR') || staffIdToCheck.startsWith('TEC')) {
+      if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
         setAuthType('pin');
-      } else if (staffIdToCheck.startsWith('ADM') || staffIdToCheck.startsWith('PRV')) {
+      } else if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
         setAuthType('password');
       } else {
         setError('');
@@ -82,7 +82,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
 
   // Auto-check auth type when staff ID changes
   useEffect(() => {
-    if (staffId.trim().length >= 7) { // Check when we have a reasonable staff ID length (DOC0001 format)
+    if (staffId.trim().length === 7) { // Check when we have exact staff ID length (DOC0001 format)
       checkAuthType(staffId);
     } else {
       setAuthType('unknown');
@@ -102,7 +102,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
     setSuccess('');
 
     try {
-      const user = await HospitalAPI.authenticateCredentials(staffId, password);
+      const user = await AuthService.authenticateCredentials(staffId, password);
       
       if (user) {
         setSuccess(`Authentication successful! Welcome, ${user.name}!`);
@@ -130,7 +130,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
     setSuccess('');
 
     try {
-      const user = await HospitalAPI.authenticateCredentials(staffId, '', pin);
+      const user = await AuthService.authenticateCredentials(staffId, '', pin);
       
       if (user) {
         setSuccess(`Authentication successful! Welcome, ${user.name}!`);
@@ -149,13 +149,6 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
     }
   };
 
-  const resetLogin = () => {
-    setStaffId('');
-    setPassword('');
-    setAuthType('unknown');
-    setError('');
-    setSuccess('');
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 flex items-center justify-center p-6">
@@ -299,14 +292,14 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
                   </form>
                 )}
 
-                {authType === 'unknown' && staffId.trim().length >= 4 && (
+                {authType === 'unknown' && staffId.trim().length >= 3 && staffId.trim().length < 7 && (
                   <div className="text-center text-gray-500 py-8">
                     <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <p>Enter a valid Staff ID to continue</p>
                   </div>
                 )}
 
-                {authType === 'unknown' && staffId.trim().length < 4 && (
+                {authType === 'unknown' && staffId.trim().length < 3 && (
                   <div className="text-center text-gray-400 py-8">
                     <User className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <p>Enter your 4-digit Staff ID above</p>

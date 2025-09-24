@@ -3,16 +3,16 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Patient, VitalHistory, TimeRange } from './types';
+import { patient, vitalhistory, timerange } from './types';
 import { getVitalDisplayName, getVitalUnit } from './utils';
 
 interface VitalChartProps {
-  patient: Patient;
+  patient: patient;
   vitalType: string;
-  vitalHistory: VitalHistory[];
-  timeRange: TimeRange;
+  vitalHistory: vitalhistory[];
+  timeRange: timerange;
   onClose: () => void;
-  onTimeRangeChange: (range: TimeRange) => void;
+  onTimeRangeChange: (range: timerange) => void;
 }
 
 export const VitalChart: React.FC<VitalChartProps> = ({
@@ -44,14 +44,14 @@ export const VitalChart: React.FC<VitalChartProps> = ({
                     vitalType === 'respiratoryRate' ? h.respiratoryRate :
                     vitalType === 'ecg' ? h.ecg :
                     vitalType === 'eeg' ? h.eeg :
-                    vitalType === 'bioimpedance' ? h.bioimpedance :
+                    vitalType === 'bioImpedance' ? h.bioImpedance :
                     vitalType === 'tremor' ? h.tremor :
-                    h[vitalType as keyof VitalHistory]
+                    h[vitalType as keyof vitalhistory]
       };
     }
   });
 
-  const timeRanges: TimeRange[] = ['1h', '6h', '24h', '7d'];
+  const timeRanges: timerange[] = ['1h', '6h', '24h', '7d'];
 
   // Get current value for display
   const getCurrentValue = () => {
@@ -62,7 +62,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
     if (vitalType === 'bloodPressure') return patient.vitals.bloodPressure;
     if (vitalType === 'ecg') return `${patient.vitals.ecg} mV`;
     if (vitalType === 'eeg') return `${patient.vitals.eeg || 45} μV`;
-    if (vitalType === 'bioimpedance') return `${patient.vitals.bioimpedance || 500} Ω`;
+    if (vitalType === 'bioImpedance') return `${patient.vitals.bioImpedance || 500} Ω`;
     if (vitalType === 'tremor') return `${(patient.vitals.tremor || 0).toFixed(1)}/10`;
     return '';
   };
@@ -86,7 +86,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
         return [50, 250];
       case 'eeg':
         return [0, 100];
-      case 'bioimpedance':
+      case 'bioImpedance':
         return [300, 900];
       case 'tremor':
         return [0, 10];
@@ -107,7 +107,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
       case 'diastolic': return '#EC4899'; // Pink
       case 'ecg': return '#10B981'; // Green
       case 'eeg': return '#3B82F6'; // Blue
-      case 'bioimpedance': return '#14B8A6'; // Teal
+      case 'bioImpedance': return '#14B8A6'; // Teal
       case 'tremor': return '#F472B6'; // Pink
       default: return '#6B7280'; // Gray
     }
@@ -124,7 +124,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
     if (name === 'diastolic') return [`${Math.round(value)} mmHg`, 'Diastolic Pressure'];
     if (name === 'ecg') return [`${Math.round(value)} mV`, 'ECG'];
     if (name === 'eeg') return [`${Math.round(value)} μV`, 'EEG'];
-    if (name === 'bioimpedance') return [`${Math.round(value)} Ω`, 'Bioimpedance'];
+    if (name === 'bioImpedance') return [`${Math.round(value)} Ω`, 'Bioimpedance'];
     if (name === 'tremor') return [`${Number(value).toFixed(1)}/10`, 'Tremor Intensity'];
     return [value, name];
   };
@@ -148,7 +148,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
         return '• Normal Range: 100-150 mV';
       case 'eeg':
         return '• Normal Range: 10-60 μV';
-      case 'bioimpedance':
+      case 'bioImpedance':
         return '• Normal Range: 450-650 Ω';
       case 'tremor':
         return '• Normal Range: 0-2/10 (minimal tremor)';
@@ -176,7 +176,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
         return 'ECG amplitude reflects cardiac electrical activity and muscle mass. Abnormal patterns may indicate arrhythmias or structural heart disease.';
       case 'eeg':
         return 'EEG activity reflects brain electrical function and arousal state. Abnormal patterns may indicate seizures or altered consciousness.';
-      case 'bioimpedance':
+      case 'bioImpedance':
         return 'Bioimpedance measures tissue electrical properties related to fluid status and body composition. Changes may indicate fluid retention.';
       case 'tremor':
         return 'Tremor intensity indicates involuntary muscle activity. High levels increase fall risk and may suggest neurological conditions.';

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Pill, TrendingUp, TrendingDown, ArrowLeft } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Patient } from './types';
-import HospitalAPI from './api';
+import { patient } from './types';
+import { VitalService } from './services';
 import auditService from './services/auditService';
 
 interface EnhancedVitalChartProps {
-  patient: Patient;
+  patient: patient;
   vitalType: string;
   currentUser?: { id: string; staffId?: string; name: string; role: string };
   onClose: () => void;
@@ -67,11 +67,11 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
   // Map frontend vital types to backend types
   const mapVitalType = (frontendType: string): string => {
     const mapping: { [key: string]: string } = {
-      'heartRate': 'heartRate',
+      'heartrate': 'heartrate',
       'temperature': 'temperature',
-      'bloodPressure': 'bloodPressureSystolic',
-      'oxygenSat': 'oxygenSaturation',
-      'respiratoryRate': 'respiratoryRate'
+      'bloodpressure': 'bloodpressureSystolic',
+      'oxygenSat': 'oxygensaturation',
+      'respiratoryrate': 'respiratoryrate'
     };
     return mapping[frontendType] || frontendType;
   };
@@ -93,7 +93,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
         raw: showRawData
       });
       
-      console.log('Calling HospitalAPI.getVitalHistory (fallback)...');
+      console.log('Calling VitalService.getVitalHistory (fallback)...');
       
       // Use working getVitalHistory method with fallback support
       const timeRangeMap: { [key: string]: '1h' | '6h' | '24h' | '7d' } = {
@@ -108,20 +108,20 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       const mappedTimeRange = timeRangeMap[selectedTimeframe] || '6h';
       console.log('Mapped timeframe:', selectedTimeframe, '->', mappedTimeRange);
       
-      const vitalHistoryData = await HospitalAPI.getVitalHistory(patient.id, mappedTimeRange);
+      const vitalHistoryData = await VitalService.getVitalHistory(patient.id, mappedTimeRange);
       console.log('Vital history data:', vitalHistoryData.length, 'points');
       console.log('Raw vital history data:', vitalHistoryData);
       console.log('Sample data point:', vitalHistoryData[0]);
       
       if (vitalHistoryData && vitalHistoryData.length > 0) {
         // Convert VitalHistory format to chart data format
-        const isBloodPressure = vitalType === 'bloodPressure';
+        const isBloodPressure = vitalType === 'bloodpressure';
         
         if (isBloodPressure) {
           console.log('Processing blood pressure data');
           
           // Convert to systolic BP data
-          const systolicData = vitalHistoryData.map(point => ({
+          const systolicData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
             value: point.bloodPressure || 0,
             qualityScore: 0.9,
@@ -129,7 +129,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           }));
           
           // Convert to diastolic BP data
-          const diastolicData = vitalHistoryData.map(point => ({
+          const diastolicData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
             value: point.bloodPressureDiastolic || 0,
             qualityScore: 0.9,
@@ -153,20 +153,20 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           // Convert single vital data
           // Map frontend vital types to VitalHistory property names
           const vitalKeyMap: { [key: string]: keyof typeof vitalHistoryData[0] } = {
-            'heartRate': 'heartRate',
-            'temperature': 'temperature', 
-            'oxygenSat': 'oxygenSat',
-            'respiratoryRate': 'respiratoryRate',
+            'heartrate': 'heartRate',
+            'temperature': 'temperature',
+            'oxygensat': 'oxygenSat',
+            'respiratoryrate': 'respiratoryRate',
             'ecg': 'ecg',
             'eeg': 'eeg',
-            'bioimpedance': 'bioimpedance',
+            'bioimpedance': 'bioImpedance',
             'tremor': 'tremor'
           };
           
-          const vitalKey = vitalKeyMap[vitalType] || 'heartRate';
+          const vitalKey = vitalKeyMap[vitalType] || 'heartrate';
           console.log('Mapping vitalType:', vitalType, 'to key:', vitalKey);
           
-          const chartData = vitalHistoryData.map(point => ({
+          const chartData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
             value: (point[vitalKey] as number) || 0,
             qualityScore: 0.9,
@@ -180,10 +180,10 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           
           // Set chart config based on vital type
           const chartConfigs = {
-            heartRate: { title: 'Heart Rate', color: '#dc2626', unit: 'BPM', normalRange: { min: 60, max: 100 }},
+            heartrate: { title: 'Heart Rate', color: '#dc2626', unit: 'BPM', normalRange: { min: 60, max: 100 }},
             temperature: { title: 'Temperature', color: '#f59e0b', unit: '°F', normalRange: { min: 97, max: 100 }},
             oxygenSat: { title: 'Oxygen Saturation', color: '#3b82f6', unit: '%', normalRange: { min: 95, max: 100 }},
-            respiratoryRate: { title: 'Respiratory Rate', color: '#10b981', unit: '/min', normalRange: { min: 12, max: 20 }},
+            respiratoryrate: { title: 'Respiratory Rate', color: '#10b981', unit: '/min', normalRange: { min: 12, max: 20 }},
             ecg: { title: 'ECG', color: '#8b5cf6', unit: 'mV', normalRange: { min: 80, max: 160 }},
             eeg: { title: 'EEG', color: '#f97316', unit: 'μV', normalRange: { min: 30, max: 60 }}
           };
@@ -306,16 +306,16 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
     return null; // Use default dot for normal values
   };
   
-  const isBloodPressure = vitalType === 'bloodPressure';
+  const isBloodPressure = vitalType === 'bloodpressure';
   
   // Function to check if a vital value is abnormal
   const isAbnormal = (value: number, vitalType: string, isDiastolic: boolean = false) => {
     const ranges: { [key: string]: { min: number; max: number } } = {
-      heartRate: { min: 60, max: 100 },
+      heartrate: { min: 60, max: 100 },
       temperature: { min: 97.0, max: 100.4 }, // °F
       oxygenSat: { min: 95, max: 100 },
-      respiratoryRate: { min: 12, max: 20 },
-      bloodPressure: isDiastolic 
+      respiratoryrate: { min: 12, max: 20 },
+      bloodpressure: isDiastolic 
         ? { min: 60, max: 90 }   // Diastolic: 60-90 mmHg 
         : { min: 90, max: 140 },  // Systolic: 90-140 mmHg
       ecg: { min: 80, max: 160 },
@@ -397,7 +397,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           {/* Blood Pressure - Show both systolic and diastolic */}
           {isBloodPressure && data.diastolicValue !== undefined ? (
             <div>
-              <p className="text-red-300">{`Systolic: ${payload[0].value.toFixed(0)} mmHg ${data.isAbnormal && payload[0].value < 90 || payload[0].value > 140 ? '⚠️' : '✓'}`}</p>
+              <p className="text-red-300">{`Systolic: ${payload[0].value.toFixed(0)} mmHg ${(data.isAbnormal && payload[0].value < 90) || payload[0].value > 140 ? '⚠️' : '✓'}`}</p>
               <p className="text-purple-300">{`Diastolic: ${data.diastolicValue.toFixed(0)} mmHg ${data.diastolicAbnormal ? '⚠️' : '✓'}`}</p>
               <p className="text-blue-200 text-sm font-semibold">{`BP: ${payload[0].value.toFixed(0)}/${data.diastolicValue.toFixed(0)} mmHg`}</p>
               {(data.isAbnormal) && (
@@ -407,7 +407,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           ) : (
             /* Single vital display */
             <div>
-              <p className="text-blue-300">{`${getVitalDisplayName()}: ${payload[0].value.toFixed(1)} ${chartConfig.yAxisLabel || ''}`}</p>
+              <p className="text-blue-300">{`${getvitaldisplayname()}: ${payload[0].value.toFixed(1)} ${chartConfig.yAxisLabel || ''}`}</p>
               {data.isAbnormal && (
                 <p className="text-red-400 text-sm">⚠️ Abnormal Reading</p>
               )}
@@ -429,13 +429,13 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
     return null;
   };
 
-  const getVitalDisplayName = () => {
+  const getvitaldisplayname = () => {
     const names: { [key: string]: string } = {
-      'heartRate': 'Heart Rate',
+      'heartrate': 'Heart Rate',
       'temperature': 'Temperature', 
-      'bloodPressure': 'Blood Pressure',
+      'bloodpressure': 'Blood Pressure',
       'oxygenSat': 'Oxygen Saturation',
-      'respiratoryRate': 'Respiratory Rate'
+      'respiratoryrate': 'Respiratory Rate'
     };
     return names[vitalType] || vitalType;
   };
@@ -556,7 +556,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
             </button>
             <div>
               <h2 className="text-xl font-bold text-gray-900">
-                {patient.name} - {getVitalDisplayName()} Analytics
+                {patient.name} - {getvitaldisplayname()} Analytics
               </h2>
               <p className="text-sm text-gray-600">
                 Bed {patient.bedNumber} • Room {patient.room} • {patient.ward} Ward
@@ -687,7 +687,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
                     dataKey="value" 
                     stroke={isBloodPressure ? '#EF4444' : '#10B981'} // Red for systolic, green for normal vitals
                     strokeWidth={chartConfig.lineWidth || 2}
-                    name={isBloodPressure ? 'Systolic' : `${getVitalDisplayName()}`}
+                    name={isBloodPressure ? 'Systolic' : `${getvitaldisplayname()}`}
                     dot={<CustomDot />}
                     activeDot={{ 
                       r: (chartConfig.dotSize || 4) + 2, 

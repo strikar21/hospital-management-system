@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  User, Save, X, Calendar, MapPin, Stethoscope, 
-  Heart, AlertCircle, CheckCircle, UserPlus 
+import {
+  User, Save, X, Calendar, MapPin, Stethoscope,
+  Heart, AlertCircle, CheckCircle, UserPlus
 } from 'lucide-react';
-import { User as UserType } from './types';
-import HospitalAPI from './api';
+import { user as UserType } from './types';
+import { getApiUrl } from './config/apiConfig';
+// Removed unused HospitalAPI import
 
 interface PatientAdmissionProps {
   currentUser: UserType;
@@ -104,7 +105,7 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
         weight: formData.weight ? parseFloat(formData.weight) : null
       };
 
-      const response = await fetch('http://localhost:8001/api/v1/admission/recommendations', {
+      const response = await fetch(getApiUrl('/admission/recommendations'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json'

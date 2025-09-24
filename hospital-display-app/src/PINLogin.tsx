@@ -148,7 +148,7 @@ const PINLogin: React.FC<PINLoginProps> = ({ staffId: propStaffId, onLogin, load
           <div /> {/* Empty space */}
           <button
             onClick={() => handlePINDigit('0')}
-            disabled={loading || pin.length >= 6}
+            disabled={loading || pin.length >= 4}
             className="h-14 text-xl font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
           >
             0
