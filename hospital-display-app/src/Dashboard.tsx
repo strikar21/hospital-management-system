@@ -6,7 +6,7 @@ import { user, patient, roomproximity, appsettings } from './types';
 import { PatientService, VitalService } from './services';
 import { isNurseOrTechnician } from './utils';
 import { Header } from './Header';
-import { PatientCard } from './PatientCard';
+import PatientCard from './PatientCard';
 import PatientDetail from './PatientDetail';
 import { EnhancedVitalChart } from './EnhancedVitalChart';
 import { ECGViewer } from './ECGViewer';
@@ -133,8 +133,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Clean up alert timeouts on unmount
   useEffect(() => {
     return () => {
-      alertTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      alertTimeoutsRef.current.clear();
+      // Capture current ref value to prevent stale closure
+      const timeouts = alertTimeoutsRef.current;
+      timeouts.forEach((timeout) => clearTimeout(timeout));
+      timeouts.clear();
     };
   }, []);
 
@@ -171,7 +173,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       
       return () => clearInterval(proximityInterval);
     }
-  }, [currentUser]);
+  }, [currentUser, detectProximity]); // Add missing dependency
 
   // Real-time vital updates removed - backend handles real-time data
 
@@ -198,8 +200,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setProximityScanning(true);
     try {
       const proximity = await VitalService.detectRoomProximity();
-      setRoomProximity(proximity);
-      setLastSync(new Date());
+      const syncTime = new Date();
+      // Batch related state updates to prevent race conditions
+      React.unstable_batchedUpdates(() => {
+        setRoomProximity(proximity);
+        setLastSync(syncTime);
+      });
     } catch (error) {
       console.error('Failed to detect room proximity:', error);
     } finally {
@@ -304,9 +310,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handlePatientSelection = async (patient: patient) => {
+    setLoading(true);
     try {
       console.log(`🔍 Fetching complete details for patient: ${patient.id}`);
-      const fullPatientData = await PatientService.getPatient(patient.id);
+
+      // Add timeout wrapper for API call
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), 10000);
+      });
+
+      const fullPatientData = await Promise.race([
+        PatientService.getPatient(patient.id),
+        timeoutPromise
+      ]);
+
       if (fullPatientData) {
         console.log(`✅ Got complete patient data with ${fullPatientData.medications?.length || 0} medications, ${fullPatientData.investigations?.length || 0} investigations, ${fullPatientData.therapies?.length || 0} therapies`);
         setSelectedPatient(fullPatientData);
@@ -319,6 +336,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       console.error('❌ Error fetching complete patient data:', error);
       // Fallback to basic data if API call fails
       setSelectedPatient(patient);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -407,11 +426,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <input
                   type="checkbox"
                   checked={settings.enableautoscroll || false}
-                  onChange={(e) => onUpdateSettings({ 
-                    ...settings, 
-                    enableautoscroll: e.target.checked 
+                  onChange={(e) => onUpdateSettings({
+                    ...settings,
+                    enableautoscroll: e.target.checked
                   })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  aria-describedby="autoscroll-description"
+                  aria-label="Enable automatic scrolling of patient list"
                 />
                 <span className="text-sm">Enable auto-scroll for patient rows</span>
               </label>

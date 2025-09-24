@@ -138,8 +138,8 @@ const App: React.FC = () => {
   // If in bedside mode, show bedside monitor
   if (settings.bedsidemode && bedsidePatients.length > 0) {
     return (
-      <MedicalErrorBoundary 
-        patientId={bedsidePatients[0]?.id}
+      <MedicalErrorBoundary
+        patientId={bedsidePatients.length > 0 ? bedsidePatients[0].id : undefined}
         medicalContext="bedsideMonitoring"
       >
         <BedsideMode

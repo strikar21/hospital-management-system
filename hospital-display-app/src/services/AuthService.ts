@@ -66,7 +66,7 @@ export class AuthService extends BaseService {
           SecureStorage.setToken(response.accessToken);
         }
         SecureStorage.setUser(response);
-        localStorage.setItem('currentUser', JSON.stringify(response));
+        // Remove HIPAA violation: Don't store sensitive user data in plain localStorage
 
         return response;
       }

@@ -16,7 +16,7 @@ interface PatientCardProps {
   onToggleECGMode: (patient: patient) => void;
 }
 
-export const PatientCard: React.FC<PatientCardProps> = ({
+const PatientCard: React.FC<PatientCardProps> = ({
   patient,
   currentUser,
   onPatientClick,
@@ -563,3 +563,6 @@ export const PatientCard: React.FC<PatientCardProps> = ({
     </div>
   );
 };
+
+// Memoize PatientCard for performance optimization
+export default React.memo(PatientCard);

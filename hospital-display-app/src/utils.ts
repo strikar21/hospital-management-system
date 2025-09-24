@@ -5,8 +5,9 @@ import { vitaltype, vitalstatus } from './types';
 export const getVitalStatus = (value: number, type: vitaltype): vitalstatus => {
   switch (type) {
     case 'heartRate':
-      if (value < 60 || value > 100) return 'critical';
-      if (value < 65 || value > 95) return 'warning';
+      // Updated to standard medical ranges
+      if (value < 40 || value > 130) return 'critical';
+      if (value < 50 || value > 110) return 'warning';
       return 'normal';
     case 'oxygenSat':
       if (value < 90) return 'critical';
@@ -17,8 +18,9 @@ export const getVitalStatus = (value: number, type: vitaltype): vitalstatus => {
       if (value < 96 || value > 101) return 'warning';
       return 'normal';
     case 'bloodPressure':
-      if (value < 90 || value > 160) return 'critical';
-      if (value < 110 || value > 140) return 'warning';
+      // Updated systolic BP ranges for medical accuracy
+      if (value < 70 || value > 180) return 'critical';
+      if (value < 90 || value > 160) return 'warning';
       return 'normal';
     case 'respiratoryRate':
       if (value < 8 || value > 25) return 'critical';

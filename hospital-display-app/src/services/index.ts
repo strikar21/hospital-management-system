@@ -6,9 +6,7 @@ import { MedicationService } from './MedicationService';
 import { DeviceService } from './DeviceService';
 import { InvestigationService } from './InvestigationService';
 import { TherapyService } from './TherapyService';
-import { ClinicalDecisionSupportService } from './ClinicalDecisionSupport';
-import { LabIntegrationService } from './LabIntegration';
-import { ImagingService } from './ImagingService';
+// Removed unused services: ClinicalDecisionSupport, LabIntegration, ImagingService
 import { BaseService } from './BaseService';
 
 export { BaseService } from './BaseService';
@@ -19,9 +17,7 @@ export { MedicationService } from './MedicationService';
 export { DeviceService } from './DeviceService';
 export { InvestigationService } from './InvestigationService';
 export { TherapyService } from './TherapyService';
-export { ClinicalDecisionSupportService } from './ClinicalDecisionSupport';
-export { LabIntegrationService } from './LabIntegration';
-export { ImagingService } from './ImagingService';
+// Removed unused service exports
 
 // Legacy compatibility layer - HospitalAPI class that delegates to services
 
