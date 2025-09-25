@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Activity, Thermometer, Droplets, AlertTriangle, Eye, CheckCircle, Brain, Wind, Waves, Watch, WifiOff } from 'lucide-react';
 import { patient, user } from './types';
-import { getStatusColor, detectArrhythmia, detectSeizureActivity, assessFallRisk, formatTimeOnly } from './utils';
+import { getStatusColor, formatTimeOnly } from './utils';
+import { MedicalUtils } from './utils/medicalUtils';
 import auditService from './services/auditService';
 
 interface PatientCardProps {
@@ -28,19 +29,11 @@ const PatientCard: React.FC<PatientCardProps> = ({
   const [displayedAlerts, setDisplayedAlerts] = useState(patient.alerts || []);
   const [selectedLead, setSelectedLead] = useState<string>(patient.vitals?.isEcgMode ? 'II' : 'C3-C4');
 
-  // Auto-hide acknowledged alerts after 3 seconds (reduced from 5 for faster disappear)
+  // MEDICAL SAFETY: Never auto-hide any medical alerts - all alerts must be manually dismissed
+  // This prevents critical safety information from disappearing without explicit user action
   useEffect(() => {
-    const acknowledgedAlerts = (patient.alerts || []).filter(alert => alert.isAcknowledged);
-    if (acknowledgedAlerts.length > 0) {
-      const timer = setTimeout(() => {
-        setDisplayedAlerts(prev => (prev || []).filter(alert => !alert.isAcknowledged));
-      }, 3000); // Reduced timeout
-      return () => clearTimeout(timer);
-    }
-  }, [patient.alerts]);
-
-  // Update displayed alerts when patient alerts change
-  useEffect(() => {
+    // Only filter out alerts that have been explicitly dismissed by user action
+    // Never auto-hide based on time or acknowledgment status
     setDisplayedAlerts(patient.alerts || []);
   }, [patient.alerts]);
 
@@ -55,9 +48,9 @@ const PatientCard: React.FC<PatientCardProps> = ({
   const pathData = "M 0 25 L 250 25"; // Flat line placeholder
 
   // Detect various conditions
-  const arrhythmiaDetected = detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecg);
-  const seizureActivity = patient.vitals?.eeg ? detectSeizureActivity(patient.vitals?.eeg, patient.vitals?.heartRate || 0) : false;
-  const fallRisk = assessFallRisk(patient.vitals?.tremor || 0, patient.vitals?.heartRate || 0, patient.age);
+  const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecg || 120);
+  const seizureActivity = patient.vitals?.eeg ? MedicalUtils.detectSeizureActivity(patient.vitals?.eeg, patient.vitals?.heartRate || 0) : false;
+  const fallRisk = MedicalUtils.assessFallRisk(patient.vitals?.tremor || 0, patient.vitals?.heartRate || 0, patient.age);
 
   // Add fall risk alert to displayed alerts if high or medium risk
   const alertsWithFallRisk = [...(displayedAlerts || [])];

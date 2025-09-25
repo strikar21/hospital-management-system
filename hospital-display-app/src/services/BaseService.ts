@@ -142,7 +142,7 @@ export abstract class BaseService {
       const itemTime = new Date(timestamp);
       const now = new Date();
       const timeDiff = now.getTime() - itemTime.getTime();
-      const maxEditWindow = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      const maxEditWindow = 2 * 60 * 60 * 1000; // 2 hours in milliseconds - MEDICAL COMPLIANCE
 
       const canEdit = timeDiff <= maxEditWindow;
       console.log(`🔍 Edit permission check: ${canEdit ? 'ALLOWED' : 'DENIED'} (${Math.round(timeDiff / (60 * 1000))} minutes old)`);

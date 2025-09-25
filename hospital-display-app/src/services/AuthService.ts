@@ -6,20 +6,53 @@ import SecureStorage from '../utils/secureStorage';
 export class AuthService extends BaseService {
 
   // ================================
+  // INPUT SANITIZATION FOR MEDICAL SECURITY
+  // ================================
+
+  /**
+   * Sanitize input to prevent injection attacks in medical systems
+   */
+  private static sanitizeInput(input: string): string {
+    if (!input || typeof input !== 'string') return '';
+
+    // Remove dangerous characters while allowing alphanumeric, dash, underscore
+    return input
+      .trim()
+      .replace(/[<>'";&|`${}()[\]]/g, '') // Remove injection characters
+      .replace(/\s+/g, '') // Remove all whitespace for staff IDs
+      .substring(0, 50); // Limit length
+  }
+
+  /**
+   * Validate staff ID format for medical compliance
+   */
+  private static validateStaffId(staffId: string): boolean {
+    // Medical staff ID should be alphanumeric with possible dash/underscore
+    const staffIdRegex = /^[A-Za-z0-9_-]{3,20}$/;
+    return staffIdRegex.test(staffId);
+  }
+
+  // ================================
   // AUTHENTICATION METHODS
   // ================================
 
   static async authenticateNFC(nfcId: string): Promise<user | null> {
     try {
+      // Sanitize and validate NFC ID for medical security
+      const sanitizedNfcId = this.sanitizeInput(nfcId);
+      if (!sanitizedNfcId || sanitizedNfcId.length < 4) {
+        throw new Error('Invalid NFC ID format');
+      }
+
       const response = await this.fetchFromBackend('/auth/nfc', {
         method: 'POST',
-        body: JSON.stringify({ nfcId })
+        body: JSON.stringify({ nfcId: sanitizedNfcId })
       });
 
       if (response && response.id) {
         console.log('🏥 NFC authentication successful:', response.name || response.id);
-        SecureStorage.setToken(response.token || 'nfc-auth-token');
-        SecureStorage.setUser(response);
+        await SecureStorage.setToken(response.token || 'nfc-auth-token');
+        await SecureStorage.setUser(response);
         return response;
       }
 
@@ -33,9 +66,20 @@ export class AuthService extends BaseService {
 
   static async authenticateCredentials(staffId: string, password: string, pin?: string): Promise<user | null> {
     try {
-      console.log('🔍 Attempting authentication for:', staffId, pin ? '(PIN)' : '(Password)');
+      // Input sanitization for medical security
+      const sanitizedStaffId = this.sanitizeInput(staffId);
+      if (!this.validateStaffId(sanitizedStaffId)) {
+        throw new Error('Invalid staff ID format - must be 3-20 alphanumeric characters');
+      }
 
-      const loginData: any = { staffId };
+      // Validate PIN format if provided
+      if (pin && (!/^\d{4,8}$/.test(pin))) {
+        throw new Error('Invalid PIN format - must be 4-8 digits');
+      }
+
+      console.log('🔍 Attempting authentication for:', sanitizedStaffId, pin ? '(PIN)' : '(Password)');
+
+      const loginData: any = { staffId: sanitizedStaffId };
 
       if (pin) {
         loginData.pin = pin;
@@ -56,16 +100,24 @@ export class AuthService extends BaseService {
         body: JSON.stringify(loginData)
       });
 
-      console.log('📥 Login response received:', response);
+      // Log response without sensitive data (tokens, passwords, etc.)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Login response received:', {
+          id: response?.id,
+          name: response?.firstName || response?.name,
+          role: response?.role,
+          success: !!response?.id
+        });
+      }
 
       if (response && response.id) {
         console.log('✅ Authentication successful for:', response.firstName, response.lastName);
 
-        // Store authentication data
+        // Store authentication data with medical-grade encryption
         if (response.accessToken) {
-          SecureStorage.setToken(response.accessToken);
+          await SecureStorage.setToken(response.accessToken);
         }
-        SecureStorage.setUser(response);
+        await SecureStorage.setUser(response);
         // Remove HIPAA violation: Don't store sensitive user data in plain localStorage
 
         return response;
@@ -81,8 +133,14 @@ export class AuthService extends BaseService {
 
   static async checkAuthType(staffId: string): Promise<{ requiresPin: boolean, requiresPassword: boolean } | null> {
     try {
+      // Sanitize staff ID for security
+      const sanitizedStaffId = this.sanitizeInput(staffId);
+      if (!this.validateStaffId(sanitizedStaffId)) {
+        return null; // Return null for invalid input
+      }
+
       // Production authentication type checking - backend only
-      const response = await this.fetchFromBackend(`/auth/check-type?staffId=${staffId}`);
+      const response = await this.fetchFromBackend(`/auth/check-type?staffId=${encodeURIComponent(sanitizedStaffId)}`);
 
       if (response) {
         return {
@@ -92,7 +150,7 @@ export class AuthService extends BaseService {
       }
 
       // Fallback for development - assume PIN for doctors, password for others
-      if (staffId.startsWith('DOC')) {
+      if (sanitizedStaffId.startsWith('DOC')) {
         return { requiresPin: true, requiresPassword: false };
       } else {
         return { requiresPin: false, requiresPassword: true };
@@ -118,8 +176,8 @@ export class AuthService extends BaseService {
     return super.getCurrentUser();
   }
 
-  static isAuthenticated(): boolean {
-    const token = SecureStorage.getToken();
+  static async isAuthenticated(): Promise<boolean> {
+    const token = await SecureStorage.getToken();
     const user = this.getCurrentUser();
     return !!(token && user);
   }

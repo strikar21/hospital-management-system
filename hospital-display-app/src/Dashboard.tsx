@@ -1,12 +1,11 @@
 // Dashboard.tsx - Main Dashboard
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, RefreshCw, Activity, X, Monitor } from 'lucide-react';
+import { Users, RefreshCw, Activity, X } from 'lucide-react';
 import { user, patient, roomproximity, appsettings } from './types';
 import { PatientService, VitalService } from './services';
-import { isNurseOrTechnician } from './utils';
+import { PermissionUtils } from './utils/permissionUtils';
 import { Header } from './Header';
-import PatientCard from './PatientCard';
 import PatientDetail from './PatientDetail';
 import { EnhancedVitalChart } from './EnhancedVitalChart';
 import { ECGViewer } from './ECGViewer';
@@ -15,6 +14,10 @@ import { PatientAdmission } from './PatientAdmission';
 import { DeviceProvisioning } from './DeviceProvisioning';
 import { NurseAdmissionProcessing } from './NurseAdmissionProcessing';
 import StaffManagement from './StaffManagement';
+import { SettingsPanel } from './components/Dashboard/SettingsPanel';
+import { PatientGrid } from './components/Dashboard/PatientGrid';
+import { useAutoLogout } from './hooks/useAutoLogout';
+import { usePatientData } from './hooks/usePatientData';
 import auditService from './services/auditService';
 
 interface DashboardProps {
@@ -33,14 +36,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onBedsideMode
 }) => {
   // Dashboard component for ${currentUser.name}
-  const [patients, setPatients] = useState<patient[]>([]);
   const [selectedWard, setSelectedWard] = useState<string>('My Patients');
   const [roomProximity, setRoomProximity] = useState<roomproximity | null>(null);
   const [proximityScanning, setProximityScanning] = useState(false);
   const [showAllDepartments, setShowAllDepartments] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [lastSync, setLastSync] = useState(new Date());
-  const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<patient | null>(null);
   const [showVitalChart, setShowVitalChart] = useState<{patient: patient, vital: string} | null>(null);
   const [showECGViewer, setShowECGViewer] = useState<patient | null>(null);
@@ -51,84 +51,45 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [showNurseAdmission, setShowNurseAdmission] = useState(false);
   const [showStaffManagement, setShowStaffManagement] = useState(false);
   
-  // Auto-logout management
-  const [lastActivity, setLastActivity] = useState(Date.now());
   const [currentPage, setCurrentPage] = useState(1);
   const PATIENTS_PER_PAGE = 20; // Limit to 20 patients for better performance
-  const autoLogoutTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastActivityRef = useRef(Date.now());
   const alertTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Initialize audit service and activity tracking
+  // Auto-logout hook
+  useAutoLogout({
+    settings,
+    onLogout,
+    userId: currentUser.id
+  });
+
+  // Patient data hook
+  const {
+    patients,
+    loading,
+    lastSync,
+    error,
+    loadPatients,
+    updatePatient,
+    removePatient,
+    totalPatients
+  } = usePatientData({
+    userId: currentUser.id,
+    selectedWard,
+    showAllDepartments,
+    refreshInterval: 30000
+  });
+
+  // Initialize audit service
   useEffect(() => {
     // Set user ID for audit logging
     auditService.setUserId(currentUser.id);
-    
+
     // Log dashboard access
     auditService.logNavigation('login', 'dashboard', {
       userRole: currentUser.role,
       dashboardMode: 'main'
     });
-    
-    const updateActivity = () => {
-      const now = Date.now();
-      // Only update if more than 1 second has passed to prevent excessive updates
-      if (now - lastActivityRef.current > 1000) {
-        lastActivityRef.current = now;
-        setLastActivity(now);
-      }
-    };
-
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
-    events.forEach(event => {
-      document.addEventListener(event, updateActivity, true);
-    });
-
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, updateActivity, true);
-      });
-    };
   }, [currentUser.id, currentUser.role]);
-
-  // Auto-logout timer management
-  useEffect(() => {
-    if (!settings.enableautologout || settings.bedsidemode) {
-      if (autoLogoutTimerRef.current) {
-        clearTimeout(autoLogoutTimerRef.current);
-        autoLogoutTimerRef.current = null;
-      }
-      return;
-    }
-
-    const checkForAutoLogout = () => {
-      const timeSinceLastActivity = Date.now() - lastActivity;
-      const timeoutMs = settings.autologoutminutes * 60 * 1000;
-      
-      if (timeSinceLastActivity >= timeoutMs) {
-        console.log('Auto-logout triggered due to inactivity');
-        onLogout();
-        return;
-      }
-      
-      const remainingTime = timeoutMs - timeSinceLastActivity;
-      autoLogoutTimerRef.current = setTimeout(checkForAutoLogout, Math.min(remainingTime, 60000));
-    };
-
-    if (autoLogoutTimerRef.current) {
-      clearTimeout(autoLogoutTimerRef.current);
-    }
-
-    const timeoutMs = settings.autologoutminutes * 60 * 1000;
-    autoLogoutTimerRef.current = setTimeout(checkForAutoLogout, timeoutMs);
-
-    return () => {
-      if (autoLogoutTimerRef.current) {
-        clearTimeout(autoLogoutTimerRef.current);
-      }
-    };
-  }, [lastActivity, settings.enableautologout, settings.autologoutminutes, settings.bedsidemode, onLogout]);
 
   // Clean up alert timeouts on unmount
   useEffect(() => {
@@ -164,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Auto-proximity detection for nurses and technicians
   useEffect(() => {
-    if (currentUser && isNurseOrTechnician(currentUser.role)) {
+    if (currentUser && PermissionUtils.isNurseOrTechnician(currentUser.role)) {
       detectProximity();
       
       const proximityInterval = setInterval(() => {
@@ -173,39 +134,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
       
       return () => clearInterval(proximityInterval);
     }
-  }, [currentUser, detectProximity]); // Add missing dependency
+  }, [currentUser]); // Remove detectProximity dependency to avoid hoisting issue
 
   // Real-time vital updates removed - backend handles real-time data
 
   // NFC override functionality removed - using backend-only mode
 
-  const loadPatients = async () => {
-    setLoading(true);
-    try {
-      // TEMPORARILY BYPASS ALL FILTERING - JUST GET ALL PATIENTS
-      let patientsData: patient[] = await PatientService.getPatients(undefined, undefined, true);
-      console.log('👥 Dashboard loaded patients with device assignments:', patientsData.map((p: any) => `${p.name} - Device: ${p.assignedDeviceId || 'None'}`));
-      setPatients(patientsData);
-      setLastSync(new Date());
-    } catch (error) {
-      console.error('❌ Failed to load patients:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const detectProximity = async () => {
-    if (!currentUser || !isNurseOrTechnician(currentUser.role)) return;
+    if (!currentUser || !PermissionUtils.isNurseOrTechnician(currentUser.role)) return;
     
     setProximityScanning(true);
     try {
       const proximity = await VitalService.detectRoomProximity();
-      const syncTime = new Date();
-      // Batch related state updates to prevent race conditions
-      React.unstable_batchedUpdates(() => {
-        setRoomProximity(proximity);
-        setLastSync(syncTime);
-      });
+      // React 18+ automatically batches state updates
+      setRoomProximity(proximity);
     } catch (error) {
       console.error('Failed to detect room proximity:', error);
     } finally {
@@ -214,12 +157,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handleToggleECGMode = (patient: patient) => {
-    setPatients(prev => prev.map(p => 
-      p.id === patient.id ? {
-        ...p,
-        vitals: { ...p.vitals, isEcgMode: !p.vitals.isEcgMode }
-      } : p
-    ));
+    updatePatient(patient.id, {
+      vitals: { ...patient.vitals, isEcgMode: !patient.vitals.isEcgMode }
+    });
   };
 
   const handleVitalClick = async (patient: patient, vitalType: string) => {
@@ -232,7 +172,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const handlePatientDischarge = (patientId: string) => {
     // Remove patient from the local list
-    setPatients(prev => prev.filter(p => p.id !== patientId));
+    removePatient(patientId);
     
     // Log discharge for audit
     auditService.logPatientInteraction('discharged', patientId, 'Patient successfully discharged from hospital', {
@@ -246,47 +186,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
     try {
       await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
       
-      // Update the patients state to remove the acknowledged alert
-      setPatients(prev => prev.map(p => 
-        p.id === patient.id ? {
-          ...p,
-          alerts: p.alerts.map(alert => 
-            alert.id === alertId ? {
-              ...alert,
-              isAcknowledged: true,
-              performedby: currentUser.id,
-              performedbyName: currentUser.name,
-              performedbyRole: currentUser.role,
-              completedat: new Date().toISOString()
-            } : alert
-          ).filter(alert => {
-            // Remove acknowledged alerts from the patient card display after 2 seconds
-            if (alert.id === alertId && alert.isAcknowledged) {
-              // Clear existing timeout for this alert if it exists
-              const existingTimeout = alertTimeoutsRef.current.get(alertId);
-              if (existingTimeout) {
-                clearTimeout(existingTimeout);
-              }
-              
-              // Set new timeout
-              const timeout = setTimeout(() => {
-                setPatients(prevPatients => prevPatients.map(prevP => 
-                  prevP.id === patient.id ? {
-                    ...prevP,
-                    alerts: prevP.alerts.filter(a => a.id !== alertId)
-                  } : prevP
-                ));
-                // Clean up timeout reference
-                alertTimeoutsRef.current.delete(alertId);
-              }, 2000);
-              
-              alertTimeoutsRef.current.set(alertId, timeout);
-              return true; // Keep for now, will be removed after timeout
-            }
-            return true;
-          })
-        } : p
-      ));
+      // Update the patient's alerts to mark as acknowledged
+      const updatedAlerts = patient.alerts.map(alert =>
+        alert.id === alertId ? {
+          ...alert,
+          isAcknowledged: true,
+          performedby: currentUser.id,
+          performedbyName: currentUser.name,
+          performedbyRole: currentUser.role,
+          completedat: new Date().toISOString()
+        } : alert
+      );
+
+      updatePatient(patient.id, { alerts: updatedAlerts });
+
+      // Remove acknowledged alerts from the patient card display after 2 seconds
+      const existingTimeout = alertTimeoutsRef.current.get(alertId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      // Set new timeout to remove the alert from display
+      const timeout = setTimeout(() => {
+        const filteredAlerts = updatedAlerts.filter(a => a.id !== alertId);
+        updatePatient(patient.id, { alerts: filteredAlerts });
+        alertTimeoutsRef.current.delete(alertId);
+      }, 2000);
+
+      alertTimeoutsRef.current.set(alertId, timeout);
     } catch (error) {
       console.error('Failed to acknowledge alert:', error);
       alert('Failed to acknowledge alert. Please try again.');
@@ -310,7 +237,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handlePatientSelection = async (patient: patient) => {
-    setLoading(true);
     try {
       console.log(`🔍 Fetching complete details for patient: ${patient.id}`);
 
@@ -337,12 +263,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
       // Fallback to basic data if API call fails
       setSelectedPatient(patient);
     } finally {
-      setLoading(false);
     }
   };
 
   const getWardOptions = () => {
-    if (isNurseOrTechnician(currentUser.role)) {
+    if (PermissionUtils.isNurseOrTechnician(currentUser.role)) {
       return [];
     } else if (currentUser.role === 'Doctor') {
       const options = ['My Patients'];
@@ -356,195 +281,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   // Paginate patients for performance
-  const totalPatients = patients.length;
   const totalPages = Math.ceil(totalPatients / PATIENTS_PER_PAGE);
-  const startIndex = (currentPage - 1) * PATIENTS_PER_PAGE;
-  const endIndex = startIndex + PATIENTS_PER_PAGE;
-  const paginatedPatients = patients.slice(startIndex, endIndex);
 
-  // Split paginated patients into rows - 2 cards per row instead of 3  
-  const topRowPatients = paginatedPatients.filter((_, index) => {
-    const groupOf4 = Math.floor(index / 4);
-    const positionInGroup = index % 4;
-    return positionInGroup < 2; // First 2 of each group of 4
-  });
 
-  const bottomRowPatients = paginatedPatients.filter((_, index) => {
-    const groupOf4 = Math.floor(index / 4);
-    const positionInGroup = index % 4;
-    return positionInGroup >= 2; // Last 2 of each group of 4
-  });
-
-  // Get CSS animation speed based on settings with patient count consideration
-  const getScrollSpeed = () => {
-    const speed = settings.autoscrollspeed || 30;
-    const baseSpeed = Math.max(20, 100 - speed); // 20-70 seconds range
-    
-    // Adjust speed based on patient count to prevent insane scrolling
-    const patientCount = paginatedPatients.length;
-    const minSpeedForCount = Math.max(30, patientCount * 3); // Minimum 30s, +3s per patient
-    
-    const finalSpeed = Math.max(baseSpeed, minSpeedForCount);
-    
-    if (patientCount > 10) {
-      console.log(`🐌 Scroll speed adjusted: ${patientCount} patients (page ${currentPage}), ${finalSpeed}s duration`);
-    }
-    
-    return finalSpeed;
-  };
-
-  // Settings Panel
-  const SettingsPanel = () => (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          setShowSettings(false);
-        }
-      }}
-    >
-      <div 
-        className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold">System Settings</h3>
-          <button
-            onClick={() => setShowSettings(false)}
-            className="text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 rounded"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="space-y-6">
-          {/* Auto-scroll Settings */}
-          <div>
-            <h4 className="font-medium mb-3">Auto-scroll Settings</h4>
-            <div className="space-y-3">
-              <label className="flex items-center space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.enableautoscroll || false}
-                  onChange={(e) => onUpdateSettings({
-                    ...settings,
-                    enableautoscroll: e.target.checked
-                  })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  aria-describedby="autoscroll-description"
-                  aria-label="Enable automatic scrolling of patient list"
-                />
-                <span className="text-sm">Enable auto-scroll for patient rows</span>
-              </label>
-              
-              {settings.enableautoscroll && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scroll speed (pixels/second):
-                  </label>
-                  <select
-                    value={settings.autoscrollspeed || 30}
-                    onChange={(e) => onUpdateSettings({ 
-                      ...settings, 
-                      autoscrollspeed: parseInt(e.target.value) 
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value={10}>Slow (10px/s)</option>
-                    <option value={20}>Medium-Slow (20px/s)</option>
-                    <option value={30}>Medium (30px/s)</option>
-                    <option value={50}>Fast (50px/s)</option>
-                    <option value={70}>Very Fast (70px/s)</option>
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Auto-logout Settings */}
-          <div>
-            <h4 className="font-medium mb-3">Auto-logout Settings</h4>
-            <div className="space-y-3">
-              <label className="flex items-center space-x-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.enableautologout}
-                  onChange={(e) => onUpdateSettings({ 
-                    ...settings, 
-                    enableautologout: e.target.checked 
-                  })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Enable auto-logout after inactivity</span>
-              </label>
-              
-              {settings.enableautologout && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Auto-logout after (minutes):
-                  </label>
-                  <select
-                    value={settings.autologoutminutes}
-                    onChange={(e) => onUpdateSettings({ 
-                      ...settings, 
-                      autologoutminutes: parseInt(e.target.value) 
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value={5}>5 minutes</option>
-                    <option value={10}>10 minutes</option>
-                    <option value={15}>15 minutes</option>
-                    <option value={30}>30 minutes</option>
-                    <option value={60}>1 hour</option>
-                    <option value={120}>2 hours</option>
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Bedside Mode Options */}
-          <div>
-            <h4 className="font-medium mb-3">Bedside Monitor Mode</h4>
-            <div className="space-y-2">
-              <button
-                onClick={handleDualBedsideMode}
-                disabled={patients.length === 0}
-                className="w-full flex items-center justify-center space-x-2 p-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                <Monitor className="w-4 h-4" />
-                <span>Enter Bedside Mode ({Math.min(patients.length, 2)} patient{Math.min(patients.length, 2) !== 1 ? 's' : ''})</span>
-              </button>
-              <p className="text-xs text-gray-600">
-                Shows 1-2 patients in full-screen medical monitor view with ECG/EEG toggle
-              </p>
-            </div>
-          </div>
-
-          {/* Current Status */}
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <h4 className="font-medium mb-2">Current Status</h4>
-            <div className="text-sm space-y-1">
-              <p><strong>User:</strong> {currentUser.name} ({currentUser.role})</p>
-              <p><strong>Auto-logout:</strong> {settings.enableautologout ? `Enabled (${settings.autologoutminutes}min)` : 'Disabled'}</p>
-              <p><strong>Auto-scroll:</strong> {settings.enableautoscroll ? `Enabled (${settings.autoscrollspeed || 30}px/s)` : 'Disabled'}</p>
-              <p><strong>Layout:</strong> 2 cards per row (same direction scrolling)</p>
-              <p><strong>Patients:</strong> {patients.length} loaded</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex space-x-3 mt-6">
-          <button
-            onClick={() => setShowSettings(false)}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Apply & Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   // ECG Viewer Modal
   if (showECGViewer) {
@@ -695,7 +434,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-white border-b px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600">
-              Showing {startIndex + 1}-{Math.min(endIndex, totalPatients)} of {totalPatients} patients
+              Showing {((currentPage - 1) * PATIENTS_PER_PAGE) + 1}-{Math.min(currentPage * PATIENTS_PER_PAGE, totalPatients)} of {totalPatients} patients
             </div>
             <div className="flex items-center space-x-2">
               <button
@@ -727,15 +466,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="text-center">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {isNurseOrTechnician(currentUser.role) && !roomProximity
+                {PermissionUtils.isNurseOrTechnician(currentUser.role) && !roomProximity
                   ? 'Room Location Not Detected'
                   : 'No Patients Found'
                 }
               </h3>
               <p className="text-gray-600 mb-4">
-                {isNurseOrTechnician(currentUser.role) && !roomProximity
+                {PermissionUtils.isNurseOrTechnician(currentUser.role) && !roomProximity
                   ? 'Move this tablet to a patient room. The system will automatically detect which patients are present via their wearables.'
-                  : isNurseOrTechnician(currentUser.role) && roomProximity
+                  : PermissionUtils.isNurseOrTechnician(currentUser.role) && roomProximity
                   ? `No patients with wearables detected in ${roomProximity.tabletLocation}. Patients may not be wearing their devices.`
                   : selectedWard === 'My Patients' 
                   ? `No patients found in your ${currentUser.role === 'Doctor' ? 'department' : 'assigned area'}.`
@@ -743,7 +482,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   ? 'No patients are currently in the system.'
                   : `No patients found in ${selectedWard} ward.`}
               </p>
-              {isNurseOrTechnician(currentUser.role) && !roomProximity ? (
+              {PermissionUtils.isNurseOrTechnician(currentUser.role) && !roomProximity ? (
                 <div className="space-y-3">
                   <button
                     onClick={detectProximity}
@@ -777,101 +516,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col gap-1.5 relative">
-            {/* Auto-scroll indicator */}
-            {settings.enableautoscroll && paginatedPatients.length > 4 && (
-              <div className="absolute top-2 right-2 z-10 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-                Auto-scroll: {settings.autoscrollspeed || 30}px/s • Page {currentPage}/{totalPages} • {paginatedPatients.length} patients
-              </div>
-            )}
-
-            {/* Top Row - 2 Cards with Manual + Auto scroll */}
-            <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
-              <div 
-                className={`h-full flex gap-1.5 ${settings.enableautoscroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
-                style={{ 
-                  minWidth: 'max-content',
-                  animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
-                  animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
-                }}
-              >
-                {/* Original patients */}
-                {topRowPatients.map((patient) => (
-                  <div key={`top-original-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
-                    <PatientCard
-                      patient={patient}
-                      currentUser={currentUser}
-                      onPatientClick={handlePatientSelection}
-                      onVitalClick={handleVitalClick}
-                      onAcknowledgeAlert={handleAcknowledgeAlert}
-                      onBedsideMode={handleSingleBedsideMode}
-                      onToggleECGMode={handleToggleECGMode}
-                    />
-                  </div>
-                ))}
-                {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-                {settings.enableautoscroll && paginatedPatients.length > 4 && topRowPatients.map((patient) => (
-                  <div key={`top-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
-                    <PatientCard
-                      patient={patient}
-                      currentUser={currentUser}
-                      onPatientClick={handlePatientSelection}
-                      onVitalClick={handleVitalClick}
-                      onAcknowledgeAlert={handleAcknowledgeAlert}
-                      onBedsideMode={handleSingleBedsideMode}
-                      onToggleECGMode={handleToggleECGMode}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Bottom Row - 2 Cards with Manual + Auto scroll */}
-            <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
-              <div 
-                className={`h-full flex gap-1.5 ${settings.enableautoscroll && paginatedPatients.length > 4 ? 'patient-infinite-scroll' : ''}`}
-                style={{ 
-                  minWidth: 'max-content',
-                  animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
-                  animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
-                }}
-              >
-                {/* Original patients */}
-                {bottomRowPatients.map((patient) => (
-                  <div key={`bottom-original-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
-                    <PatientCard
-                      patient={patient}
-                      currentUser={currentUser}
-                      onPatientClick={handlePatientSelection}
-                      onVitalClick={handleVitalClick}
-                      onAcknowledgeAlert={handleAcknowledgeAlert}
-                      onBedsideMode={handleSingleBedsideMode}
-                      onToggleECGMode={handleToggleECGMode}
-                    />
-                  </div>
-                ))}
-                {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-                {settings.enableautoscroll && paginatedPatients.length > 4 && bottomRowPatients.map((patient) => (
-                  <div key={`bottom-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
-                    <PatientCard
-                      patient={patient}
-                      currentUser={currentUser}
-                      onPatientClick={handlePatientSelection}
-                      onVitalClick={handleVitalClick}
-                      onAcknowledgeAlert={handleAcknowledgeAlert}
-                      onBedsideMode={handleSingleBedsideMode}
-                      onToggleECGMode={handleToggleECGMode}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <PatientGrid
+            patients={patients}
+            currentUser={currentUser}
+            loading={loading}
+            settings={settings}
+            onPatientClick={handlePatientSelection}
+            onVitalClick={handleVitalClick}
+            onAcknowledgeAlert={handleAcknowledgeAlert}
+            onBedsideMode={handleSingleBedsideMode}
+            onToggleECGMode={handleToggleECGMode}
+            onRefreshData={loadPatients}
+          />
         )}
       </div>
 
       {/* Settings Panel */}
-      {showSettings && <SettingsPanel />}
+      <SettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        currentUser={currentUser}
+        patients={patients}
+        settings={settings}
+        onUpdateSettings={onUpdateSettings}
+        onBedsideMode={handleDualBedsideMode}
+      />
     </div>
   );
 };

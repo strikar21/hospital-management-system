@@ -1,107 +1,13 @@
 // PatientService.ts - Patient data and case management
 import { patient, noteComment } from '../types';
 import { BaseService } from './BaseService';
+import { MedicalDataTransformer } from '../utils/dataTransformers';
 
 export class PatientService extends BaseService {
 
   // ================================
-  // PATIENT DATA TRANSFORMATION
+  // PATIENT DATA MANAGEMENT
   // ================================
-
-  private static transformPatientData(p: any): any {
-    const canEditItem = (createdAt: string) => {
-      try {
-        if (!createdAt) return false;
-        const itemTime = new Date(createdAt);
-        const now = new Date();
-        const timeDiff = now.getTime() - itemTime.getTime();
-        const maxEditWindow = 24 * 60 * 60 * 1000; // 24 hours
-        return timeDiff <= maxEditWindow;
-      } catch (error) {
-        console.error('Error checking edit permission:', error);
-        return false;
-      }
-    };
-
-    return {
-      // Core patient identification
-      id: p.id,
-      firstName: p.firstName || p.first_name,
-      lastName: p.lastName || p.last_name,
-      name: p.name || `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim(),
-      dateOfBirth: p.dateOfBirth || p.date_of_birth,
-      age: p.age || (p.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0),
-      gender: p.gender,
-
-      // Contact information
-      phoneNumber: p.phoneNumber || p.phone_number,
-      emergencyContactName: p.emergencyContactName || p.emergency_contact_name,
-      emergencyContactPhone: p.emergencyContactPhone || p.emergency_contact_phone,
-
-      // Medical information
-      bloodType: p.bloodType || p.blood_type,
-      allergies: p.allergies,
-      medicalHistory: p.medicalHistory || p.medical_history,
-      currentMedications: p.currentMedications || p.current_medications,
-
-      // Hospital stay information
-      admissionDate: p.admissionDate || p.admission_date,
-      dischargeDate: p.dischargeDate || p.discharge_date,
-      roomNumber: p.roomNumber || p.room_number,
-      bedNumber: p.bedNumber || p.bed_number,
-      status: p.status,
-      dischargeStatus: p.dischargeStatus || p.discharge_status,
-
-      // Staff assignments
-      attendingPhysician: p.attendingPhysician || p.attending_physician,
-      attendingPhysicianName: p.attendingPhysicianName || p.attending_physician_name,
-      assignedDoctor: p.assignedDoctor || p.assigned_doctor || p.attendingPhysicianName || p.attending_physician_name,
-      nurseInCharge: p.nurseInCharge || p.nurse_in_charge,
-
-      // Device and monitoring
-      assignedDeviceId: p.assignedDeviceId || p.assigned_device_id,
-
-      // Timestamps
-      createdAt: p.createdAt || p.created_at,
-      updatedAt: p.updatedAt || p.updated_at,
-
-      // Additional fields
-      recommendedFrom: p.recommendedFrom || p.recommended_from,
-
-      // Medical records with edit permissions
-      medications: (p.medications || []).map((med: any) => ({
-        ...med,
-        canEdit: canEditItem(med.createdAt || med.created_at)
-      })),
-
-      investigations: (p.investigations || []).map((inv: any) => ({
-        ...inv,
-        canEdit: canEditItem(inv.createdAt || inv.created_at)
-      })),
-
-      therapies: (p.therapies || []).map((therapy: any) => ({
-        ...therapy,
-        canEdit: canEditItem(therapy.createdAt || therapy.created_at)
-      })),
-
-      notes: (p.notes || []).map((note: any) => ({
-        ...note,
-        canEdit: canEditItem(note.timestamp || note.created_at)
-      })),
-
-      // Vital signs and monitoring
-      vitals: p.vitals ? {
-        heartRate: p.vitals.heartRate || p.vitals.heart_rate || 0,
-        bloodPressure: p.vitals.bloodPressure || p.vitals.blood_pressure || 0,
-        bloodPressureDiastolic: p.vitals.bloodPressureDiastolic || p.vitals.blood_pressure_diastolic || 0,
-        temperature: p.vitals.temperature || 0,
-        oxygenSaturation: p.vitals.oxygenSaturation || p.vitals.oxygen_saturation || 0,
-        respiratoryRate: p.vitals.respiratoryRate || p.vitals.respiratory_rate || 0,
-        lastUpdated: p.vitals.lastUpdated || p.vitals.last_updated || new Date().toISOString(),
-        lastSync: p.vitals.lastSync || p.vitals.last_sync || new Date().toISOString()
-      } : null
-    };
-  }
 
   // ================================
   // PATIENT RETRIEVAL
@@ -121,7 +27,7 @@ export class PatientService extends BaseService {
       console.log(`✅ Raw patient data received for ${patientId}:`, response);
 
       // Transform and return patient data
-      const transformedPatient = this.transformPatientData(response);
+      const transformedPatient = MedicalDataTransformer.transformPatientData(response);
 
       console.log(`🔄 Transformed patient data for ${patientId}:`, transformedPatient);
 
@@ -158,7 +64,7 @@ export class PatientService extends BaseService {
       console.log(`✅ Retrieved ${patients.length} patients`);
 
       // Transform all patient data
-      return patients.map(p => this.transformPatientData(p));
+      return patients.map(p => MedicalDataTransformer.transformPatientData(p));
     } catch (error) {
       console.error('❌ Error fetching patients:', error);
       return [];
@@ -168,7 +74,7 @@ export class PatientService extends BaseService {
   static async searchPatients(query: string): Promise<patient[]> {
     try {
       const response = await this.fetchFromBackend(`/patients/search?q=${encodeURIComponent(query)}`);
-      return Array.isArray(response) ? response.map(p => this.transformPatientData(p)) : [];
+      return Array.isArray(response) ? response.map(p => MedicalDataTransformer.transformPatientData(p)) : [];
     } catch (error) {
       console.error('❌ Error searching patients:', error);
       return [];
@@ -178,7 +84,7 @@ export class PatientService extends BaseService {
   static async getPatientsByStatus(status: 'stable' | 'critical' | 'emergency'): Promise<patient[]> {
     try {
       const response = await this.fetchFromBackend(`/patients/list?status=${status}`);
-      return Array.isArray(response) ? response.map(p => this.transformPatientData(p)) : [];
+      return Array.isArray(response) ? response.map(p => MedicalDataTransformer.transformPatientData(p)) : [];
     } catch (error) {
       console.error('❌ Error fetching patients by status:', error);
       return [];

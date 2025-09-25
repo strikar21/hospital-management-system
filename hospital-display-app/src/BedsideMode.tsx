@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Settings, Monitor, Wifi, WifiOff, AlertTriangle, Heart, Activity, Thermometer, Droplets, Zap, CreditCard, Volume2, VolumeX } from 'lucide-react';
 import { patient, user, appsettings } from './types';
-import { getVitalStatus, detectArrhythmia } from './utils';
+import { MedicalUtils } from './utils/medicalUtils';
 // Removed unused HospitalAPI import
 
 interface BedsideModeProps {
@@ -32,9 +32,17 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
   const [isECGMode, setIsECGMode] = useState<boolean>(true);
   const [currentPatientIndex, setCurrentPatientIndex] = useState<number>(0);
 
-  // Reset patient index if it's out of bounds
+  // Medical safety: Reset patient index with proper bounds checking
   useEffect(() => {
-    if (currentPatientIndex >= patients.length) {
+    if (patients.length === 0) {
+      // No patients available - ensure index is safe
+      setCurrentPatientIndex(0);
+    } else if (currentPatientIndex >= patients.length) {
+      // Current index out of bounds - reset to last valid index
+      setCurrentPatientIndex(Math.max(0, patients.length - 1));
+    }
+    // If currentPatientIndex is negative (edge case), reset to 0
+    else if (currentPatientIndex < 0) {
       setCurrentPatientIndex(0);
     }
   }, [patients.length, currentPatientIndex]);
@@ -87,7 +95,18 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
 
     const unacknowledgedAlerts = patient.alerts.filter(alert => !alert.isAcknowledged);
     const hasCriticalAlert = unacknowledgedAlerts.some(alert => alert.severity === 'critical');
-    const arrhythmiaDetected = detectArrhythmia(patient.vitals.heartRate, patient.vitals.ecg);
+    const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals.heartRate, patient.vitals.ecg);
+
+    // MEDICAL SAFETY: Validate vital signs are within displayable ranges
+    const safeVitals = {
+      heartRate: Math.max(0, Math.min(300, patient.vitals.heartRate || 0)),
+      bloodPressure: patient.vitals.bloodPressure || '0/0',
+      bloodPressureValue: Math.max(0, Math.min(300, patient.vitals.bloodPressureValue || 0)),
+      oxygenSat: Math.max(0, Math.min(100, patient.vitals.oxygenSat || 0)),
+      temperature: Math.max(90.0, Math.min(115.0, patient.vitals.temperature || 98.6)),
+      ecg: Math.max(-50, Math.min(50, patient.vitals.ecg || 0)),
+      eeg: Math.max(0, Math.min(200, patient.vitals.eeg || 45))
+    };
 
     // Vital status color handled by existing getVitalStatus utility
 
@@ -140,12 +159,12 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="text-4xl font-mono font-bold text-red-400 leading-none">
-                      {patient.vitals.heartRate}
+                      {safeVitals.heartRate}
                     </div>
                     <div className="text-red-300 text-sm font-medium">BPM</div>
                   </div>
                   <div className="text-xs text-gray-500 font-medium">
-                    Normal: 60-100 • {getVitalStatus(patient.vitals.heartRate, 'heartRate').toUpperCase()}
+                    Normal: 60-100 • {MedicalUtils.getVitalStatus(safeVitals.heartRate, 'heartRate').toUpperCase()}
                   </div>
                 </div>
 
@@ -159,12 +178,12 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="text-3xl font-mono font-bold text-blue-400 leading-none">
-                      {patient.vitals.bloodPressure}
+                      {safeVitals.bloodPressure}
                     </div>
                     <div className="text-blue-300 text-sm font-medium">mmHg</div>
                   </div>
                   <div className="text-xs text-gray-500 font-medium">
-                    Normal: 90-140/60-90 • {getVitalStatus(patient.vitals.bloodPressureValue, 'bloodPressure').toUpperCase()}
+                    Normal: 90-140/60-90 • {MedicalUtils.getVitalStatus(safeVitals.bloodPressureValue, 'bloodPressure').toUpperCase()}
                   </div>
                 </div>
 
@@ -178,12 +197,12 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="text-4xl font-mono font-bold text-cyan-400 leading-none">
-                      {patient.vitals.oxygenSat}
+                      {safeVitals.oxygenSat}
                     </div>
                     <div className="text-cyan-300 text-sm font-medium">%</div>
                   </div>
                   <div className="text-xs text-gray-500 font-medium">
-                    Normal: 95-100 • {getVitalStatus(patient.vitals.oxygenSat, 'oxygenSat').toUpperCase()}
+                    Normal: 95-100 • {MedicalUtils.getVitalStatus(safeVitals.oxygenSat, 'oxygenSat').toUpperCase()}
                   </div>
                 </div>
 
@@ -197,12 +216,12 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="text-3xl font-mono font-bold text-amber-400 leading-none">
-                      {patient.vitals.temperature.toFixed(1)}
+                      {safeVitals.temperature.toFixed(1)}
                     </div>
                     <div className="text-amber-300 text-sm font-medium">°F</div>
                   </div>
                   <div className="text-xs text-gray-500 font-medium">
-                    Normal: 97.0-99.0 • {getVitalStatus(patient.vitals.temperature, 'temperature').toUpperCase()}
+                    Normal: 97.0-99.0 • {MedicalUtils.getVitalStatus(safeVitals.temperature, 'temperature').toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -226,7 +245,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <div className="flex items-center space-x-4">
                     <div className="text-right">
                       <div className="text-green-400 text-xl font-mono font-bold">
-                        {isECGMode ? `${patient.vitals.ecg} mV` : 'ACTIVE'}
+                        {isECGMode ? `${safeVitals.ecg} mV` : 'ACTIVE'}
                       </div>
                       <div className="text-green-300 text-xs font-medium">
                         {isECGMode ? 'Amplitude' : 'Brain Activity'}
@@ -298,7 +317,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <Heart className="w-4 h-4 text-red-500" />
                   <span className="text-red-300 text-xs font-bold">HR</span>
                 </div>
-                <div className="text-2xl font-mono font-bold text-red-400">{patient.vitals.heartRate}</div>
+                <div className="text-2xl font-mono font-bold text-red-400">{safeVitals.heartRate}</div>
                 <div className="text-red-300 text-xs">BPM</div>
               </div>
 
@@ -307,7 +326,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <Droplets className="w-4 h-4 text-blue-500" />
                   <span className="text-blue-300 text-xs font-bold">BP</span>
                 </div>
-                <div className="text-xl font-mono font-bold text-blue-400">{patient.vitals.bloodPressure}</div>
+                <div className="text-xl font-mono font-bold text-blue-400">{safeVitals.bloodPressure}</div>
                 <div className="text-blue-300 text-xs">mmHg</div>
               </div>
 
@@ -316,7 +335,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <Activity className="w-4 h-4 text-cyan-500" />
                   <span className="text-cyan-300 text-xs font-bold">O2</span>
                 </div>
-                <div className="text-2xl font-mono font-bold text-cyan-400">{patient.vitals.oxygenSat}</div>
+                <div className="text-2xl font-mono font-bold text-cyan-400">{safeVitals.oxygenSat}</div>
                 <div className="text-cyan-300 text-xs">%</div>
               </div>
 
@@ -325,7 +344,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <Thermometer className="w-4 h-4 text-amber-500" />
                   <span className="text-amber-300 text-xs font-bold">TEMP</span>
                 </div>
-                <div className="text-xl font-mono font-bold text-amber-400">{patient.vitals.temperature.toFixed(1)}</div>
+                <div className="text-xl font-mono font-bold text-amber-400">{safeVitals.temperature.toFixed(1)}</div>
                 <div className="text-amber-300 text-xs">°F</div>
               </div>
             </div>
@@ -338,7 +357,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
                   <span className="text-green-300 text-sm font-bold">{isECGMode ? 'ECG' : 'EEG'}</span>
                 </div>
                 <div className="text-green-400 text-sm font-mono">
-                  {isECGMode ? `${patient.vitals.ecg} mV` : 'ACTIVE'}
+                  {isECGMode ? `${safeVitals.ecg} mV` : 'ACTIVE'}
                 </div>
               </div>
               
@@ -578,7 +597,7 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
 
       {patients.some(p => 
         p.alerts.some(a => !a.isAcknowledged && a.severity === 'critical') || 
-        detectArrhythmia(p.vitals.heartRate, p.vitals.ecg)
+        MedicalUtils.detectArrhythmia(p.vitals.heartRate, p.vitals.ecg)
       ) && (
         <div className="bg-red-900 text-red-100 py-3 px-6 text-center border-t-2 border-red-600">
           <div className="flex items-center justify-center space-x-3">

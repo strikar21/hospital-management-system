@@ -6,10 +6,11 @@ import {
   Send, Reply
 } from 'lucide-react';
 import { patient, user, medication, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
-import { 
-  getVitalStatus, getStatusColor, getVitalStatusColor, canViewMedications, canViewNotes,
-  canEditNotes, canEditMedications, getMedicationStatusColor, formatTimeOnly, formatDateTime
+import {
+  getStatusColor, getVitalStatusColor, getMedicationStatusColor, formatTimeOnly, formatDateTime
 } from './utils';
+import { MedicalUtils } from './utils/medicalUtils';
+import { PermissionUtils } from './utils/permissionUtils';
 import { PatientService, MedicationService, InvestigationService, TherapyService } from './services';
 import CaseSheetBook from './CaseSheetBook';
 
@@ -37,7 +38,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   if (process.env.NODE_ENV === 'development') {
     console.log('🏥 PatientDetail loading for patient ID:', patient.id);
     console.log('👤 Current user role:', currentUser.role);
-    console.log('🔐 Can view medications:', canViewMedications(currentUser.role));
+    console.log('🔐 Can view medications:', PermissionUtils.canViewMedications(currentUser.role));
     console.log('💊 Patient medications count:', patient.medications?.length || 0);
     console.log('🧪 Patient investigations count:', patient.investigations?.length || 0);
     console.log('🏃 Patient therapies count:', patient.therapies?.length || 0);
@@ -1142,7 +1143,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Heart Rate</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.heartRate || 70, 'heartRate'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.heartRate || 70, 'heartRate'))}`}>
                         <Heart className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1158,7 +1159,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Blood Pressure</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.bloodPressureValue || 120, 'bloodPressure'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.bloodPressureValue || 120, 'bloodPressure'))}`}>
                         <Droplets className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1174,7 +1175,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Oxygen Sat</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.oxygenSat || 98, 'oxygenSat'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.oxygenSat || 98, 'oxygenSat'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1190,7 +1191,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Temperature</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.temperature || 98.6, 'temperature'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.temperature || 98.6, 'temperature'))}`}>
                         <Thermometer className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1206,7 +1207,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Respiratory Rate</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.respiratoryRate || 16, 'respiratoryRate'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.respiratoryRate || 16, 'respiratoryRate'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1222,7 +1223,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">{patient.vitals?.isEcgMode ? 'ECG' : 'EEG'}</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45), patient.vitals?.isEcgMode ? 'ecg' : 'eeg'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45), patient.vitals?.isEcgMode ? 'ecg' : 'eeg'))}`}>
                         <Zap className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1238,7 +1239,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Bioimpedance</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.bioImpedance || 500, 'bioImpedance'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.bioImpedance || 500, 'bioImpedance'))}`}>
                         <Zap className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1254,7 +1255,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Tremor Level</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(getVitalStatus(patient.vitals?.tremor || 0, 'tremor'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.tremor || 0, 'tremor'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
@@ -1421,7 +1422,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
           {/* Notes Tab - Compact layout */}
           {activeTab === 'notes' && (
             <div className="p-3 h-full flex flex-col">
-              {canEditNotes(currentUser.role) && (
+              {PermissionUtils.canEditNotes(currentUser.role) && (
                 <div className="flex justify-end mb-2">
                   <button
                     onClick={() => setIsAddingNote(true)}
@@ -1434,7 +1435,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
               )}
 
               {/* Add New Note - Compact */}
-              {isAddingNote && canEditNotes(currentUser.role) && (
+              {isAddingNote && PermissionUtils.canEditNotes(currentUser.role) && (
                 <div className="mb-2 p-2 bg-blue-50 rounded-lg border">
                   <div className="flex items-start space-x-2">
                     <div className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium">
@@ -1519,7 +1520,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                               </span>
                             )}
                           </div>
-                          {note.canEdit && note.authorId === currentUser.id && canEditNotes(currentUser.role) && (
+                          {note.canEdit && note.authorId === currentUser.id && PermissionUtils.canEditNotes(currentUser.role) && (
                             <button
                               onClick={() => startEditingNote(note)}
                               className="text-gray-500 hover:text-gray-700 p-1"
@@ -1585,7 +1586,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   <div className="text-center py-6 text-gray-500">
                     <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
                     <p>No clinical notes yet</p>
-                    {canEditNotes(currentUser.role) && (
+                    {PermissionUtils.canEditNotes(currentUser.role) && (
                       <button
                         onClick={() => setIsAddingNote(true)}
                         className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -1606,7 +1607,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                     </div>
                     <span>Shift Handoff Notes</span>
                   </h3>
-                  {canEditNotes(currentUser.role) && (
+                  {PermissionUtils.canEditNotes(currentUser.role) && (
                     <button
                       onClick={() => {
                         const shift = new Date().getHours() < 16 ? 'day' : new Date().getHours() < 23 ? 'evening' : 'night';
@@ -1698,13 +1699,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
           {activeTab === 'medications' && (
             <div className="p-3 h-full flex flex-col">
               <div className="flex justify-end mb-2">
-                {!canEditMedications(currentUser.role) && (
+                {!PermissionUtils.canEditMedications(currentUser.role) && (
                   <span className="text-xs bg-yellow-100 text-yellow-600 px-2 py-1 rounded-lg flex items-center space-x-1">
                     <Shield className="w-3 h-3" />
                     <span>View Only</span>
                   </span>
                 )}
-                {canEditMedications(currentUser.role) && (
+                {PermissionUtils.canEditMedications(currentUser.role) && (
                   <button
                     onClick={() => setIsAddingMedication(true)}
                     className="flex items-center space-x-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -1716,7 +1717,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
               </div>
 
               {/* Add Medication Form */}
-              {isAddingMedication && canEditMedications(currentUser.role) && (
+              {isAddingMedication && PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="mb-2 p-2 bg-blue-50 rounded-lg border">
                   <h4 className="font-medium mb-2 text-sm">Prescribe New Medication</h4>
                   <div className="grid grid-cols-2 gap-2">
@@ -1914,7 +1915,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         </div>
                       </div>
                       
-                      {canEditMedications(currentUser.role) && med.canEdit && (
+                      {PermissionUtils.canEditMedications(currentUser.role) && med.canEdit && (
                         <div className="flex items-center space-x-1">
                           {med.status === 'active' && (
                             <>
@@ -1991,7 +1992,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
           {/* Investigation Tab */}
           {activeTab === 'investigations' && (
             <div className="p-4 h-full flex flex-col">
-              {canEditMedications(currentUser.role) && (
+              {PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="flex justify-end mb-3">
                   <button
                     onClick={() => setIsAddingInvestigation(true)}
@@ -2004,7 +2005,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
               )}
 
               {/* Add Investigation Form */}
-              {isAddingInvestigation && canEditMedications(currentUser.role) && (
+              {isAddingInvestigation && PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="mb-3 p-3 bg-green-50 rounded-lg border">
                   <h4 className="font-medium mb-2 text-sm">Order New Investigation</h4>
                   <div className="grid grid-cols-2 gap-2">
@@ -2214,7 +2215,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       </div>
                       
                       {/* Investigation Actions */}
-                      {canEditMedications(currentUser.role) && inv.canEdit && (
+                      {PermissionUtils.canEditMedications(currentUser.role) && inv.canEdit && (
                         <div className="flex items-center space-x-1">
                           {inv.status === 'ordered' && (
                             <button
@@ -2613,7 +2614,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
           {/* Therapy Tab */}
           {activeTab === 'therapy' && (
             <div className="p-4 h-full flex flex-col">
-              {canEditMedications(currentUser.role) && (
+              {PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="flex justify-end mb-3">
                   <button
                     onClick={() => setIsAddingTherapy(true)}
@@ -2626,7 +2627,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
               )}
 
               {/* Add Therapy Form */}
-              {isAddingTherapy && canEditMedications(currentUser.role) && (
+              {isAddingTherapy && PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="mb-3 p-3 bg-purple-50 rounded-lg border">
                   <h4 className="font-medium mb-2 text-sm">Prescribe New Therapy</h4>
                   <div className="grid grid-cols-2 gap-2">
@@ -2779,7 +2780,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       </div>
                       
                       {/* Therapy Actions */}
-                      {canEditMedications(currentUser.role) && therapy.canEdit && (
+                      {PermissionUtils.canEditMedications(currentUser.role) && therapy.canEdit && (
                         <div className="flex items-center space-x-1">
                           {therapy.status === 'active' && (
                             <>

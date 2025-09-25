@@ -1,55 +1,9 @@
 // VitalService.ts - Vital signs monitoring and ECG data
 import { vitalhistory, timerange, ecgreading } from '../types';
 import { BaseService } from './BaseService';
+import { MedicalDataTransformer } from '../utils/dataTransformers';
 
 export class VitalService extends BaseService {
-
-  // ================================
-  // VITAL SIGNS DATA TRANSFORMATION
-  // ================================
-
-  private static convertTimescaleToVitalHistory(timescaleData: any[]): vitalhistory[] {
-    // Group data by timestamp to combine all vital types
-    const groupedData: { [timestamp: string]: any } = {};
-
-    timescaleData.forEach(item => {
-      const timestamp = item.time || item.timestamp;
-      if (!groupedData[timestamp]) {
-        groupedData[timestamp] = {
-          time: timestamp,
-          heartRate: 0,
-          bloodPressure: 0,
-          bloodPressureDiastolic: 0,
-          temperature: 0,
-          oxygenSaturation: 0,
-          respiratoryRate: 0,
-          qualityScore: 0.9
-        };
-      }
-
-      // Map TimescaleDB columns to frontend format
-      if (item.heart_rate !== undefined) groupedData[timestamp].heartRate = item.heart_rate;
-      if (item.blood_pressure !== undefined) groupedData[timestamp].bloodPressure = item.blood_pressure;
-      if (item.blood_pressure_diastolic !== undefined) groupedData[timestamp].bloodPressureDiastolic = item.blood_pressure_diastolic;
-      if (item.temperature !== undefined) groupedData[timestamp].temperature = item.temperature;
-      if (item.oxygen_saturation !== undefined) groupedData[timestamp].oxygenSaturation = item.oxygen_saturation;
-      if (item.respiratory_rate !== undefined) groupedData[timestamp].respiratoryRate = item.respiratory_rate;
-      if (item.quality_score !== undefined) groupedData[timestamp].qualityScore = item.quality_score;
-
-      // Handle camelCase variants
-      if (item.heartRate !== undefined) groupedData[timestamp].heartRate = item.heartRate;
-      if (item.bloodPressure !== undefined) groupedData[timestamp].bloodPressure = item.bloodPressure;
-      if (item.bloodPressureDiastolic !== undefined) groupedData[timestamp].bloodPressureDiastolic = item.bloodPressureDiastolic;
-      if (item.oxygenSaturation !== undefined) groupedData[timestamp].oxygenSaturation = item.oxygenSaturation;
-      if (item.respiratoryRate !== undefined) groupedData[timestamp].respiratoryRate = item.respiratoryRate;
-      if (item.qualityScore !== undefined) groupedData[timestamp].qualityScore = item.qualityScore;
-    });
-
-    // Convert grouped data to array and sort by timestamp
-    return Object.values(groupedData).sort((a, b) =>
-      new Date(a.time).getTime() - new Date(b.time).getTime()
-    );
-  }
 
   // ================================
   // VITAL SIGNS RETRIEVAL
@@ -73,7 +27,7 @@ export class VitalService extends BaseService {
         return [];
       }
 
-      const convertedData = this.convertTimescaleToVitalHistory(response);
+      const convertedData = MedicalDataTransformer.transformVitalTimeSeriesData(response);
       console.log(`✅ Retrieved ${convertedData.length} vital data points`);
 
       return convertedData;
@@ -111,7 +65,7 @@ export class VitalService extends BaseService {
 
       return {
         medication: response.medication || null,
-        vitals: this.convertTimescaleToVitalHistory(response.vitals || [])
+        vitals: response.vitals || []
       };
     } catch (error) {
       console.error('❌ Error fetching medication-correlated vitals:', error);

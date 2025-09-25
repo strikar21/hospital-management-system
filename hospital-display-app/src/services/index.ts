@@ -100,28 +100,23 @@ export class HospitalAPI extends BaseService {
   // static addTherapySession = TherapyService.addTherapy; // Use addTherapy instead
 
   // ================================
-  // LEGACY METHOD ALIASES
+  // LEGACY COMPATIBILITY (Deprecated - Use individual services instead)
   // ================================
 
-  // Maintain backward compatibility with existing method names
+  // Note: These aliases are deprecated. Use individual service classes for better code organization.
   static addnotecomment = PatientService.addNoteComment;
   static editnotecomment = PatientService.editNoteComment;
   static deletenotecomment = PatientService.deleteNoteComment;
+  static getpatientsbystatus = PatientService.getPatientsByStatus;
   static addmedication = MedicationService.addMedication;
   static updatemedication = MedicationService.updateMedication;
   static discontinuemedication = MedicationService.discontinueMedication;
-  static recordmedicationAdministration = MedicationService.recordMedicationAdministration;
   static addinvestigation = InvestigationService.addInvestigation;
   static updateinvestigation = InvestigationService.updateInvestigationStatus;
-  static completeinvestigation = InvestigationService.completeInvestigation;
   static addtherapy = TherapyService.addTherapy;
   static updatetherapy = TherapyService.updateTherapy;
-  // static addtherapysession = TherapyService.addTherapy; // Use addtherapy instead
   static getecgreadings = VitalService.getECGReadings;
   static getvitaltimeseries = VitalService.getVitalTimeSeries;
-  static getmedicationCorrelatedVitals = VitalService.getMedicationCorrelatedVitals;
-  static getmedicationTimeline = VitalService.getMedicationTimeline;
-  static getpatientsbystatus = PatientService.getPatientsByStatus;
   static getpatientdevice = DeviceService.getPatientDevice;
 
   // ================================

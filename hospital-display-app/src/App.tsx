@@ -167,7 +167,8 @@ const App: React.FC = () => {
   // Normal dashboard view
   return (
     <MedicalErrorBoundary
-      patientId={currentUser.id}
+      userId={currentUser.id}
+      userRole={currentUser.role}
       medicalContext="dashboard"
     >
       <Dashboard

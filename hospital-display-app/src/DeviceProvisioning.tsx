@@ -4,7 +4,7 @@ import {
   CheckCircle, AlertCircle, Settings, Plus
 } from 'lucide-react';
 import { user as UserType } from './types';
-import { canManageDevices } from './utils';
+import { PermissionUtils } from './utils/permissionUtils';
 import { getApiUrl } from './config/apiConfig';
 // Removed unused HospitalAPI import
 
@@ -129,7 +129,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
   };
 
   // Role-based access control
-  if (!canManageDevices(currentUser.role)) {
+  if (!PermissionUtils.canManageDevices(currentUser.role)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6 text-center">

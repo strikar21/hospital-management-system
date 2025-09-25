@@ -3,7 +3,7 @@
 import React from 'react';
 import { Tablet, MapPin, Wifi, WifiOff, Clock, RefreshCw, LogOut, Activity, Settings, Watch, UserPlus, Plus, Users } from 'lucide-react';
 import { user, roomproximity, patient, appsettings } from './types';
-import { isNurseOrTechnician } from './utils';
+import { PermissionUtils } from './utils/permissionUtils';
 
 interface HeaderProps {
   currentUser: user;
@@ -55,9 +55,9 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout
 }) => {
   const getCurrentWardInfo = () => {
-    if (isNurseOrTechnician(currentUser.role) && roomProximity) {
+    if (PermissionUtils.isNurseOrTechnician(currentUser.role) && roomProximity) {
       return `Room ${roomProximity.roomNumber} (${roomProximity.patientsInRoom.length} patients detected)`;
-    } else if (isNurseOrTechnician(currentUser.role)) {
+    } else if (PermissionUtils.isNurseOrTechnician(currentUser.role)) {
       return 'Detecting room location...';
     }
     return currentUser.department;
@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Ward Filter integrated in header */}
             <div className="flex items-center space-x-3 border-l pl-4">
-              {!isNurseOrTechnician(currentUser.role) ? (
+              {!PermissionUtils.isNurseOrTechnician(currentUser.role) ? (
                 <div className="flex items-center space-x-1.5">
                   <label className="text-xs font-medium text-gray-700">View:</label>
                   <select
@@ -137,7 +137,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Room Proximity Detection Status */}
             <div className={`flex items-center space-x-1.5 text-xs px-2 py-1 rounded-lg border ${
-              isNurseOrTechnician(currentUser.role)
+              PermissionUtils.isNurseOrTechnician(currentUser.role)
                 ? roomProximity 
                   ? 'text-green-700 bg-green-100 border-green-300' 
                   : proximityScanning
@@ -148,7 +148,7 @@ export const Header: React.FC<HeaderProps> = ({
               <MapPin className={`w-3 h-3 ${proximityScanning ? 'animate-pulse' : ''}`} />
               <div>
                 <span className="font-medium">
-                  {isNurseOrTechnician(currentUser.role)
+                  {PermissionUtils.isNurseOrTechnician(currentUser.role)
                     ? roomProximity 
                       ? `📍 Room ${roomProximity.roomNumber}`
                       : proximityScanning
@@ -161,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Manual Proximity Detection */}
-            {isNurseOrTechnician(currentUser.role) && (
+            {PermissionUtils.isNurseOrTechnician(currentUser.role) && (
               <button
                 onClick={onDetectProximity}
                 disabled={proximityScanning}
@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {/* Device Assignment Button (Nurses only) */}
-            {(isNurseOrTechnician(currentUser.role) || currentUser.role === 'Administrator') && onShowDeviceAssignment && (
+            {(PermissionUtils.isNurseOrTechnician(currentUser.role) || currentUser.role === 'Administrator') && onShowDeviceAssignment && (
               <button
                 onClick={onShowDeviceAssignment}
                 className="flex items-center space-x-1.5 px-2 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"

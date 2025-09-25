@@ -587,6 +587,14 @@ export interface externalsystem {
   version?: string;
 }
 
+// Medical record interface for edit time checking
+export interface editableRecord {
+  id: string;
+  createdAt?: string;
+  timestamp?: string;
+  canEdit?: boolean;
+}
+
 // Type aliases for backward compatibility
 export type clinicalAlert = clinicalalert;
 export type labResult = labresult;

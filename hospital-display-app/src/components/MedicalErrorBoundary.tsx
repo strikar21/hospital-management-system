@@ -6,6 +6,8 @@ import auditService from '../services/auditService';
 interface Props {
   children: ReactNode;
   patientId?: string;
+  userId?: string;
+  userRole?: string;
   medicalContext?: string;
   fallbackComponent?: ReactNode;
 }
@@ -29,9 +31,12 @@ class MedicalErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    // Generate unique error ID for tracking
-    const errorId = `ERR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+    // Generate cryptographically secure error ID for medical compliance
+    const timestamp = Date.now().toString();
+    const randomBytes = crypto.getRandomValues(new Uint8Array(6));
+    const randomHex = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('');
+    const errorId = `ERR-${timestamp}-${randomHex}`;
+
     return {
       hasError: true,
       error,
@@ -41,7 +46,7 @@ class MedicalErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('🚨 MEDICAL ERROR BOUNDARY TRIGGERED:', error, errorInfo);
-    
+
     // Log to audit service for medical compliance
     auditService.logError(error, 'criticalMedicalComponent', this.props.patientId, {
       componentStack: errorInfo.componentStack,
@@ -52,7 +57,10 @@ class MedicalErrorBoundary extends Component<Props, State> {
       timestamp: new Date().toISOString(),
       useragent: navigator.userAgent,
       url: window.location.href,
-      patientId: this.props.patientId
+      // Separate patient and user context for proper audit trails
+      patientId: this.props.patientId,
+      userId: this.props.userId,
+      userRole: this.props.userRole
     });
 
     this.setState({
