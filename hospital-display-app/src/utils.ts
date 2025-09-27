@@ -78,14 +78,15 @@ export const formatTimeOnly = (dateString: string | undefined): string => {
 export const getVitalDisplayName = (vitalType: string): string => {
   switch (vitalType) {
     case 'heartRate': return 'Heart Rate';
-    case 'temperature': return 'Temperature';
-    case 'oxygenSat': return 'Oxygen Saturation';
+    case 'skinTemperature': return 'Skin Temperature';
+    case 'oxygenSaturation': return 'Oxygen Saturation';
     case 'respiratoryRate': return 'Respiratory Rate';
-    case 'bloodPressure': return 'Blood Pressure';
-    case 'ecg': return 'ECG';
-    case 'eeg': return 'EEG';
-    case 'bioImpedance': return 'Bioimpedance';
-    case 'tremor': return 'Tremor Intensity';
+    case 'systolicPressure': return 'Systolic Pressure';
+    case 'diastolicPressure': return 'Diastolic Pressure';
+    case 'ecgReading': return 'ECG';
+    case 'eegReading': return 'EEG';
+    case 'bioelectricalImpedance': return 'Bioimpedance';
+    case 'tremorIntensity': return 'Tremor Intensity';
     default: return vitalType;
   }
 };
@@ -93,14 +94,15 @@ export const getVitalDisplayName = (vitalType: string): string => {
 export const getVitalUnit = (vitalType: string): string => {
   switch (vitalType) {
     case 'heartRate': return 'BPM';
-    case 'temperature': return '°F';
-    case 'oxygenSat': return '%';
+    case 'skinTemperature': return '°F';
+    case 'oxygenSaturation': return '%';
     case 'respiratoryRate': return '/min';
-    case 'bloodPressure': return 'mmHg';
-    case 'ecg': return 'mV';
-    case 'eeg': return 'μV';
-    case 'bioImpedance': return 'Ω';
-    case 'tremor': return '/10';
+    case 'systolicPressure': return 'mmHg';
+    case 'diastolicPressure': return 'mmHg';
+    case 'ecgReading': return 'mV';
+    case 'eegReading': return 'μV';
+    case 'bioelectricalImpedance': return 'Ω';
+    case 'tremorIntensity': return '/10';
     default: return '';
   }
 };
@@ -221,46 +223,47 @@ export const getTherapyStatusColor = (status: string): string => {
 // Helper to ensure blood pressure is always integer
 export const formatBloodPressure = (systolic: number, diastolic?: number): string => {
   const sys = Math.round(systolic); // Always integer
-  const dia = diastolic ? Math.round(diastolic) : Math.round(systolic * 0.6); // Always integer
+  const dia = diastolic ? Math.round(diastolic) : Math.round(systolic * 0.67); // Always integer - medical standard ratio
   return `${sys}/${dia}`;
 };
 
 // Enhanced vital sign interpretation with clinical context including new vitals
 export const getVitalInterpretation = (
-  heartRate: number, 
-  bloodPressure: number, 
-  oxygenSat: number, 
-  temperature: number, 
-  ecgValue: number,
-  eegValue?: number,
+  heartRate: number,
+  systolicPressure: number,
+  diastolicPressure: number,
+  oxygenSaturation: number,
+  skinTemperature: number,
+  ecgReading: number,
+  eegReading?: number,
   respiratoryRate?: number,
-  skinTemperature?: number,
-  bioimpedance?: number,
-  tremor?: number
+  bioelectricalImpedance?: number,
+  tremorIntensity?: number
 ): string => {
   const interpretations: string[] = [];
-  
+
   // Heart rate interpretation
   if (heartRate < 50) interpretations.push('Severe bradycardia detected');
   else if (heartRate < 60) interpretations.push('Bradycardia present');
   else if (heartRate > 120) interpretations.push('Tachycardia present');
   else if (heartRate > 100) interpretations.push('Mild tachycardia');
-  
-  // Blood pressure interpretation
-  if (bloodPressure > 160) interpretations.push('Hypertensive crisis');
-  else if (bloodPressure > 140) interpretations.push('Hypertension');
-  else if (bloodPressure < 90) interpretations.push('Hypotension');
+
+  // Blood pressure interpretation - check both systolic and diastolic
+  if (systolicPressure > 180 || diastolicPressure > 120) interpretations.push('Hypertensive crisis');
+  else if (systolicPressure > 160 || diastolicPressure > 100) interpretations.push('Stage 2 hypertension');
+  else if (systolicPressure > 140 || diastolicPressure > 90) interpretations.push('Stage 1 hypertension');
+  else if (systolicPressure < 90 || diastolicPressure < 60) interpretations.push('Hypotension');
   
   // Oxygen saturation interpretation
-  if (oxygenSat < 90) interpretations.push('Severe hypoxemia');
-  else if (oxygenSat < 95) interpretations.push('Mild hypoxemia');
+  if (oxygenSaturation < 90) interpretations.push('Severe hypoxemia');
+  else if (oxygenSaturation < 95) interpretations.push('Mild hypoxemia');
   
   // Temperature interpretation
-  if (temperature > 102) interpretations.push('High fever');
-  else if (temperature > 100.4) interpretations.push('Fever present');
-  else if (temperature < 96) interpretations.push('Hypothermia');
+  if (skinTemperature > 102) interpretations.push('High fever');
+  else if (skinTemperature > 100.4) interpretations.push('Fever present');
+  else if (skinTemperature < 96) interpretations.push('Hypothermia');
   
-  // Skin temperature interpretation
+  // Additional temperature interpretation
   if (skinTemperature) {
     if (skinTemperature > 103) interpretations.push('Elevated skin temperature');
     else if (skinTemperature < 95) interpretations.push('Low skin temperature');
@@ -273,34 +276,34 @@ export const getVitalInterpretation = (
   }
   
   // Arrhythmia detection
-  if (MedicalUtils.detectArrhythmia(heartRate, ecgValue)) {
-    const arrhythmiaType = MedicalUtils.getArrhythmiaType(heartRate, ecgValue);
+  if (MedicalUtils.detectArrhythmia(heartRate, ecgReading)) {
+    const arrhythmiaType = MedicalUtils.getArrhythmiaType(heartRate, ecgReading);
     if (arrhythmiaType) {
       interpretations.push(`${arrhythmiaType} detected`);
     }
   }
   
   // EEG interpretation
-  if (eegValue) {
-    if (MedicalUtils.detectSeizureActivity(eegValue, heartRate)) {
+  if (eegReading) {
+    if (MedicalUtils.detectSeizureActivity(eegReading, heartRate)) {
       interpretations.push('Possible seizure activity detected');
-    } else if (eegValue > 70) {
+    } else if (eegReading > 70) {
       interpretations.push('Elevated brain activity');
-    } else if (eegValue < 5) {
+    } else if (eegReading < 5) {
       interpretations.push('Low brain activity');
     }
   }
   
   // Tremor interpretation
-  if (tremor) {
-    if (tremor > 7) interpretations.push('Severe tremor detected');
-    else if (tremor > 4) interpretations.push('Moderate tremor present');
-    else if (tremor > 1) interpretations.push('Mild tremor noted');
+  if (tremorIntensity) {
+    if (tremorIntensity > 7) interpretations.push('Severe tremor detected');
+    else if (tremorIntensity > 4) interpretations.push('Moderate tremor present');
+    else if (tremorIntensity > 1) interpretations.push('Mild tremor noted');
   }
   
   // Bioimpedance interpretation
-  if (bioimpedance) {
-    if (bioimpedance < 350 || bioimpedance > 850) {
+  if (bioelectricalImpedance) {
+    if (bioelectricalImpedance < 350 || bioelectricalImpedance > 850) {
       interpretations.push('Abnormal bioimpedance reading');
     }
   }
@@ -324,14 +327,15 @@ export const getVitalTrend = (currentValue: number, previousValue: number, vital
 const getvitaltrendthreshold = (vitalType: vitaltype): number => {
   switch (vitalType) {
     case 'heartRate': return 5;
-    case 'temperature': return 0.3;
-    case 'oxygenSat': return 2;
+    case 'skinTemperature': return 0.3;
+    case 'oxygenSaturation': return 2;
     case 'respiratoryRate': return 2;
-    case 'bloodPressure': return 10;
-    case 'ecg': return 10;
-    case 'eeg': return 5;
-    case 'bioImpedance': return 25;
-    case 'tremor': return 0.5;
+    case 'systolicPressure': return 10;
+    case 'diastolicPressure': return 10;
+    case 'ecgReading': return 10;
+    case 'eegReading': return 5;
+    case 'bioelectricalImpedance': return 25;
+    case 'tremorIntensity': return 0.5;
     default: return 1;
   }
 };
@@ -340,31 +344,31 @@ const getvitaltrendthreshold = (vitalType: vitaltype): number => {
 export const getVitalRangesForCondition = (diagnosis: string) => {
   const baseRanges = {
     heartRate: { min: 60, max: 100 },
-    temperature: { min: 97.0, max: 99.0 },
-    skinTemperature: { min: 96.0, max: 98.0 },
-    oxygenSat: { min: 95, max: 100 },
+    skinTemperature: { min: 97.0, max: 99.0 },
+    oxygenSaturation: { min: 95, max: 100 },
     respiratoryRate: { min: 12, max: 20 },
-    bloodPressure: { min: 110, max: 140 },
-    ecg: { min: 100, max: 150 },
-    eeg: { min: 10, max: 60 },
-    bioimpedance: { min: 450, max: 650 },
-    tremor: { min: 0, max: 2 }
+    systolicPressure: { min: 110, max: 140 },
+    diastolicPressure: { min: 70, max: 90 },
+    ecgReading: { min: 100, max: 150 },
+    eegReading: { min: 10, max: 60 },
+    bioelectricalImpedance: { min: 450, max: 650 },
+    tremorIntensity: { min: 0, max: 2 }
   };
   
   // Adjust ranges based on diagnosis
   if (diagnosis.toLowerCase().includes('cardiac') || diagnosis.toLowerCase().includes('heart')) {
     baseRanges.heartRate = { min: 70, max: 110 };
-    baseRanges.ecg = { min: 90, max: 160 };
+    baseRanges.ecgReading = { min: 90, max: 160 };
   }
   
   if (diagnosis.toLowerCase().includes('pneumonia') || diagnosis.toLowerCase().includes('respiratory')) {
-    baseRanges.oxygenSat = { min: 92, max: 98 };
+    baseRanges.oxygenSaturation = { min: 92, max: 98 };
     baseRanges.respiratoryRate = { min: 14, max: 24 };
   }
   
   if (diagnosis.toLowerCase().includes('stroke') || diagnosis.toLowerCase().includes('neurological')) {
-    baseRanges.eeg = { min: 5, max: 70 };
-    baseRanges.tremor = { min: 0, max: 5 };
+    baseRanges.eegReading = { min: 5, max: 70 };
+    baseRanges.tremorIntensity = { min: 0, max: 5 };
   }
   
   return baseRanges;

@@ -8,20 +8,22 @@ from datetime import datetime, date
 
 class PatientBase(BaseModel):
     """Base patient model - matches database schema"""
-    firstname: str
-    lastname: str
-    dateofbirth: Optional[date] = None
+    firstName: str
+    lastName: str
+    mrn: Optional[str] = None
+    dateOfBirth: Optional[date] = None
     gender: Optional[str] = None
-    phonenumber: Optional[str] = None
-    emergencycontactname: Optional[str] = None
-    emergencycontactphone: Optional[str] = None
-    bloodtype: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    emergencyContactName: Optional[str] = None
+    emergencyContactPhone: Optional[str] = None
+    bloodType: Optional[str] = None
     allergies: Optional[str] = None
-    medicalhistory: Optional[str] = None
-    roomnumber: Optional[str] = None
-    bednumber: Optional[str] = None
-    attendingphysician: Optional[str] = None
-    nurseincharge: Optional[str] = None
+    medicalHistory: Optional[str] = None
+    currentMedications: Optional[str] = None
+    roomNumber: Optional[str] = None
+    bedNumber: Optional[str] = None
+    attendingPhysician: Optional[str] = None
+    nurseInCharge: Optional[str] = None
 
 class PatientCreate(PatientBase):
     """Patient creation model"""
@@ -29,34 +31,180 @@ class PatientCreate(PatientBase):
 
 class PatientUpdate(BaseModel):
     """Patient update model - matches database schema"""
-    firstname: Optional[str] = None
-    lastname: Optional[str] = None
-    dateofbirth: Optional[date] = None
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    mrn: Optional[str] = None
+    dateOfBirth: Optional[date] = None
     gender: Optional[str] = None
-    phonenumber: Optional[str] = None
-    emergencycontactname: Optional[str] = None
-    emergencycontactphone: Optional[str] = None
-    bloodtype: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    emergencyContactName: Optional[str] = None
+    emergencyContactPhone: Optional[str] = None
+    bloodType: Optional[str] = None
     allergies: Optional[str] = None
-    medicalhistory: Optional[str] = None
-    roomnumber: Optional[str] = None
-    bednumber: Optional[str] = None
-    attendingphysician: Optional[str] = None
-    nurseincharge: Optional[str] = None
+    medicalHistory: Optional[str] = None
+    currentMedications: Optional[str] = None
+    roomNumber: Optional[str] = None
+    bedNumber: Optional[str] = None
+    attendingPhysician: Optional[str] = None
+    nurseInCharge: Optional[str] = None
     status: Optional[str] = None
 
 class Patient(PatientBase):
     """Complete patient model - matches database schema"""
     id: str
-    admissiondate: Optional[datetime] = None
-    dischargedate: Optional[datetime] = None
-    assigneddeviceid: Optional[str] = None
+    admissionDate: Optional[datetime] = None
+    dischargeDate: Optional[datetime] = None
+    assignedDeviceId: Optional[str] = None
     status: str = "active"
-    createdat: datetime
-    updatedat: datetime
-    
+    createdAt: datetime
+    updatedAt: datetime
+
+    # Internal attribute for vitals data
+    _current_vitals: Optional['VitalSigns'] = None
+    _current_alerts: List[Any] = []
+
     class Config:
         from_attributes = True
+        arbitrary_types_allowed = True
+
+    @property
+    def name(self) -> str:
+        """Computed property for frontend compatibility - combines firstName and lastName"""
+        return f"{self.firstName} {self.lastName}".strip()
+
+    @property
+    def ward(self) -> str:
+        """Extract ward from room number for frontend compatibility"""
+        if self.roomNumber:
+            # Assuming room format like "ICU-101", "GEN-205", etc.
+            return self.roomNumber.split("-")[0] if "-" in self.roomNumber else ""
+        return ""
+
+    @property
+    def room(self) -> str:
+        """Return room number for frontend compatibility"""
+        return self.roomNumber or ""
+
+    @property
+    def assignedDoctor(self) -> str:
+        """Return attending physician for frontend compatibility"""
+        return self.attendingPhysician or ""
+
+    @property
+    def vitals(self) -> dict:
+        """Computed vitals property for frontend compatibility"""
+        if hasattr(self, '_current_vitals') and self._current_vitals:
+            vitals_data = {
+                "heartRate": self._current_vitals.heartRate or 0,
+                "temperature": self._current_vitals.temperature or 0.0,
+                "oxygenSat": self._current_vitals.oxygenSaturation or 0,
+                "respiratoryRate": self._current_vitals.respiratoryRate or 0,
+                "bloodPressureValue": self._current_vitals.bloodPressureSystolic or 0,
+                "lastUpdated": self._current_vitals.timestamp.isoformat() if self._current_vitals.timestamp else "",
+                "lastSync": self._current_vitals.timestamp.isoformat() if self._current_vitals.timestamp else "",
+                "ecg": 0,  # Default values for extended monitoring
+                "eeg": 0,
+                "isEcgMode": False,
+                "bioImpedance": 0,
+                "tremor": 0,
+                "fallRisk": "low"
+            }
+
+            # Format blood pressure as string "120/80"
+            if (self._current_vitals.bloodPressureSystolic and
+                self._current_vitals.bloodPressureDiastolic):
+                vitals_data["bloodPressure"] = f"{self._current_vitals.bloodPressureSystolic}/{self._current_vitals.bloodPressureDiastolic}"
+            else:
+                vitals_data["bloodPressure"] = "0/0"
+
+            return vitals_data
+
+        # Return default vitals structure
+        return {
+            "heartRate": 0,
+            "bloodPressure": "0/0",
+            "bloodPressureValue": 0,
+            "temperature": 0.0,
+            "oxygenSat": 0,
+            "respiratoryRate": 0,
+            "ecg": 0,
+            "eeg": 0,
+            "isEcgMode": False,
+            "bioImpedance": 0,
+            "tremor": 0,
+            "fallRisk": "low",
+            "lastUpdated": "",
+            "lastSync": ""
+        }
+
+    @property
+    def alerts(self) -> List[dict]:
+        """Return alerts in frontend format"""
+        return getattr(self, '_current_alerts', [])
+
+    @property
+    def deviceStatus(self) -> str:
+        """Device status for frontend compatibility"""
+        # This would be populated from device assignment data
+        if self.assignedDeviceId:
+            return "connected"  # Default assumption
+        return "disconnected"
+
+    @property
+    def age(self) -> int:
+        """Calculate age from date of birth"""
+        if self.dateOfBirth:
+            from datetime import date
+            today = date.today()
+            return today.year - self.dateOfBirth.year - ((today.month, today.day) < (self.dateOfBirth.month, self.dateOfBirth.day))
+        return 0
+
+    @property
+    def medicationsList(self) -> List[dict]:
+        """Return medications list for frontend"""
+        return getattr(self, '_medications', [])
+
+    @property
+    def investigationsList(self) -> List[dict]:
+        """Return investigations list for frontend"""
+        return getattr(self, '_investigations', [])
+
+    @property
+    def therapiesList(self) -> List[dict]:
+        """Return therapies list for frontend"""
+        return getattr(self, '_therapies', [])
+
+    @property
+    def notesList(self) -> List[dict]:
+        """Return notes list for frontend"""
+        return getattr(self, '_notes', [])
+
+    @property
+    def caseSheet(self) -> List[dict]:
+        """Return case sheet entries for frontend"""
+        return getattr(self, '_case_sheet', [])
+
+    def set_current_vitals(self, vitals: 'VitalSigns'):
+        """Set current vitals for computed property"""
+        self._current_vitals = vitals
+
+    def set_alerts(self, alerts: List[dict]):
+        """Set alerts for the patient"""
+        self._current_alerts = alerts
+
+    def set_medical_data(self, medications: List[dict] = None, investigations: List[dict] = None,
+                        therapies: List[dict] = None, notes: List[dict] = None, case_sheet: List[dict] = None):
+        """Set medical data for computed properties"""
+        if medications is not None:
+            self._medications = medications
+        if investigations is not None:
+            self._investigations = investigations
+        if therapies is not None:
+            self._therapies = therapies
+        if notes is not None:
+            self._notes = notes
+        if case_sheet is not None:
+            self._case_sheet = case_sheet
 
 class VitalSigns(BaseModel):
     """Vital signs data model - uses camelCase as per project standards"""
@@ -77,8 +225,8 @@ class VitalSigns(BaseModel):
 
 class PatientWithVitals(Patient):
     """Patient model with current vital signs and related data"""
-    currentVitals: Optional[VitalSigns] = None
-    recentVitals: List[VitalSigns] = []
+    currentvitals: Optional[VitalSigns] = None
+    recentvitals: List[VitalSigns] = []
     medications: List[Any] = []
     investigations: List[Any] = []
     therapies: List[Any] = []

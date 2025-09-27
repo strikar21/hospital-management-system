@@ -5,9 +5,9 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: hospital_db
-      POSTGRES_USER: hospital_user
-      POSTGRES_PASSWORD: hospital_pass
+      POSTGRES_DB: hospitaldb
+      POSTGRES_USER: hospital
+      POSTGRES_PASSWORD: hospital123
     ports:
       - "5432:5432"
     volumes:
@@ -15,7 +15,7 @@ services:
     networks:
       - hospital_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hospital_user -d hospital_db"]
+      test: ["CMD-SHELL", "pg_isready -U hospital -d hospitaldb"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,9 +24,9 @@ services:
   timescaledb:
     image: timescale/timescaledb:latest-pg15
     environment:
-      POSTGRES_DB: hospital_timescale
-      POSTGRES_USER: hospital_user
-      POSTGRES_PASSWORD: hospital_pass
+      POSTGRES_DB: hospitaltimescale
+      POSTGRES_USER: hospital
+      POSTGRES_PASSWORD: hospital123
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5433:5432"  # Use different port to avoid conflict
@@ -36,7 +36,7 @@ services:
     networks:
       - hospital_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hospital_user -d hospital_timescale"]
+      test: ["CMD-SHELL", "pg_isready -U hospital -d hospitaltimescale"]
       interval: 30s
       timeout: 10s
       retries: 3

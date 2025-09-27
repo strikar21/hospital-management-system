@@ -1,6 +1,6 @@
 // Dashboard.tsx - Main Dashboard
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Users, RefreshCw, Activity, X } from 'lucide-react';
 import { user, patient, roomproximity, appsettings } from './types';
 import { PatientService, VitalService } from './services';
@@ -67,7 +67,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     patients,
     loading,
     lastSync,
-    error,
     loadPatients,
     updatePatient,
     removePatient,
@@ -121,29 +120,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setCurrentPage(1); // Reset to page 1 when filters change
       loadPatients();
     }
-  }, [currentUser, selectedWard, showAllDepartments]); // Removed roomProximity to stop constant reloading
+  }, [currentUser, selectedWard, showAllDepartments, loadPatients]); // Removed roomProximity to stop constant reloading
 
-  // Auto-proximity detection for nurses and technicians
-  useEffect(() => {
-    if (currentUser && PermissionUtils.isNurseOrTechnician(currentUser.role)) {
-      detectProximity();
-      
-      const proximityInterval = setInterval(() => {
-        detectProximity();
-      }, 10000);
-      
-      return () => clearInterval(proximityInterval);
-    }
-  }, [currentUser]); // Remove detectProximity dependency to avoid hoisting issue
-
-  // Real-time vital updates removed - backend handles real-time data
-
-  // NFC override functionality removed - using backend-only mode
-
-
-  const detectProximity = async () => {
+  const detectProximity = useCallback(async () => {
     if (!currentUser || !PermissionUtils.isNurseOrTechnician(currentUser.role)) return;
-    
+
     setProximityScanning(true);
     try {
       const proximity = await VitalService.detectRoomProximity();
@@ -154,16 +135,34 @@ export const Dashboard: React.FC<DashboardProps> = ({
     } finally {
       setProximityScanning(false);
     }
-  };
+  }, [currentUser]);
+
+  // Auto-proximity detection for nurses and technicians
+  useEffect(() => {
+    if (currentUser && PermissionUtils.isNurseOrTechnician(currentUser.role)) {
+      detectProximity();
+
+      const proximityInterval = setInterval(() => {
+        detectProximity();
+      }, 10000);
+
+      return () => clearInterval(proximityInterval);
+    }
+  }, [currentUser, detectProximity]);
+
+  // Real-time vital updates removed - backend handles real-time data
+
+  // NFC override functionality removed - using backend-only mode
 
   const handleToggleECGMode = (patient: patient) => {
+    if (!patient.vitals) return;
     updatePatient(patient.id, {
       vitals: { ...patient.vitals, isEcgMode: !patient.vitals.isEcgMode }
     });
   };
 
   const handleVitalClick = async (patient: patient, vitalType: string) => {
-    if (vitalType === 'ecg' || vitalType === 'eeg') {
+    if (vitalType === 'ecgReading' || vitalType === 'eegReading') {
       setShowECGViewer(patient);
     } else {
       setShowVitalChart({ patient, vital: vitalType });
@@ -187,7 +186,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
       
       // Update the patient's alerts to mark as acknowledged
-      const updatedAlerts = patient.alerts.map(alert =>
+      const updatedAlerts = (patient.alerts || []).map(alert =>
         alert.id === alertId ? {
           ...alert,
           isAcknowledged: true,

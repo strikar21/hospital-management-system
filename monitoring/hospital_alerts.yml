@@ -1,0 +1,187 @@
+# Hospital Management System Alert Rules
+# Critical alerts for medical environment compliance
+
+groups:
+  - name: hospital_critical_alerts
+    rules:
+      # API Availability - Critical for patient care
+      - alert: HospitalAPIDown
+        expr: up{job="hospital-backend"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "Hospital API is down"
+          description: "The hospital management API has been down for more than 30 seconds. Patient care systems affected."
+
+      # Database Connectivity - Critical for data integrity
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Hospital database is unreachable"
+          description: "Primary hospital database has been unreachable for 1 minute. Data operations affected."
+
+      # TimescaleDB for vital signs - Critical for monitoring
+      - alert: VitalSignsDatabaseDown
+        expr: up{job="timescaledb"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: vitals
+        annotations:
+          summary: "Vital signs database is down"
+          description: "TimescaleDB for patient vital signs monitoring is down for 2 minutes."
+
+      # High API Response Time - Affects patient care speed
+      - alert: HighAPIResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="hospital-backend"}[5m])) > 1.0
+        for: 2m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High API response time detected"
+          description: "95th percentile API response time is above 1 second for 2 minutes."
+
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolHigh
+        expr: (database_connections_active / database_connections_max) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Database connection pool is over 80% utilized for 5 minutes."
+
+      # Memory Usage - System stability
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "System memory usage is above 90% for 5 minutes."
+
+      # Disk Space - Critical for logs and data
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Disk space critically low"
+          description: "Available disk space is below 10% on {{ $labels.device }}."
+
+      # Redis Cache Issues
+      - alert: RedisCacheDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache service has been down for 2 minutes. Session management affected."
+
+      # MQTT Broker for IoT devices
+      - alert: MQTTBrokerDown
+        expr: up{job="mqtt"} == 0
+        for: 3m
+        labels:
+          severity: warning
+          service: iot
+        annotations:
+          summary: "MQTT broker is down"
+          description: "MQTT broker for IoT devices has been down for 3 minutes. Device communication affected."
+
+      # HTTP Error Rate
+      - alert: HighHTTPErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "High HTTP error rate"
+          description: "HTTP 5xx error rate is above 10% for 5 minutes."
+
+  - name: hospital_security_alerts
+    rules:
+      # HIPAA Compliance - Failed authentication attempts
+      - alert: HighFailedLoginAttempts
+        expr: rate(authentication_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High number of failed login attempts"
+          description: "More than 10 failed login attempts per minute for 2 minutes. Possible security threat."
+
+      # SSL Certificate Expiry
+      - alert: SSLCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+        for: 1h
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate will expire within 7 days."
+
+  - name: hospital_performance_alerts
+    rules:
+      # Patient Data Processing Delays
+      - alert: PatientDataProcessingDelay
+        expr: rate(patient_data_processing_duration_seconds_sum[5m]) / rate(patient_data_processing_duration_seconds_count[5m]) > 5.0
+        for: 3m
+        labels:
+          severity: warning
+          service: processing
+        annotations:
+          summary: "Patient data processing delays"
+          description: "Average patient data processing time exceeds 5 seconds for 3 minutes."
+
+      # WebSocket Connection Issues
+      - alert: WebSocketConnectionDrop
+        expr: rate(websocket_disconnections_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: websocket
+        annotations:
+          summary: "High WebSocket disconnection rate"
+          description: "More than 5 WebSocket disconnections per minute for 2 minutes."
+
+  - name: hospital_data_integrity_alerts
+    rules:
+      # Database Backup Failures
+      - alert: DatabaseBackupFailed
+        expr: time() - database_last_successful_backup_timestamp > 86400
+        for: 1h
+        labels:
+          severity: critical
+          service: backup
+        annotations:
+          summary: "Database backup failed"
+          description: "No successful database backup in the last 24 hours. Data protection compromised."
+
+      # Audit Log Issues
+      - alert: AuditLogWriteFailure
+        expr: rate(audit_log_write_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: audit
+        annotations:
+          summary: "Audit log write failures detected"
+          description: "HIPAA audit log writes are failing. Compliance requirement violated."

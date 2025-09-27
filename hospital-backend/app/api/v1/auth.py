@@ -2,30 +2,56 @@
 Authentication API endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse
 from datetime import datetime
 import logging
+import json
 
 from ...models.staff import StaffLogin, StaffLoginResponse, Staff
-from ...core.database import get_db_connection
-from ...core.db_utils import fetch_one, execute_query
+from ...core.database import getDbConnection
+from ...core.db_utils import fetchOne
 from ...core.security import verify_pin, verify_password, validate_pin_format, validate_staff_id_format
-from ...services.audit import log_audit_event
+from ...services.audit import logAuditEvent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+@router.post("/simple-test")
+async def simpleTest(data: dict):
+    """Ultra simple test endpoint to verify POST requests work"""
+    print(f"SIMPLE TEST: Received data: {data}")
+    return {"message": "POST works", "received": data}
+
+@router.post("/debug-auth")
+async def debugAuth(request: Request):
+    """Debug auth endpoint - always succeeds"""
+    try:
+        body = await request.body()
+        requestData = json.loads(body.decode('utf-8'))
+        print(f"DEBUG AUTH: Received: {requestData}")
+
+        return {
+            "id": "DOC0001",
+            "name": "Dr. Sarah Johnson",
+            "role": "doctor",
+            "department": "Cardiology",
+            "lastSeen": datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"DEBUG AUTH ERROR: {e}")
+        return {"error": str(e)}
+
 @router.get("/test")
-async def auth_test():
+async def authTest():
     """Test endpoint to verify auth router is working"""
     logger.info("AUTH TEST: Endpoint reached successfully")
     try:
-        async with get_db_connection() as conn:
-            result = await fetch_one(conn, "SELECT COUNT(*) as count FROM staff")
-            staff_count = dict(result)['count']
-            logger.info(f"AUTH TEST: Found {staff_count} staff members")
-            return {"message": "Auth router working", "status": "OK", "staff_count": staff_count}
+        async with getDbConnection() as conn:
+            result = await fetchOne(conn, "SELECT COUNT(*) as count FROM staff")
+            staffCount = dict(result)['count']
+            logger.info(f"AUTH TEST: Found {staffCount} staff members")
+            return {"message": "Auth router working", "status": "OK", "staffCount": staffCount}
     except Exception as e:
         logger.error(f"AUTH TEST: Database error: {e}")
         import traceback
@@ -33,100 +59,116 @@ async def auth_test():
         return {"message": "Database error", "error": str(e), "status": "ERROR"}
 
 @router.post("/login", response_model=StaffLoginResponse)
-async def staff_login(login_data: StaffLogin):
+async def staffLogin(loginData: StaffLogin):
     """
-    Staff login endpoint - supports staff ID + PIN and NFC card authentication
+    Staff login endpoint - supports staff ID + PIN and NFC card authentication - Uses middleware transformation
     """
-    print(f"AUTH: Login attempt for staff ID: {login_data.staffId}")
-    logger.info(f"AUTH: Login attempt for staff ID: {login_data.staffId}")
+    print("AUTH: Staff login endpoint called")
+    logger.info("AUTH: Staff login endpoint called")
+    print(f"AUTH: Received loginData: {loginData}")
+    logger.info(f"AUTH: Received loginData: {loginData}")
+
+    staffId = loginData.staffId
+    pin = loginData.pin
+    password = loginData.password
+    nfcCardId = loginData.nfcCardId
+
+    print(f"AUTH: Login attempt for staff ID: {staffId}")
+    logger.info(f"AUTH: Login attempt for staff ID: {staffId}")
     try:
         # Validate staff ID format
-        if not validate_staff_id_format(login_data.staffId):
+        if not validate_staff_id_format(staffId):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid staff ID format. Must be DOC/NUR/ADM/PRV/TEC followed by 4 digits."
             )
-        
+
         # If PIN is provided, validate format
-        if login_data.pin and not validate_pin_format(login_data.pin):
+        if pin and not validate_pin_format(pin):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid PIN format. Must be 4 digits."
             )
-        
+
         # Check that either PIN or password is provided
-        if not login_data.pin and not login_data.password and not login_data.nfcCardId:
+        if not pin and not password and not nfcCardId:
             raise HTTPException(
                 status_code=400,
                 detail="Either PIN, password, or NFC card is required."
             )
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Try to find staff by ID first, then by NFC card ID
-            if login_data.nfcCardId:
+            if nfcCardId:
                 query = """
-                SELECT * FROM staff 
-                WHERE (id = $1 OR nfccardid = $2) AND isactive = true
+                SELECT * FROM staff
+                WHERE (id = $1 OR "nfcCardId" = $2) AND "isActive" = true
                 """
-                staff_row = await conn.fetchrow(query, login_data.staffId, login_data.nfcCardId)
+                staffRow = await conn.fetchrow(query, staffId, nfcCardId)
             else:
-                query = "SELECT * FROM staff WHERE id = $1 AND isactive = true"
-                staff_row = await conn.fetchrow(query, login_data.staffId)
+                query = 'SELECT * FROM staff WHERE id = $1 AND "isActive" = true'
+                staffRow = await conn.fetchrow(query, staffId)
             
-            if not staff_row:
-                # Log failed login attempt
-                await log_audit_event(
-                    user_id=login_data.staffId,
-                    action="LOGIN_FAILED",
-                    resource_type="AUTHENTICATION",
-                    details=f"Invalid staff ID or NFC card"
-                )
+            if not staffRow:
+                # Log failed login attempt (temporarily disabled for debugging)
+                try:
+                    await logAuditEvent(
+                        userId=staffId,
+                        action="LOGIN_FAILED",
+                        resourceType="AUTHENTICATION",
+                        details="Invalid staff ID or NFC card"
+                    )
+                except Exception as audit_e:
+                    logger.warning(f"Audit logging failed: {audit_e}")
                 raise HTTPException(
                     status_code=401,
                     detail="Invalid staff credentials"
                 )
             
             # Convert row to dict
-            staff_dict = dict(staff_row) if hasattr(staff_row, 'keys') else staff_row
-            # Create name field from firstname + lastname
-            if 'firstname' in staff_dict and 'lastname' in staff_dict:
-                staff_dict['name'] = f"{staff_dict['firstname'] or ''} {staff_dict['lastname'] or ''}".strip()
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
             
             # If PIN is provided, verify it
-            if login_data.pin:
-                if not staff_dict.get('pin'):
+            if pin:
+                if not staffDict.get('pin'):
                     raise HTTPException(
                         status_code=401,
                         detail="PIN not set for this staff member"
                     )
-                
-                if not verify_pin(login_data.pin, staff_dict['pin']):
-                    await log_audit_event(
-                        user_id=login_data.staffId,
-                        action="LOGIN_FAILED",
-                        resource_type="AUTHENTICATION",
-                        details="Invalid PIN"
-                    )
+
+                if not verify_pin(pin, staffDict['pin']):
+                    try:
+                        await logAuditEvent(
+                            userId=staffId,
+                            action="LOGIN_FAILED",
+                            resourceType="AUTHENTICATION",
+                            details="Invalid PIN"
+                        )
+                    except Exception as audit_e:
+                        logger.warning(f"Audit logging failed: {audit_e}")
                     raise HTTPException(
                         status_code=401,
                         detail="Invalid PIN"
                     )
-            
+
             # If password is provided, verify it
-            if login_data.password:
-                if not staff_dict.get('password'):
+            if password:
+                if not staffDict.get('password'):
                     raise HTTPException(
                         status_code=401,
                         detail="Password not set for this staff member"
                     )
-                
-                if not verify_password(login_data.password, staff_dict['password']):
-                    await log_audit_event(
-                        user_id=login_data.staffId,
-                        action="LOGIN_FAILED",
-                        resource_type="AUTHENTICATION",
-                        details="Invalid password"
-                    )
+
+                if not verify_password(password, staffDict['password']):
+                    try:
+                        await logAuditEvent(
+                            userId=staffId,
+                            action="LOGIN_FAILED",
+                            resourceType="AUTHENTICATION",
+                            details="Invalid password"
+                        )
+                    except Exception as audit_e:
+                        logger.warning(f"Audit logging failed: {audit_e}")
                     raise HTTPException(
                         status_code=401,
                         detail="Invalid password"
@@ -134,56 +176,56 @@ async def staff_login(login_data: StaffLogin):
             
             # Update last seen timestamp
             await conn.execute(
-                "UPDATE staff SET lastseen = CURRENT_TIMESTAMP WHERE id = $1",
-                staff_dict['id']
+                'UPDATE staff SET "lastSeen" = CURRENT_TIMESTAMP WHERE id = $1',
+                staffDict['id']
             )
             
             # Log successful login
-            await log_audit_event(
-                user_id=staff_dict['id'],
-                action="LOGIN_SUCCESS",
-                resource_type="AUTHENTICATION",
-                details=f"Staff logged in: {staff_dict['name']} ({staff_dict['role']})"
-            )
+            try:
+                await logAuditEvent(
+                    userId=staffDict['id'],
+                    action="LOGIN_SUCCESS",
+                    resourceType="AUTHENTICATION",
+                    details=f"Staff logged in: {staffDict['name']} ({staffDict['role']})"
+                )
+            except Exception as audit_e:
+                logger.warning(f"Audit logging failed: {audit_e}")
             
-            logger.info(f"✅ Staff login successful: {staff_dict['name']} ({staff_dict['role']})")
-            
+            logger.info(f"Staff login successful: {staffDict['firstName']} {staffDict['lastName']} ({staffDict['role']})")
+
             return StaffLoginResponse(
-                id=staff_dict['id'],
-                name=staff_dict['name'],
-                role=staff_dict['role'],
-                department=staff_dict.get('department'),
+                id=staffDict['id'],
+                firstName=staffDict['firstName'],
+                lastName=staffDict['lastName'],
+                role=staffDict['role'],
+                department=staffDict.get('department'),
                 lastSeen=datetime.now()
             )
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Login error: {e}")
+        logger.error(f"LOGIN ERROR: {e}", exc_info=True)
         import traceback
-        logger.error(f"❌ Login error traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.error(f"LOGIN ERROR TRACEBACK: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
-@router.post("/simple-login", response_model=StaffLoginResponse)
-async def simple_login(login_data: StaffLogin):
-    """Simple login endpoint (alias for main login) - Frontend expects this endpoint"""
-    return await staff_login(login_data)
 
 @router.post("/logout")
-async def staff_logout(staff_id: str):
+async def staffLogout(staffId: str):
     """
     Staff logout endpoint
     """
     try:
         # Log logout event
-        await log_audit_event(
-            user_id=staff_id,
+        await logAuditEvent(
+            userId=staffId,
             action="LOGOUT",
-            resource_type="AUTHENTICATION",
+            resourceType="AUTHENTICATION",
             details="Staff logged out"
         )
         
-        logger.info(f"🔓 Staff logout: {staff_id}")
+        logger.info(f"🔓 Staff logout: {staffId}")
         
         return JSONResponse({
             "message": "Logout successful",
@@ -194,25 +236,24 @@ async def staff_logout(staff_id: str):
         logger.error(f"❌ Logout error: {e}")
         raise HTTPException(status_code=500, detail="Logout failed")
 
-@router.get("/me/{staff_id}", response_model=Staff)
-async def get_current_staff(staff_id: str):
+@router.get("/me/{staffId}", response_model=Staff)
+async def getCurrentStaff(staffId: str):
     """
     Get current staff information
     """
     try:
-        async with get_db_connection() as conn:
-            query = "SELECT * FROM staff WHERE id = $1 AND isactive = true"
-            staff_row = await conn.fetchrow(query, staff_id)
-            
-            if not staff_row:
+        async with getDbConnection() as conn:
+            query = 'SELECT * FROM staff WHERE id = $1 AND "isActive" = true'
+            staffRow = await conn.fetchrow(query, staffId)
+
+            if not staffRow:
                 raise HTTPException(status_code=404, detail="Staff not found")
+
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
+            # Create name field from "firstName" and "lastName"
+            staffDict['name'] = f"{staffDict.get('firstName', '') or ''} {staffDict.get('lastName', '') or ''}".strip()
             
-            staff_dict = dict(staff_row) if hasattr(staff_row, 'keys') else staff_row
-            # Create name field from firstname + lastname
-            if 'firstname' in staff_dict and 'lastname' in staff_dict:
-                staff_dict['name'] = f"{staff_dict['firstname'] or ''} {staff_dict['lastname'] or ''}".strip()
-            
-            return Staff(**staff_dict)
+            return Staff(**staffDict)
             
     except HTTPException:
         raise
@@ -220,54 +261,158 @@ async def get_current_staff(staff_id: str):
         logger.error(f"❌ Get staff error: {e}")
         raise HTTPException(status_code=500, detail="Failed to get staff information")
 
-@router.post("/nfc-tap")
-async def nfc_tap_login(nfc_card_id: str):
+@router.get("/check-type")
+async def checkAuthType(staffId: str = Query(..., description="Staff ID to check auth methods")):
     """
-    NFC card tap authentication
+    Check what authentication methods are available for a staff member
+    Used by HybridLogin.tsx
     """
     try:
-        async with get_db_connection() as conn:
-            query = "SELECT * FROM staff WHERE nfccardid = $1 AND isactive = true"
-            staff_row = await conn.fetchrow(query, nfc_card_id)
-            
-            if not staff_row:
-                await log_audit_event(
-                    user_id="unknown",
-                    action="NFC_TAP_FAILED",
-                    resource_type="AUTHENTICATION",
-                    details=f"Invalid NFC card ID: {nfc_card_id}"
+        # Validate staff ID format
+        if not validate_staff_id_format(staffId):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid staff ID format. Must be DOC/NUR/ADM/PRV/TEC followed by 4 digits."
+            )
+
+        async with getDbConnection() as conn:
+            query = 'SELECT pin, password, "nfcCardId" FROM staff WHERE id = $1 AND "isActive" = true'
+            staffRow = await conn.fetchrow(query, staffId)
+
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff not found")
+
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
+
+            # Determine available authentication methods
+            authMethods = []
+            if staffDict.get('pin'):
+                authMethods.append('pin')
+            if staffDict.get('password'):
+                authMethods.append('password')
+            if staffDict.get('nfcCardId'):
+                authMethods.append('nfc')
+
+            logger.info(f"🔍 Auth check for {staffId}: {authMethods}")
+
+            return {
+                "authMethods": authMethods,
+                "staffId": staffId,
+                "hasPin": bool(staffDict.get('pin')),
+                "hasPassword": bool(staffDict.get('password')),
+                "hasNfc": bool(staffDict.get('nfcCardId'))
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Check auth type error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to check authentication methods")
+
+@router.post("/nfc")
+async def authenticateNfc(nfcData: dict):
+    """
+    Authenticate staff using NFC card
+    Used by Login.tsx
+    """
+    try:
+        nfcCardId = nfcData.get('nfcId')
+        if not nfcCardId:
+            raise HTTPException(status_code=400, detail="NFC card ID is required")
+
+        async with getDbConnection() as conn:
+            query = 'SELECT * FROM staff WHERE "nfcCardId" = $1 AND "isActive" = true'
+            staffRow = await conn.fetchrow(query, nfcCardId)
+
+            if not staffRow:
+                await logAuditEvent(
+                    userId="unknown",
+                    action="NFC_AUTH_FAILED",
+                    resourceType="AUTHENTICATION",
+                    details=f"Invalid NFC card ID: {nfcCardId}"
                 )
                 raise HTTPException(status_code=401, detail="Invalid NFC card")
-            
-            staff_dict = dict(staff_row) if hasattr(staff_row, 'keys') else staff_row
-            # Create name field from firstname + lastname
-            if 'firstname' in staff_dict and 'lastname' in staff_dict:
-                staff_dict['name'] = f"{staff_dict['firstname'] or ''} {staff_dict['lastname'] or ''}".strip()
-            
+
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
+
             # Update last seen
             await conn.execute(
-                "UPDATE staff SET lastseen = CURRENT_TIMESTAMP WHERE id = $1",
-                staff_dict['id']
+                'UPDATE staff SET "lastSeen" = CURRENT_TIMESTAMP WHERE id = $1',
+                staffDict['id']
             )
-            
-            # Log NFC tap
-            await log_audit_event(
-                user_id=staff_dict['id'],
-                action="NFC_TAP_SUCCESS",
-                resource_type="AUTHENTICATION",
-                details=f"NFC tap login: {staff_dict['name']}"
+
+            # Log NFC authentication
+            await logAuditEvent(
+                userId=staffDict['id'],
+                action="NFC_AUTH_SUCCESS",
+                resourceType="AUTHENTICATION",
+                details=f"NFC authentication: {staffDict['firstName']} {staffDict['lastName']}"
             )
-            
-            logger.info(f"📱 NFC tap login: {staff_dict['name']} ({staff_dict['role']})")
-            
+
+            logger.info(f"📱 NFC authentication: {staffDict['firstName']} {staffDict['lastName']} ({staffDict['role']})")
+
             return StaffLoginResponse(
-                id=staff_dict['id'],
-                name=staff_dict['name'],
-                role=staff_dict['role'],
-                department=staff_dict.get('department'),
+                id=staffDict['id'],
+                firstName=staffDict['firstName'],
+                lastName=staffDict['lastName'],
+                role=staffDict['role'],
+                department=staffDict.get('department'),
                 lastSeen=datetime.now()
             )
-            
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ NFC authentication error: {e}")
+        raise HTTPException(status_code=500, detail="NFC authentication failed")
+
+@router.post("/nfc-tap")
+async def nfcTapLogin(nfcCardId: str):
+    """
+    NFC card tap authentication (legacy endpoint)
+    """
+    try:
+        async with getDbConnection() as conn:
+            query = 'SELECT * FROM staff WHERE "nfcCardId" = $1 AND "isActive" = true'
+            staffRow = await conn.fetchrow(query, nfcCardId)
+
+            if not staffRow:
+                await logAuditEvent(
+                    userId="unknown",
+                    action="NFC_TAP_FAILED",
+                    resourceType="AUTHENTICATION",
+                    details=f"Invalid NFC card ID: {nfcCardId}"
+                )
+                raise HTTPException(status_code=401, detail="Invalid NFC card")
+
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
+            # Create name field from "firstName" and "lastName"
+            staffDict['name'] = f"{staffDict.get('firstName', '') or ''} {staffDict.get('lastName', '') or ''}".strip()
+
+            # Update last seen
+            await conn.execute(
+                'UPDATE staff SET "lastSeen" = CURRENT_TIMESTAMP WHERE id = $1',
+                staffDict['id']
+            )
+
+            # Log NFC tap
+            await logAuditEvent(
+                userId=staffDict['id'],
+                action="NFC_TAP_SUCCESS",
+                resourceType="AUTHENTICATION",
+                details=f"NFC tap login: {staffDict['name']}"
+            )
+
+            logger.info(f"📱 NFC tap login: {staffDict['name']} ({staffDict['role']})")
+
+            return StaffLoginResponse(
+                id=staffDict['id'],
+                name=staffDict['name'],
+                role=staffDict['role'],
+                department=staffDict.get('department'),
+                lastSeen=datetime.now()
+            )
+
     except HTTPException:
         raise
     except Exception as e:

@@ -31,7 +31,7 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
 }) => {
   // Get CSS animation speed based on settings
   const getScrollSpeed = () => {
-    const speed = settings.autoscrollspeed || 30;
+    const speed = settings.autoScrollSpeed || 30;
     const baseSpeed = Math.max(20, 100 - speed); // 20-70 seconds range
 
     // Adjust speed based on patient count to prevent insane scrolling
@@ -49,13 +49,11 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
 
   // Split patients into rows - 2 cards per row
   const topRowPatients = patients.filter((_, index) => {
-    const groupOf4 = Math.floor(index / 4);
     const positionInGroup = index % 4;
     return positionInGroup < 2; // First 2 of each group of 4
   });
 
   const bottomRowPatients = patients.filter((_, index) => {
-    const groupOf4 = Math.floor(index / 4);
     const positionInGroup = index % 4;
     return positionInGroup >= 2; // Last 2 of each group of 4
   });
@@ -83,20 +81,20 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
   return (
     <div className="h-full flex flex-col gap-1.5 relative">
       {/* Auto-scroll indicator */}
-      {settings.enableautoscroll && patients.length > 4 && (
+      {settings.enableAutoScroll && patients.length > 4 && (
         <div className="absolute top-2 right-2 z-10 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-          Auto-scroll: {settings.autoscrollspeed || 30}px/s • {patients.length} patients
+          Auto-scroll: {settings.autoScrollSpeed || 30}px/s • {patients.length} patients
         </div>
       )}
 
       {/* Top Row - 2 Cards with Manual + Auto scroll */}
       <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
         <div
-          className={`h-full flex gap-1.5 ${settings.enableautoscroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
+          className={`h-full flex gap-1.5 ${settings.enableAutoScroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
           style={{
             minWidth: 'max-content',
-            animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
-            animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
+            animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
+            animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
           }}
         >
           {/* Original patients */}
@@ -114,7 +112,7 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
             </div>
           ))}
           {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-          {settings.enableautoscroll && patients.length > 4 && topRowPatients.map((patient) => (
+          {settings.enableAutoScroll && patients.length > 4 && topRowPatients.map((patient) => (
             <div key={`top-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
               <PatientCard
                 patient={patient}
@@ -133,11 +131,11 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
       {/* Bottom Row - 2 Cards with Manual + Auto scroll */}
       <div className="flex-1 patient-row-scroll overflow-x-auto overflow-y-hidden">
         <div
-          className={`h-full flex gap-1.5 ${settings.enableautoscroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
+          className={`h-full flex gap-1.5 ${settings.enableAutoScroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
           style={{
             minWidth: 'max-content',
-            animationDuration: settings.enableautoscroll ? `${getScrollSpeed()}s` : 'none',
-            animationPlayState: settings.enableautoscroll ? 'running' : 'paused'
+            animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
+            animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
           }}
         >
           {/* Original patients */}
@@ -155,7 +153,7 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
             </div>
           ))}
           {/* Duplicate for seamless scroll - only if auto-scroll enabled and enough patients */}
-          {settings.enableautoscroll && patients.length > 4 && bottomRowPatients.map((patient) => (
+          {settings.enableAutoScroll && patients.length > 4 && bottomRowPatients.map((patient) => (
             <div key={`bottom-duplicate-${patient.id}`} className="flex-shrink-0 patient-card-container" style={{ width: '500px' }}>
               <PatientCard
                 patient={patient}

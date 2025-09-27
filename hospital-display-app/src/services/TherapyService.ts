@@ -1,7 +1,6 @@
 // TherapyService.ts - Therapy and rehabilitation management (V2)
 import { therapy } from '../types';
 import { BaseService } from './BaseService';
-import { getApiUrl } from '../config/apiConfig';
 
 export class TherapyService extends BaseService {
 
@@ -22,7 +21,7 @@ export class TherapyService extends BaseService {
 
   static async getPatientTherapy(patientId: string): Promise<therapy[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/therapy/patient/${patientId}`));
+      const response = await this.fetchFromBackend(`/therapy/patient/${patientId}`);
       const therapySessions = this.handleV2Response<therapy>(response);
 
       console.log(`✅ Retrieved ${therapySessions.length} therapy sessions for patient ${patientId}`);
@@ -35,7 +34,7 @@ export class TherapyService extends BaseService {
 
   static async getActiveTherapy(patientId: string): Promise<therapy[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/therapy/patient/${patientId}/active`));
+      const response = await this.fetchFromBackend(`/therapy/patient/${patientId}/active`);
       const therapySessions = this.handleV2Response<therapy>(response);
 
       console.log(`✅ Retrieved ${therapySessions.length} active therapy sessions for patient ${patientId}`);
@@ -48,7 +47,7 @@ export class TherapyService extends BaseService {
 
   static async addTherapy(patientId: string, therapy: Omit<therapy, 'id'>, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/therapy/patient/${patientId}/add`), {
+      await this.fetchFromBackend(`/therapy/patient/${patientId}/add`, {
         method: 'POST',
         body: JSON.stringify({
           ...therapy,
@@ -68,7 +67,7 @@ export class TherapyService extends BaseService {
 
   static async updateTherapyStatus(sessionId: string, status: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/therapy/${sessionId}/status`), {
+      await this.fetchFromBackend(`/therapy/${sessionId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
           status,
@@ -87,7 +86,7 @@ export class TherapyService extends BaseService {
 
   static async completeTherapySession(sessionId: string, notes: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/therapy/${sessionId}/complete`), {
+      await this.fetchFromBackend(`/therapy/${sessionId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
           notes,
@@ -110,7 +109,7 @@ export class TherapyService extends BaseService {
 
   static async getTherapyTypes(): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/therapy/types`));
+      const response = await this.fetchFromBackend(`/therapy/types`);
       const types = this.handleV2Response<any>(response);
 
       console.log(`✅ Retrieved ${types.length} therapy types`);
@@ -128,7 +127,7 @@ export class TherapyService extends BaseService {
   static async updateTherapy(patientId: string, sessionId: string, updates: Partial<therapy>, userId: string): Promise<boolean> {
     try {
       // For v2, we use the status endpoint for most updates
-      await this.fetchFromBackend(getApiUrl(`/therapy/${sessionId}/status`), {
+      await this.fetchFromBackend(`/therapy/${sessionId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
           ...updates,

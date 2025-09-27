@@ -12,7 +12,7 @@ export class MedicalUtils {
    * Get vital sign status with medical accuracy
    * Uses standard medical ranges for patient safety
    */
-  static getVitalStatus(value: number, type: vitaltype): vitalstatus {
+  static getVitalStatus(value: number, type: vitaltype, diastolic?: number): vitalstatus {
     switch (type) {
       case 'heartRate':
         // Medical standard ranges for adults
@@ -20,22 +20,30 @@ export class MedicalUtils {
         if (value < 50 || value > 110) return 'warning';
         return 'normal';
 
-      case 'oxygenSat':
+      case 'oxygenSaturation':
         // Oxygen saturation critical thresholds
         if (value < 90) return 'critical';
         if (value < 95) return 'warning';
         return 'normal';
 
-      case 'temperature':
+      case 'skinTemperature':
         // Temperature in Fahrenheit
         if (value < 95 || value > 103) return 'critical';
         if (value < 96 || value > 101) return 'warning';
         return 'normal';
 
-      case 'bloodPressure':
-        // Systolic blood pressure ranges
-        if (value < 70 || value > 180) return 'critical';
-        if (value < 90 || value > 160) return 'warning';
+      case 'systolicPressure':
+        // Blood pressure ranges - check both systolic and diastolic
+        const systolic = value;
+        const diastolicValue = diastolic || Math.round(systolic * 0.67);
+
+        const systolicCritical = systolic < 70 || systolic > 180;
+        const diastolicCritical = diastolicValue < 40 || diastolicValue > 120;
+        const systolicWarning = systolic < 90 || systolic > 160;
+        const diastolicWarning = diastolicValue < 50 || diastolicValue > 100;
+
+        if (systolicCritical || diastolicCritical) return 'critical';
+        if (systolicWarning || diastolicWarning) return 'warning';
         return 'normal';
 
       case 'respiratoryRate':
@@ -44,25 +52,25 @@ export class MedicalUtils {
         if (value < 12 || value > 20) return 'warning';
         return 'normal';
 
-      case 'ecg':
+      case 'ecgReading':
         // ECG values in mV * 100 (120 = 1.2mV)
         if (value < 80 || value > 200) return 'critical';
         if (value < 100 || value > 150) return 'warning';
         return 'normal';
 
-      case 'eeg':
+      case 'eegReading':
         // EEG values in microvolts
         if (value < 5 || value > 80) return 'critical';
         if (value < 10 || value > 60) return 'warning';
         return 'normal';
 
-      case 'bioImpedance':
+      case 'bioelectricalImpedance':
         // Bioimpedance in ohms
         if (value < 350 || value > 850) return 'critical';
         if (value < 400 || value > 750) return 'warning';
         return 'normal';
 
-      case 'tremor':
+      case 'tremorIntensity':
         // Tremor intensity 0-10 scale
         if (value > 7) return 'critical';
         if (value > 4) return 'warning';

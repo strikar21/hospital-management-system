@@ -17,268 +17,268 @@ class ConnectionManager:
     
     def __init__(self):
         # Active connections by connection ID
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.activeConnections: Dict[str, WebSocket] = {}
         
         # Connections subscribed to specific patients
-        self.patient_subscriptions: Dict[str, Set[str]] = {}  # patient_id -> set of connection_ids
+        self.patientSubscriptions: Dict[str, Set[str]] = {}  # patientId -> set of connectionIds
         
         # Connections subscribed to general hospital updates
-        self.general_subscriptions: Set[str] = set()
+        self.generalSubscriptions: Set[str] = set()
         
         # Connection metadata
-        self.connection_metadata: Dict[str, Dict[str, Any]] = {}
+        self.connectionMetadata: Dict[str, Dict[str, Any]] = {}
     
-    async def connect(self, websocket: WebSocket, connection_id: str, user_id: str, user_role: str) -> None:
+    async def connect(self, websocket: WebSocket, connectionId: str, userId: str, userRole: str) -> None:
         """Accept a new WebSocket connection"""
         await websocket.accept()
         
-        self.active_connections[connection_id] = websocket
-        self.connection_metadata[connection_id] = {
-            'user_id': user_id,
-            'user_role': user_role,
-            'connected_at': datetime.now().isoformat(),
-            'last_ping': datetime.now().isoformat()
+        self.activeConnections[connectionId] = websocket
+        self.connectionMetadata[connectionId] = {
+            'userId': userId,
+            'userRole': userRole,
+            'connectedAt': datetime.now().isoformat(),
+            'lastPing': datetime.now().isoformat()
         }
         
         # Auto-subscribe to general updates
-        self.general_subscriptions.add(connection_id)
+        self.generalSubscriptions.add(connectionId)
         
-        logger.info(f"🔌 WebSocket connection established: {connection_id} (User: {user_id}, Role: {user_role})")
+        logger.info(f"🔌 WebSocket connection established: {connectionId} (User: {userId}, Role: {userRole})")
         
         # Send connection confirmation
-        await self.send_to_connection(connection_id, {
-            'type': 'connection_established',
-            'connection_id': connection_id,
+        await self.sendToConnection(connectionId, {
+            'type': 'connectionEstablished',
+            'connectionId': connectionId,
             'timestamp': datetime.now().isoformat(),
             'message': 'Real-time updates enabled'
         })
     
-    def disconnect(self, connection_id: str) -> None:
+    def disconnect(self, connectionId: str) -> None:
         """Remove a WebSocket connection"""
-        if connection_id in self.active_connections:
-            del self.active_connections[connection_id]
+        if connectionId in self.activeConnections:
+            del self.activeConnections[connectionId]
         
-        if connection_id in self.connection_metadata:
-            del self.connection_metadata[connection_id]
+        if connectionId in self.connectionMetadata:
+            del self.connectionMetadata[connectionId]
         
         # Remove from all subscriptions
-        self.general_subscriptions.discard(connection_id)
+        self.generalSubscriptions.discard(connectionId)
         
-        for patient_id in self.patient_subscriptions:
-            self.patient_subscriptions[patient_id].discard(connection_id)
+        for patientId in self.patientSubscriptions:
+            self.patientSubscriptions[patientId].discard(connectionId)
         
         # Clean up empty patient subscriptions
-        empty_patients = [pid for pid, conns in self.patient_subscriptions.items() if not conns]
-        for pid in empty_patients:
-            del self.patient_subscriptions[pid]
+        emptyPatients = [pid for pid, conns in self.patientSubscriptions.items() if not conns]
+        for pid in emptyPatients:
+            del self.patientSubscriptions[pid]
         
-        logger.info(f"🔌 WebSocket connection closed: {connection_id}")
+        logger.info(f"🔌 WebSocket connection closed: {connectionId}")
     
-    async def send_to_connection(self, connection_id: str, data: Dict[str, Any]) -> bool:
+    async def sendToConnection(self, connectionId: str, data: Dict[str, Any]) -> bool:
         """Send data to a specific connection"""
-        if connection_id not in self.active_connections:
+        if connectionId not in self.activeConnections:
             return False
         
         try:
-            websocket = self.active_connections[connection_id]
+            websocket = self.activeConnections[connectionId]
             await websocket.send_text(json.dumps(data))
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to send to connection {connection_id}: {e}")
+            logger.error(f"❌ Failed to send to connection {connectionId}: {e}")
             # Remove broken connection
-            self.disconnect(connection_id)
+            self.disconnect(connectionId)
             return False
     
-    async def broadcast_to_patient_subscribers(self, patient_id: str, data: Dict[str, Any]) -> int:
+    async def broadcastToPatientSubscribers(self, patientId: str, data: Dict[str, Any]) -> int:
         """Send data to all connections subscribed to a specific patient"""
-        if patient_id not in self.patient_subscriptions:
+        if patientId not in self.patientSubscriptions:
             return 0
         
-        sent_count = 0
-        failed_connections = []
-        
-        for connection_id in self.patient_subscriptions[patient_id].copy():
-            success = await self.send_to_connection(connection_id, data)
+        sentCount = 0
+        failedConnections = []
+
+        for connectionId in self.patientSubscriptions[patientId].copy():
+            success = await self.sendToConnection(connectionId, data)
             if success:
-                sent_count += 1
+                sentCount += 1
             else:
-                failed_connections.append(connection_id)
-        
+                failedConnections.append(connectionId)
+
         # Clean up failed connections
-        for conn_id in failed_connections:
-            self.patient_subscriptions[patient_id].discard(conn_id)
-        
-        return sent_count
+        for connId in failedConnections:
+            self.patientSubscriptions[patientId].discard(connId)
+
+        return sentCount
     
-    async def broadcast_general(self, data: Dict[str, Any]) -> int:
+    async def broadcastGeneral(self, data: Dict[str, Any]) -> int:
         """Send data to all general subscribers"""
-        sent_count = 0
-        failed_connections = []
-        
-        for connection_id in self.general_subscriptions.copy():
-            success = await self.send_to_connection(connection_id, data)
+        sentCount = 0
+        failedConnections = []
+
+        for connectionId in self.generalSubscriptions.copy():
+            success = await self.sendToConnection(connectionId, data)
             if success:
-                sent_count += 1
+                sentCount += 1
             else:
-                failed_connections.append(connection_id)
-        
+                failedConnections.append(connectionId)
+
         # Clean up failed connections
-        for conn_id in failed_connections:
-            self.general_subscriptions.discard(conn_id)
-        
-        return sent_count
+        for connId in failedConnections:
+            self.generalSubscriptions.discard(connId)
+
+        return sentCount
     
-    def subscribe_to_patient(self, connection_id: str, patient_id: str) -> bool:
+    def subscribeToPatient(self, connectionId: str, patientId: str) -> bool:
         """Subscribe a connection to patient-specific updates"""
-        if connection_id not in self.active_connections:
+        if connectionId not in self.activeConnections:
             return False
         
-        if patient_id not in self.patient_subscriptions:
-            self.patient_subscriptions[patient_id] = set()
+        if patientId not in self.patientSubscriptions:
+            self.patientSubscriptions[patientId] = set()
         
-        self.patient_subscriptions[patient_id].add(connection_id)
-        logger.info(f"📡 Connection {connection_id} subscribed to patient {patient_id}")
+        self.patientSubscriptions[patientId].add(connectionId)
+        logger.info(f"📡 Connection {connectionId} subscribed to patient {patientId}")
         return True
     
-    def unsubscribe_from_patient(self, connection_id: str, patient_id: str) -> bool:
+    def unsubscribeFromPatient(self, connectionId: str, patientId: str) -> bool:
         """Unsubscribe a connection from patient-specific updates"""
-        if patient_id in self.patient_subscriptions:
-            self.patient_subscriptions[patient_id].discard(connection_id)
+        if patientId in self.patientSubscriptions:
+            self.patientSubscriptions[patientId].discard(connectionId)
             
             # Clean up empty subscriptions
-            if not self.patient_subscriptions[patient_id]:
-                del self.patient_subscriptions[patient_id]
+            if not self.patientSubscriptions[patientId]:
+                del self.patientSubscriptions[patientId]
             
-            logger.info(f"📡 Connection {connection_id} unsubscribed from patient {patient_id}")
+            logger.info(f"📡 Connection {connectionId} unsubscribed from patient {patientId}")
             return True
         return False
     
-    def get_connection_count(self) -> int:
+    def getConnectionCount(self) -> int:
         """Get total number of active connections"""
-        return len(self.active_connections)
+        return len(self.activeConnections)
     
-    def get_patient_subscriber_count(self, patient_id: str) -> int:
+    def getPatientSubscriberCount(self, patientId: str) -> int:
         """Get number of connections subscribed to a specific patient"""
-        return len(self.patient_subscriptions.get(patient_id, set()))
+        return len(self.patientSubscriptions.get(patientId, set()))
     
-    async def send_vitals_update(self, patient_id: str, device_id: str, vitals_data: Dict[str, Any]) -> None:
+    async def sendVitalsUpdate(self, patientId: str, deviceId: str, vitalsData: Dict[str, Any]) -> None:
         """Send vitals update to patient subscribers - only if device is assigned and connected"""
-        from ..core.database import get_db_connection
+        from ..core.database import getDbConnection
         
         try:
             # Check if patient has this device assigned and device is connected
-            async with get_db_connection() as conn:
+            async with getDbConnection() as conn:
                 # Check device assignment
                 result = await conn.fetchrow(
-                    "SELECT assignedDeviceId FROM patients WHERE id = $1",
-                    patient_id
+                    "SELECT assigneddeviceid FROM patients WHERE id = $1",
+                    patientId
                 )
                 
                 if not result or not result['assigneddeviceid']:
-                    logger.warning(f"⚠️ Vitals update ignored - no device assigned to patient {patient_id}")
+                    logger.warning(f"⚠️ Vitals update ignored - no device assigned to patient {patientId}")
                     return
                 
-                if result['assigneddeviceid'] != device_id:
-                    logger.warning(f"⚠️ Vitals update ignored - device mismatch. Patient {patient_id} assigned to {result['assigneddeviceid']}, got update from {device_id}")
+                if result['assigneddeviceid'] != deviceId:
+                    logger.warning(f"⚠️ Vitals update ignored - device mismatch. Patient {patientId} assigned to {result['assigneddeviceid']}, got update from {deviceId}")
                     return
                 
                 # Check device status
-                device_result = await conn.fetchrow(
-                    "SELECT status, lastSeen FROM devices WHERE id = $1",
-                    device_id
+                deviceResult = await conn.fetchrow(
+                    "SELECT status, lastseen FROM devices WHERE id = $1",
+                    deviceId
                 )
                 
-                if not device_result or device_result['status'] not in ['active', 'connected']:
-                    logger.warning(f"⚠️ Vitals update ignored - device {device_id} status is {device_result['status'] if device_result else 'not found'}")
+                if not deviceResult or deviceResult['status'] not in ['active', 'connected']:
+                    logger.warning(f"⚠️ Vitals update ignored - device {deviceId} status is {deviceResult['status'] if deviceResult else 'not found'}")
                     return
         
             # Device validation passed - send vitals update
             data = {
-                'type': 'vitals_update',
-                'patient_id': patient_id,
-                'device_id': device_id,
+                'type': 'vitalsUpdate',
+                'patientId': patientId,
+                'deviceId': deviceId,
                 'timestamp': datetime.now().isoformat(),
-                'vitals': vitals_data
+                'vitals': vitalsData
             }
             
-            sent_count = await self.broadcast_to_patient_subscribers(patient_id, data)
-            if sent_count > 0:
-                logger.info(f"📊 Vitals update sent to {sent_count} subscribers for patient {patient_id} from device {device_id}")
+            sentCount = await self.broadcastToPatientSubscribers(patientId, data)
+            if sentCount > 0:
+                logger.info(f"📊 Vitals update sent to {sentCount} subscribers for patient {patientId} from device {deviceId}")
         
         except Exception as e:
             logger.error(f"❌ Error validating device assignment for vitals update: {e}")
     
-    async def send_medication_update(self, patient_id: str, medication_data: Dict[str, Any]) -> None:
+    async def sendMedicationUpdate(self, patientId: str, medicationData: Dict[str, Any]) -> None:
         """Send medication update to patient subscribers"""
         data = {
-            'type': 'medication_update',
-            'patient_id': patient_id,
+            'type': 'medicationUpdate',
+            'patientId': patientId,
             'timestamp': datetime.now().isoformat(),
-            'medication': medication_data
+            'medication': medicationData
         }
         
-        sent_count = await self.broadcast_to_patient_subscribers(patient_id, data)
-        if sent_count > 0:
-            logger.info(f"💊 Medication update sent to {sent_count} subscribers for patient {patient_id}")
+        sentCount = await self.broadcastToPatientSubscribers(patientId, data)
+        if sentCount > 0:
+            logger.info(f"💊 Medication update sent to {sentCount} subscribers for patient {patientId}")
     
-    async def send_alert(self, patient_id: Optional[str], alert_data: Dict[str, Any]) -> None:
+    async def sendAlert(self, patientId: Optional[str], alertData: Dict[str, Any]) -> None:
         """Send alert to relevant subscribers"""
         data = {
             'type': 'alert',
-            'patient_id': patient_id,
+            'patientId': patientId,
             'timestamp': datetime.now().isoformat(),
-            'alert': alert_data
+            'alert': alertData
         }
         
-        if patient_id:
+        if patientId:
             # Send to patient-specific subscribers
-            sent_count = await self.broadcast_to_patient_subscribers(patient_id, data)
+            sentCount = await self.broadcastToPatientSubscribers(patientId, data)
         else:
             # Send to all general subscribers
-            sent_count = await self.broadcast_general(data)
+            sentCount = await self.broadcastGeneral(data)
         
-        if sent_count > 0:
-            logger.info(f"🚨 Alert sent to {sent_count} subscribers{f' for patient {patient_id}' if patient_id else ' (general)'}")
+        if sentCount > 0:
+            logger.info(f"🚨 Alert sent to {sentCount} subscribers{f' for patient {patientId}' if patientId else ' (general)'}")
     
     async def keepalive(self) -> None:
         """Send keepalive pings to all connections"""
-        ping_data = {
+        pingData = {
             'type': 'ping',
             'timestamp': datetime.now().isoformat()
         }
         
-        sent_count = await self.broadcast_general(ping_data)
-        if sent_count > 0:
-            logger.debug(f"💓 Keepalive sent to {sent_count} connections")
+        sentCount = await self.broadcastGeneral(pingData)
+        if sentCount > 0:
+            logger.debug(f"💓 Keepalive sent to {sentCount} connections")
 
 # Global connection manager instance
-connection_manager = ConnectionManager()
+connectionManager = ConnectionManager()
 
 # Background task for keepalive pings
-async def keepalive_task():
+async def keepAliveTask():
     """Background task to send periodic keepalive pings"""
     while True:
         try:
-            await connection_manager.keepalive()
+            await connectionManager.keepalive()
             await asyncio.sleep(30)  # Send keepalive every 30 seconds
         except Exception as e:
             logger.error(f"❌ Keepalive task error: {e}")
             await asyncio.sleep(5)
 
 # The keepalive task will be started when the FastAPI app starts
-keepalive_task_instance = None
+keepaliveTaskInstance = None
 
-def start_keepalive_task():
+def startKeepaliveTask():
     """Start the keepalive background task"""
-    global keepalive_task_instance
-    if keepalive_task_instance is None:
-        keepalive_task_instance = asyncio.create_task(keepalive_task())
+    global keepaliveTaskInstance
+    if keepaliveTaskInstance is None:
+        keepaliveTaskInstance = asyncio.create_task(keepAliveTask())
         logger.info("💓 WebSocket keepalive task started")
 
-def stop_keepalive_task():
+def stopKeepaliveTask():
     """Stop the keepalive background task"""
-    global keepalive_task_instance
-    if keepalive_task_instance is not None:
-        keepalive_task_instance.cancel()
-        keepalive_task_instance = None
+    global keepaliveTaskInstance
+    if keepaliveTaskInstance is not None:
+        keepaliveTaskInstance.cancel()
+        keepaliveTaskInstance = None
         logger.info("💓 WebSocket keepalive task stopped")

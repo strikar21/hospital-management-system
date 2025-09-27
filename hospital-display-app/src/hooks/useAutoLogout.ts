@@ -38,7 +38,7 @@ export const useAutoLogout = ({ settings, onLogout, userId }: UseAutoLogoutOptio
 
   // Auto-logout timer management
   useEffect(() => {
-    if (!settings.enableautologout || settings.bedsidemode) {
+    if (!settings.enableAutoLogout || settings.bedsideMode) {
       if (autoLogoutTimerRef.current) {
         clearTimeout(autoLogoutTimerRef.current);
         autoLogoutTimerRef.current = null;
@@ -48,7 +48,7 @@ export const useAutoLogout = ({ settings, onLogout, userId }: UseAutoLogoutOptio
 
     const checkForAutoLogout = () => {
       const timeSinceLastActivity = Date.now() - lastActivity;
-      const autoLogoutTime = (settings.autologoutminutes || 15) * 60 * 1000; // Convert to milliseconds
+      const autoLogoutTime = (settings.autoLogoutMinutes || 15) * 60 * 1000; // Convert to milliseconds
 
       if (timeSinceLastActivity >= autoLogoutTime) {
         console.log('🔐 Auto-logout triggered due to inactivity');
@@ -73,7 +73,7 @@ export const useAutoLogout = ({ settings, onLogout, userId }: UseAutoLogoutOptio
         autoLogoutTimerRef.current = null;
       }
     };
-  }, [settings.enableautologout, settings.bedsidemode, settings.autologoutminutes, lastActivity, onLogout]);
+  }, [settings.enableAutoLogout, settings.bedsideMode, settings.autoLogoutMinutes, lastActivity, onLogout]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -87,8 +87,8 @@ export const useAutoLogout = ({ settings, onLogout, userId }: UseAutoLogoutOptio
 
   return {
     lastActivity,
-    timeUntilAutoLogout: settings.enableautologout && !settings.bedsidemode
-      ? Math.max(0, ((settings.autologoutminutes || 15) * 60 * 1000) - (Date.now() - lastActivity))
+    timeUntilAutoLogout: settings.enableAutoLogout && !settings.bedsideMode
+      ? Math.max(0, ((settings.autoLogoutMinutes || 15) * 60 * 1000) - (Date.now() - lastActivity))
       : null
   };
 };

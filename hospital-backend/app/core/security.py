@@ -8,19 +8,19 @@ from typing import Optional
 from passlib.context import CryptContext
 
 # Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwdContext = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_pin(pin: str) -> str:
     """
-    Hash a 4-digit PIN using SHA-256
+    Hash a 4-digit PIN using bcrypt for security
     """
-    return hashlib.sha256(pin.encode()).hexdigest()
+    return pwdContext.hash(pin)
 
-def verify_pin(pin: str, hashed_pin: str) -> bool:
+def verify_pin(pin: str, hashedPin: str) -> bool:
     """
     Verify a PIN against its hash
     """
-    return hash_pin(pin) == hashed_pin
+    return pwdContext.verify(pin, hashedPin)
 
 def validate_pin_format(pin: str) -> bool:
     """
@@ -28,36 +28,36 @@ def validate_pin_format(pin: str) -> bool:
     """
     return bool(re.match(r'^\d{4}$', pin))
 
-def validate_staff_id_format(staff_id: str) -> bool:
+def validate_staff_id_format(staffId: str) -> bool:
     """
     Validate staff ID format: DOC/NUR/ADM/PRV/TEC followed by 4 digits
     """
-    return bool(re.match(r'^(DOC|NUR|ADM|PRV|TEC)\d{4}$', staff_id))
+    return bool(re.match(r'^(DOC|NUR|ADM|PRV|TEC)\d{4}$', staffId))
 
 def hash_password(password: str) -> str:
     """
     Hash a password using bcrypt
     """
-    return pwd_context.hash(password)
+    return pwdContext.hash(password)
 
-def verify_password(password: str, hashed_password: str) -> bool:
+def verify_password(password: str, hashedPassword: str) -> bool:
     """
     Verify a password against its hash
     """
-    return pwd_context.verify(password, hashed_password)
+    return pwdContext.verify(password, hashedPassword)
 
-def generate_staff_id(role: str, sequence: int) -> str:
+def generateStaffId(role: str, sequence: int) -> str:
     """
     Generate staff ID based on role and sequence
     Doctor: DOCxxxx, Nurse: NURxxxx, Technician: TECxxxx, Administrator: ADMxxxx, Provider: PRVxxxx
     """
-    role_prefixes = {
-        "Doctor": "DOC",
-        "Nurse": "NUR", 
-        "Technician": "TEC",
-        "Administrator": "ADM",
-        "Provider": "PRV"
+    rolePrefixes = {
+        "doctor": "DOC",
+        "nurse": "NUR", 
+        "technician": "TEC",
+        "administrator": "ADM",
+        "provider": "PRV"
     }
     
-    prefix = role_prefixes.get(role, "STF")
+    prefix = rolePrefixes.get(role, "STF")
     return f"{prefix}{sequence:04d}"

@@ -27,25 +27,25 @@ export const VitalChart: React.FC<VitalChartProps> = ({
   const chartData = vitalHistory.map(h => {
     const baseData = { time: h.time };
     
-    if (vitalType === 'bloodPressure') {
+    if (vitalType === 'systolicPressure' || vitalType === 'diastolicPressure') {
       // For blood pressure, show both systolic and diastolic
       return {
         ...baseData,
-        systolic: h.bloodPressure, // Always integer - systolic
-        diastolic: h.bloodPressureDiastolic || Math.round(h.bloodPressure * 0.6) // Always integer - diastolic from API or calculated
+        systolic: h.systolicPressure || 0, // Always integer - systolic
+        diastolic: h.diastolicPressure || (h.systolicPressure ? Math.round(h.systolicPressure * 0.67) : 0) // Always integer - diastolic from API or calculated
       };
     } else {
       // For other vitals, show only the selected vital
       return {
         ...baseData,
         [vitalType]: vitalType === 'heartRate' ? h.heartRate :
-                    vitalType === 'temperature' ? h.temperature :
-                    vitalType === 'oxygenSat' ? h.oxygenSat :
+                    vitalType === 'skinTemperature' ? h.skinTemperature :
+                    vitalType === 'oxygenSaturation' ? h.oxygenSaturation :
                     vitalType === 'respiratoryRate' ? h.respiratoryRate :
-                    vitalType === 'ecg' ? h.ecg :
-                    vitalType === 'eeg' ? h.eeg :
-                    vitalType === 'bioImpedance' ? h.bioImpedance :
-                    vitalType === 'tremor' ? h.tremor :
+                    vitalType === 'ecgReading' ? h.ecgReading :
+                    vitalType === 'eegReading' ? h.eegReading :
+                    vitalType === 'bioelectricalImpedance' ? h.bioelectricalImpedance :
+                    vitalType === 'tremorIntensity' ? h.tremorIntensity :
                     h[vitalType as keyof vitalhistory]
       };
     }
@@ -56,14 +56,14 @@ export const VitalChart: React.FC<VitalChartProps> = ({
   // Get current value for display
   const getCurrentValue = () => {
     if (vitalType === 'heartRate') return `${patient.vitals.heartRate} BPM`;
-    if (vitalType === 'temperature') return `${patient.vitals.temperature.toFixed(1)}°F`;
-    if (vitalType === 'oxygenSat') return `${patient.vitals.oxygenSat}%`;
-    if (vitalType === 'respiratoryRate') return `${patient.vitals.respiratoryRate || 16}/min`;
-    if (vitalType === 'bloodPressure') return patient.vitals.bloodPressure;
-    if (vitalType === 'ecg') return `${patient.vitals.ecg} mV`;
-    if (vitalType === 'eeg') return `${patient.vitals.eeg || 45} μV`;
-    if (vitalType === 'bioImpedance') return `${patient.vitals.bioImpedance || 500} Ω`;
-    if (vitalType === 'tremor') return `${(patient.vitals.tremor || 0).toFixed(1)}/10`;
+    if (vitalType === 'skinTemperature') return `${patient.vitals.skinTemperature.toFixed(1)}°F`;
+    if (vitalType === 'oxygenSaturation') return `${patient.vitals.oxygenSaturation}%`;
+    if (vitalType === 'respiratoryRate') return `${patient.vitals.respiratoryRate || '--'}/min`;
+    if (vitalType === 'systolicPressure' || vitalType === 'diastolicPressure') return `${patient.vitals.systolicPressure || '--'}/${patient.vitals.diastolicPressure || '--'}`;
+    if (vitalType === 'ecgReading') return `${patient.vitals.ecgReading} mV`;
+    if (vitalType === 'eegReading') return `${patient.vitals.eegReading || '--'} μV`;
+    if (vitalType === 'bioelectricalImpedance') return `${patient.vitals.bioelectricalImpedance || '--'} Ω`;
+    if (vitalType === 'tremorIntensity') return `${(patient.vitals.tremorIntensity || 0).toFixed(1)}/10`;
     return '';
   };
 
@@ -72,23 +72,22 @@ export const VitalChart: React.FC<VitalChartProps> = ({
     switch (vitalType) {
       case 'heartRate':
         return [40, 160];
-      case 'temperature':
-        return [95, 105];
       case 'skinTemperature':
         return [94, 104];
-      case 'oxygenSat':
+      case 'oxygenSaturation':
         return [80, 100];
       case 'respiratoryRate':
         return [5, 35];
-      case 'bloodPressure':
+      case 'systolicPressure':
+      case 'diastolicPressure':
         return [40, 200]; // Range to accommodate both systolic and diastolic
-      case 'ecg':
+      case 'ecgReading':
         return [50, 250];
-      case 'eeg':
+      case 'eegReading':
         return [0, 100];
-      case 'bioImpedance':
+      case 'bioelectricalImpedance':
         return [300, 900];
-      case 'tremor':
+      case 'tremorIntensity':
         return [0, 10];
       default:
         return ['auto', 'auto'];
@@ -99,16 +98,15 @@ export const VitalChart: React.FC<VitalChartProps> = ({
   const getVitalColor = (vital: string) => {
     switch (vital) {
       case 'heartRate': return '#EF4444'; // Red
-      case 'temperature': return '#F59E0B'; // Orange
       case 'skinTemperature': return '#FB923C'; // Light Orange
-      case 'oxygenSat': return '#3B82F6'; // Blue
+      case 'oxygenSaturation': return '#3B82F6'; // Blue
       case 'respiratoryRate': return '#06B6D4'; // Cyan
       case 'systolic': return '#8B5CF6'; // Purple
       case 'diastolic': return '#EC4899'; // Pink
-      case 'ecg': return '#10B981'; // Green
-      case 'eeg': return '#3B82F6'; // Blue
-      case 'bioImpedance': return '#14B8A6'; // Teal
-      case 'tremor': return '#F472B6'; // Pink
+      case 'ecgReading': return '#10B981'; // Green
+      case 'eegReading': return '#3B82F6'; // Blue
+      case 'bioelectricalImpedance': return '#14B8A6'; // Teal
+      case 'tremorIntensity': return '#F472B6'; // Pink
       default: return '#6B7280'; // Gray
     }
   };
@@ -116,16 +114,15 @@ export const VitalChart: React.FC<VitalChartProps> = ({
   // Custom tooltip formatter
   const formatTooltipValue = (value: any, name: string) => {
     if (name === 'heartRate') return [`${Math.round(value)} BPM`, 'Heart Rate'];
-    if (name === 'temperature') return [`${Number(value).toFixed(1)}°F`, 'Temperature'];
     if (name === 'skinTemperature') return [`${Number(value).toFixed(1)}°F`, 'Skin Temperature'];
-    if (name === 'oxygenSat') return [`${Math.round(value)}%`, 'Oxygen Saturation'];
+    if (name === 'oxygenSaturation') return [`${Math.round(value)}%`, 'Oxygen Saturation'];
     if (name === 'respiratoryRate') return [`${Math.round(value)}/min`, 'Respiratory Rate'];
     if (name === 'systolic') return [`${Math.round(value)} mmHg`, 'Systolic Pressure'];
     if (name === 'diastolic') return [`${Math.round(value)} mmHg`, 'Diastolic Pressure'];
-    if (name === 'ecg') return [`${Math.round(value)} mV`, 'ECG'];
-    if (name === 'eeg') return [`${Math.round(value)} μV`, 'EEG'];
-    if (name === 'bioImpedance') return [`${Math.round(value)} Ω`, 'Bioimpedance'];
-    if (name === 'tremor') return [`${Number(value).toFixed(1)}/10`, 'Tremor Intensity'];
+    if (name === 'ecgReading') return [`${Math.round(value)} mV`, 'ECG'];
+    if (name === 'eegReading') return [`${Math.round(value)} μV`, 'EEG'];
+    if (name === 'bioelectricalImpedance') return [`${Math.round(value)} Ω`, 'Bioimpedance'];
+    if (name === 'tremorIntensity') return [`${Number(value).toFixed(1)}/10`, 'Tremor Intensity'];
     return [value, name];
   };
 
@@ -134,23 +131,22 @@ export const VitalChart: React.FC<VitalChartProps> = ({
     switch (vitalType) {
       case 'heartRate':
         return '• Normal Range: 60-100 BPM';
-      case 'temperature':
-        return '• Normal Range: 97.0-99.0°F';
       case 'skinTemperature':
         return '• Normal Range: 96.0-98.0°F';
-      case 'oxygenSat':
+      case 'oxygenSaturation':
         return '• Normal Range: 95-100%';
       case 'respiratoryRate':
         return '• Normal Range: 12-20 breaths/min';
-      case 'bloodPressure':
+      case 'systolicPressure':
+      case 'diastolicPressure':
         return '• Normal Range: Systolic 90-140 mmHg, Diastolic 60-90 mmHg';
-      case 'ecg':
+      case 'ecgReading':
         return '• Normal Range: 100-150 mV';
-      case 'eeg':
+      case 'eegReading':
         return '• Normal Range: 10-60 μV';
-      case 'bioImpedance':
+      case 'bioelectricalImpedance':
         return '• Normal Range: 450-650 Ω';
-      case 'tremor':
+      case 'tremorIntensity':
         return '• Normal Range: 0-2/10 (minimal tremor)';
       default:
         return '';
@@ -162,23 +158,22 @@ export const VitalChart: React.FC<VitalChartProps> = ({
     switch (vitalType) {
       case 'heartRate':
         return 'Heart rate reflects cardiac function and autonomic nervous system activity. Tachycardia may indicate fever, pain, stress, or cardiovascular issues.';
-      case 'temperature':
-        return 'Core body temperature regulation is critical for metabolic function. Fever indicates immune response to infection or inflammation.';
       case 'skinTemperature':
         return 'Skin temperature reflects peripheral circulation and thermoregulation. Changes may indicate vascular compromise or autonomic dysfunction.';
-      case 'oxygenSat':
+      case 'oxygenSaturation':
         return 'Oxygen saturation measures hemoglobin oxygen binding. Low levels indicate respiratory or circulatory compromise requiring immediate attention.';
       case 'respiratoryRate':
         return 'Respiratory rate reflects ventilation adequacy and metabolic demand. Tachypnea may indicate respiratory distress, pain, or metabolic acidosis.';
-      case 'bloodPressure':
+      case 'systolicPressure':
+      case 'diastolicPressure':
         return 'Blood pressure reflects cardiac output and vascular resistance. Hypertension increases cardiovascular risk. Hypotension may indicate shock.';
-      case 'ecg':
+      case 'ecgReading':
         return 'ECG amplitude reflects cardiac electrical activity and muscle mass. Abnormal patterns may indicate arrhythmias or structural heart disease.';
-      case 'eeg':
+      case 'eegReading':
         return 'EEG activity reflects brain electrical function and arousal state. Abnormal patterns may indicate seizures or altered consciousness.';
-      case 'bioImpedance':
+      case 'bioelectricalImpedance':
         return 'Bioimpedance measures tissue electrical properties related to fluid status and body composition. Changes may indicate fluid retention.';
-      case 'tremor':
+      case 'tremorIntensity':
         return 'Tremor intensity indicates involuntary muscle activity. High levels increase fall risk and may suggest neurological conditions.';
       default:
         return 'This vital sign provides important information about the patient\'s physiological status.';
@@ -227,7 +222,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
             <div className="flex items-center space-x-2">
               <div 
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: getVitalColor(vitalType === 'bloodPressure' ? 'systolic' : vitalType) }}
+                style={{ backgroundColor: getVitalColor(vitalType === 'systolicPressure' || vitalType === 'diastolicPressure' ? 'systolic' : vitalType) }}
               ></div>
               <span className="text-gray-600">
                 Current: <strong>{getCurrentValue()}</strong>
@@ -269,7 +264,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
               <Legend />
               
               {/* Render lines based on vital type */}
-              {vitalType === 'bloodPressure' ? (
+              {vitalType === 'systolicPressure' || vitalType === 'diastolicPressure' ? (
                 // Blood pressure shows both systolic and diastolic
                 <>
                   <Line 

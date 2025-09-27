@@ -75,8 +75,8 @@ export const ECGViewer: React.FC<ECGViewerProps> = ({ patient, onClose }) => {
             if (isECGMode) {
               // Generate realistic ECG waveform for different leads
               const lead = leads[leadIdx];
-              const heartRate = patient.vitals?.heartRate || 75; // BPM
-              const beatPeriod = 60.0 / heartRate;
+              const heartRate = patient.vitals?.heartRate || 0; // BPM
+              const beatPeriod = heartRate > 0 ? 60.0 / heartRate : 1.0; // Default 1s period if no heartRate
               const phase = ((timeIndex / sampleRate) % beatPeriod) / beatPeriod;
 
               if (lead === 'II') {
@@ -149,7 +149,7 @@ export const ECGViewer: React.FC<ECGViewerProps> = ({ patient, onClose }) => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [patient.vitals.heartRate, patient.vitals.ecg, patient.vitals.eeg, isPaused, isECGMode, speed, gain]);
+  }, [patient.vitals.heartRate, patient.vitals.ecgReading, patient.vitals.eegReading, isPaused, isECGMode, speed, gain, leads, layout, selectedLead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawAllWaveforms = () => {
     if (layout === 1) {
@@ -465,7 +465,7 @@ export const ECGViewer: React.FC<ECGViewerProps> = ({ patient, onClose }) => {
                 {isECGMode ? `HR: ${patient.vitals.heartRate} BPM` : 'EEG Activity'}
               </div>
               <div className="text-gray-400">
-                {isECGMode ? `${patient.vitals.ecg} mV` : `${patient.vitals.eeg || 45} μV • Auto-scaled`}
+                {isECGMode ? `${patient.vitals.ecgReading} mV` : `${patient.vitals.eegReading || '--'} μV • Auto-scaled`}
               </div>
             </div>
           </div>

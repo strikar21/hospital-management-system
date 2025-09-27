@@ -9,18 +9,18 @@ from typing import Dict, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from ...services.websocket_manager import connection_manager
-from ...core.database import get_db_connection, get_timescale_connection
-from ...core.db_utils import fetch_one
+from ...services.websocket_manager import connectionManager
+from ...core.database import getDbConnection, getTimescaleConnection
+from ...core.db_utils import fetchOne
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.websocket("/realtime")
-async def websocket_endpoint(
+async def websocketEndpoint(
     websocket: WebSocket,
-    user_id: str = Query(..., description="User ID for authentication"),
-    user_role: str = Query(..., description="User role for authorization")
+    userId: str = Query(..., description="User ID for authentication"),
+    userRole: str = Query(..., description="User role for authorization")
 ):
     """
     WebSocket endpoint for real-time hospital data updates
@@ -33,173 +33,173 @@ async def websocket_endpoint(
     """
     
     # Generate unique connection ID
-    connection_id = f"conn_{uuid.uuid4().hex[:8]}"
+    connectionId = f"conn{uuid.uuid4().hex[:8]}"
     
     try:
         # Establish WebSocket connection
-        await connection_manager.connect(websocket, connection_id, user_id, user_role)
+        await connectionManager.connect(websocket, connectionId, userId, userRole)
         
         # Handle incoming messages from client
         async for data in websocket.iter_text():
             try:
                 message = json.loads(data)
-                await handle_client_message(connection_id, message)
+                await handleClientMessage(connectionId, message)
                 
             except json.JSONDecodeError:
-                await connection_manager.send_to_connection(connection_id, {
+                await connectionManager.sendToConnection(connectionId, {
                     'type': 'error',
                     'message': 'Invalid JSON format'
                 })
             except Exception as e:
-                logger.error(f"❌ Error handling client message from {connection_id}: {e}")
-                await connection_manager.send_to_connection(connection_id, {
+                logger.error(f"❌ Error handling client message from {connectionId}: {e}")
+                await connectionManager.sendToConnection(connectionId, {
                     'type': 'error',
                     'message': 'Message processing failed'
                 })
                 
     except WebSocketDisconnect:
-        logger.info(f"🔌 WebSocket disconnected: {connection_id}")
+        logger.info(f"🔌 WebSocket disconnected: {connectionId}")
     except Exception as e:
-        logger.error(f"❌ WebSocket error for {connection_id}: {e}")
+        logger.error(f"❌ WebSocket error for {connectionId}: {e}")
     finally:
-        connection_manager.disconnect(connection_id)
+        connectionManager.disconnect(connectionId)
 
-async def handle_client_message(connection_id: str, message: Dict[str, Any]) -> None:
+async def handleClientMessage(connectionId: str, message: Dict[str, Any]) -> None:
     """Handle incoming messages from WebSocket clients"""
     
-    message_type = message.get('type')
+    messageType = message.get('type')
     
-    if message_type == 'subscribe_patient':
+    if messageType == 'subscribePatient':
         # Subscribe to patient-specific updates
-        patient_id = message.get('patient_id')
-        if patient_id:
+        patientId = message.get('patientId')
+        if patientId:
             # Verify patient exists and user has access
-            async with get_db_connection() as conn:
-                patient = await fetch_one(conn, "SELECT id FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            async with getDbConnection() as conn:
+                patient = await fetchOne(conn, "SELECT id FROM patients WHERE id = $1 AND status = 'active'", (patientId,))
                 if patient:
-                    success = connection_manager.subscribe_to_patient(connection_id, patient_id)
-                    await connection_manager.send_to_connection(connection_id, {
-                        'type': 'subscription_result',
-                        'action': 'subscribe_patient',
-                        'patient_id': patient_id,
+                    success = connectionManager.subscribeToPatient(connectionId, patientId)
+                    await connectionManager.sendToConnection(connectionId, {
+                        'type': 'subscriptionResult',
+                        'action': 'subscribePatient',
+                        'patientId': patientId,
                         'success': success,
-                        'message': f'Subscribed to patient {patient_id}' if success else 'Subscription failed'
+                        'message': f'Subscribed to patient {patientId}' if success else 'Subscription failed'
                     })
                 else:
-                    await connection_manager.send_to_connection(connection_id, {
-                        'type': 'subscription_result',
-                        'action': 'subscribe_patient',
-                        'patient_id': patient_id,
+                    await connectionManager.sendToConnection(connectionId, {
+                        'type': 'subscriptionResult',
+                        'action': 'subscribePatient',
+                        'patientId': patientId,
                         'success': False,
                         'message': 'Patient not found or inactive'
                     })
         else:
-            await connection_manager.send_to_connection(connection_id, {
+            await connectionManager.sendToConnection(connectionId, {
                 'type': 'error',
                 'message': 'Patient ID required for subscription'
             })
     
-    elif message_type == 'unsubscribe_patient':
+    elif messageType == 'unsubscribePatient':
         # Unsubscribe from patient-specific updates
-        patient_id = message.get('patient_id')
-        if patient_id:
-            success = connection_manager.unsubscribe_from_patient(connection_id, patient_id)
-            await connection_manager.send_to_connection(connection_id, {
-                'type': 'subscription_result',
-                'action': 'unsubscribe_patient',
-                'patient_id': patient_id,
+        patientId = message.get('patientId')
+        if patientId:
+            success = connectionManager.unsubscribe_from_patient(connectionId, patientId)
+            await connectionManager.sendToConnection(connectionId, {
+                'type': 'subscriptionResult',
+                'action': 'unsubscribePatient',
+                'patientId': patientId,
                 'success': success,
-                'message': f'Unsubscribed from patient {patient_id}' if success else 'Unsubscribe failed'
+                'message': f'Unsubscribed from patient {patientId}' if success else 'Unsubscribe failed'
             })
         else:
-            await connection_manager.send_to_connection(connection_id, {
+            await connectionManager.sendToConnection(connectionId, {
                 'type': 'error',
                 'message': 'Patient ID required for unsubscription'
             })
     
-    elif message_type == 'pong':
+    elif messageType == 'pong':
         # Handle pong response from client
-        logger.debug(f"💓 Pong received from {connection_id}")
+        logger.debug(f"💓 Pong received from {connectionId}")
     
-    elif message_type == 'get_status':
+    elif messageType == 'getStatus':
         # Send connection status
-        await connection_manager.send_to_connection(connection_id, {
+        await connectionManager.sendToConnection(connectionId, {
             'type': 'status',
-            'connection_id': connection_id,
-            'total_connections': connection_manager.get_connection_count(),
-            'metadata': connection_manager.connection_metadata.get(connection_id, {})
+            'connectionId': connectionId,
+            'totalConnections': connectionManager.getConnectionCount(),
+            'metadata': connectionManager.connectionMetadata.get(connectionId, {})
         })
     
     else:
-        await connection_manager.send_to_connection(connection_id, {
+        await connectionManager.sendToConnection(connectionId, {
             'type': 'error',
-            'message': f'Unknown message type: {message_type}'
+            'message': f'Unknown message type: {messageType}'
         })
 
 @router.get("/connections/status")
-async def get_websocket_status():
+async def getWebsocketStatus():
     """Get current WebSocket connection status"""
     return JSONResponse({
-        'total_connections': connection_manager.get_connection_count(),
-        'patient_subscriptions': {
-            patient_id: len(connections) 
-            for patient_id, connections in connection_manager.patient_subscriptions.items()
+        'totalConnections': connectionManager.getConnectionCount(),
+        'patientSubscriptions': {
+            patientId: len(connections) 
+            for patientId, connections in connectionManager.patientSubscriptions.items()
         },
-        'general_subscriptions': len(connection_manager.general_subscriptions)
+        'generalSubscriptions': len(connectionManager.generalSubscriptions)
     })
 
-@router.post("/broadcast/vitals/{patient_id}")
-async def broadcast_vitals_update(patient_id: str, vitals_data: Dict[str, Any], device_id: str = Query(..., description="Device ID sending vitals")):
+@router.post("/broadcast/vitals/{patientId}")
+async def broadcastVitalsUpdate(patientId: str, vitalsData: Dict[str, Any], deviceId: str = Query(..., description="Device ID sending vitals")):
     """
     Manually broadcast vitals update to subscribers
-    Used for testing or external integrations - requires device_id validation
+    Used for testing or external integrations - requires deviceId validation
     """
     try:
-        await connection_manager.send_vitals_update(patient_id, device_id, vitals_data)
+        await connectionManager.sendVitalsUpdate(patientId, deviceId, vitalsData)
         return JSONResponse({
             'success': True,
-            'message': f'Vitals update broadcasted for patient {patient_id} from device {device_id}',
-            'subscriber_count': connection_manager.get_patient_subscriber_count(patient_id)
+            'message': f'Vitals update broadcasted for patient {patientId} from device {deviceId}',
+            'subscriberCount': connectionManager.getPatientSubscriberCount(patientId)
         })
     except Exception as e:
         logger.error(f"❌ Failed to broadcast vitals update: {e}")
         raise HTTPException(status_code=500, detail="Failed to broadcast vitals update")
 
-@router.post("/broadcast/medication/{patient_id}")
-async def broadcast_medication_update(patient_id: str, medication_data: Dict[str, Any]):
+@router.post("/broadcast/medication/{patientId}")
+async def broadcastMedicationUpdate(patientId: str, medicationData: Dict[str, Any]):
     """
     Manually broadcast medication update to subscribers
     Used for testing or external integrations
     """
     try:
-        await connection_manager.send_medication_update(patient_id, medication_data)
+        await connectionManager.sendMedicationUpdate(patientId, medicationData)
         return JSONResponse({
             'success': True,
-            'message': f'Medication update broadcasted for patient {patient_id}',
-            'subscriber_count': connection_manager.get_patient_subscriber_count(patient_id)
+            'message': f'Medication update broadcasted for patient {patientId}',
+            'subscriberCount': connectionManager.getPatientSubscriberCount(patientId)
         })
     except Exception as e:
         logger.error(f"❌ Failed to broadcast medication update: {e}")
         raise HTTPException(status_code=500, detail="Failed to broadcast medication update")
 
 @router.post("/broadcast/alert")
-async def broadcast_alert(alert_data: Dict[str, Any]):
+async def broadcastAlert(alertData: Dict[str, Any]):
     """
     Broadcast alert to all or patient-specific subscribers
     """
     try:
-        patient_id = alert_data.get('patient_id')
-        await connection_manager.send_alert(patient_id, alert_data)
+        patientId = alertData.get('patientId')
+        await connectionManager.sendAlert(patientId, alertData)
         
-        if patient_id:
-            subscriber_count = connection_manager.get_patient_subscriber_count(patient_id)
+        if patientId:
+            subscriberCount = connectionManager.getPatientSubscriberCount(patientId)
         else:
-            subscriber_count = len(connection_manager.general_subscriptions)
+            subscriberCount = len(connectionManager.generalSubscriptions)
         
         return JSONResponse({
             'success': True,
-            'message': f'Alert broadcasted{f" for patient {patient_id}" if patient_id else " to all subscribers"}',
-            'subscriber_count': subscriber_count
+            'message': f'Alert broadcasted{f" for patient {patientId}" if patientId else " to all subscribers"}',
+            'subscriberCount': subscriberCount
         })
     except Exception as e:
         logger.error(f"❌ Failed to broadcast alert: {e}")

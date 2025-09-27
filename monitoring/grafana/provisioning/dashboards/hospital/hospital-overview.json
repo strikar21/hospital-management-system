@@ -1,0 +1,156 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Hospital Management System - Overview",
+    "tags": ["hospital", "overview", "production"],
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"hospital-backend\"}",
+            "legendFormat": "Backend API"
+          },
+          {
+            "expr": "up{job=\"postgres\"}",
+            "legendFormat": "Main Database"
+          },
+          {
+            "expr": "up{job=\"timescaledb\"}",
+            "legendFormat": "Vitals DB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "API Response Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"hospital-backend\"}[5m]))",
+            "legendFormat": "95th Percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"hospital-backend\"}[5m]))",
+            "legendFormat": "50th Percentile"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "HTTP Request Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"hospital-backend\"}[5m])",
+            "legendFormat": "Requests/sec"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"hospital-backend\",status=~\"5..\"}[5m])",
+            "legendFormat": "5xx Errors/sec"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"hospital-backend\",status=~\"4..\"}[5m])",
+            "legendFormat": "4xx Errors/sec"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Database Connections",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "database_connections_active",
+            "legendFormat": "Active Connections"
+          },
+          {
+            "expr": "database_connections_max",
+            "legendFormat": "Max Connections"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      },
+      {
+        "id": 6,
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+            "legendFormat": "Memory Usage %"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        }
+      }
+    ]
+  }
+}

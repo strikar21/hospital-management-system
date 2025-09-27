@@ -113,14 +113,24 @@ export class AuthService extends BaseService {
       if (response && response.id) {
         console.log('✅ Authentication successful for:', response.firstName, response.lastName);
 
+        // Transform backend response to frontend user format
+        const fullName = `${response.firstName || ''} ${response.lastName || ''}`.trim();
+        const displayName = response.role === 'Doctor' ? `Dr. ${fullName}` : fullName;
+
+        const user = {
+          ...response,
+          name: displayName,
+          staffId: response.id
+        };
+
         // Store authentication data with medical-grade encryption
         if (response.accessToken) {
           await SecureStorage.setToken(response.accessToken);
         }
-        await SecureStorage.setUser(response);
+        await SecureStorage.setUser(user);
         // Remove HIPAA violation: Don't store sensitive user data in plain localStorage
 
-        return response;
+        return user;
       }
 
       console.warn('⚠️ Authentication failed: Invalid credentials');

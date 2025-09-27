@@ -1,7 +1,6 @@
 // InvestigationService.ts - Medical investigations and lab tests (V2)
 import { investigation } from '../types';
 import { BaseService } from './BaseService';
-import { getApiUrl } from '../config/apiConfig';
 
 export class InvestigationService extends BaseService {
 
@@ -21,7 +20,7 @@ export class InvestigationService extends BaseService {
 
   static async getPatientInvestigations(patientId: string): Promise<investigation[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/investigations/patient/${patientId}`));
+      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}`);
       const investigations = this.handleV2Response<investigation>(response);
 
       console.log(`✅ Retrieved ${investigations.length} investigations for patient ${patientId}`);
@@ -34,7 +33,7 @@ export class InvestigationService extends BaseService {
 
   static async getPendingInvestigations(patientId: string): Promise<investigation[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/investigations/patient/${patientId}/pending`));
+      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}/pending`);
       const investigations = this.handleV2Response<investigation>(response);
 
       console.log(`✅ Retrieved ${investigations.length} pending investigations for patient ${patientId}`);
@@ -47,7 +46,7 @@ export class InvestigationService extends BaseService {
 
   static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id'>, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/investigations/patient/${patientId}/add`), {
+      await this.fetchFromBackend(`/investigations/patient/${patientId}/add`, {
         method: 'POST',
         body: JSON.stringify({
           ...investigation,
@@ -67,7 +66,7 @@ export class InvestigationService extends BaseService {
 
   static async updateInvestigationStatus(investigationId: string, status: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/investigations/${investigationId}/status`), {
+      await this.fetchFromBackend(`/investigations/${investigationId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
           status,
@@ -86,7 +85,7 @@ export class InvestigationService extends BaseService {
 
   static async completeInvestigation(investigationId: string, results: any, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/investigations/${investigationId}/complete`), {
+      await this.fetchFromBackend(`/investigations/${investigationId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
           results,
@@ -105,7 +104,7 @@ export class InvestigationService extends BaseService {
 
   static async updateInvestigationResults(investigationId: string, results: any, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/investigations/${investigationId}/results`), {
+      await this.fetchFromBackend(`/investigations/${investigationId}/results`, {
         method: 'PUT',
         body: JSON.stringify({
           results,
@@ -128,7 +127,7 @@ export class InvestigationService extends BaseService {
 
   static async getInvestigationTypes(): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/investigations/types`));
+      const response = await this.fetchFromBackend(`/investigations/types`);
       const types = this.handleV2Response<any>(response);
 
       console.log(`✅ Retrieved ${types.length} investigation types`);

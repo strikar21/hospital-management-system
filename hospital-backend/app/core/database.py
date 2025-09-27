@@ -12,329 +12,392 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-# Database connection pools
-_connection_pool = None
-_timescaledb_pool = None
+# Database connection pools - Force reset for credential update
+_connectionPool = None
+_timescaledbPool = None
 
-async def get_connection_pool():
+async def resetConnectionPools():
+    """Reset connection pools to force re-connection with new credentials"""
+    global _connectionPool, _timescaledbPool
+    if _connectionPool:
+        await _connectionPool.close()
+        _connectionPool = None
+    if _timescaledbPool:
+        await _timescaledbPool.close()
+        _timescaledbPool = None
+
+async def getConnectionPool():
     """Get or create PostgreSQL database connection pool"""
-    global _connection_pool
-    
-    if _connection_pool is None:
+    global _connectionPool
+
+    if _connectionPool is None:
         try:
-            _connection_pool = await asyncpg.create_pool(
-                settings.database_url,
-                min_size=1,
-                max_size=10,
-                command_timeout=60
+            logger.info(f"🔍 DEBUG: Creating connection pool with URL: {settings.databaseUrl}")
+            _connectionPool = await asyncpg.create_pool(
+                settings.databaseUrl,
+                min_size=2,  # Keep more connections ready
+                max_size=20,  # Allow more concurrent connections
+                command_timeout=30,  # Reduce timeout for faster failures
+                server_settings={
+                    'jit': 'off',  # Disable JIT for faster connection
+                    'application_name': 'hospital_management'
+                }
             )
             logger.info("✅ PostgreSQL connection pool created")
         except Exception as e:
             logger.error(f"❌ Failed to create PostgreSQL pool: {e}")
+            logger.error(f"🔍 DEBUG: Failed with URL: {settings.databaseUrl}")
             raise
-    
-    return _connection_pool
 
-async def get_timescaledb_pool():
+    return _connectionPool
+
+async def getTimescaleDbPool():
     """Get or create TimescaleDB connection pool for vitals data"""
-    global _timescaledb_pool
-    
-    if _timescaledb_pool is None:
+    global _timescaledbPool
+
+    if _timescaledbPool is None:
         try:
-            _timescaledb_pool = await asyncpg.create_pool(
-                settings.timescaledb_url,
+            _timescaledbPool = await asyncpg.create_pool(
+                settings.timescaledbUrl,
                 min_size=1,
-                max_size=10,
-                command_timeout=60
+                max_size=15,
+                command_timeout=30,
+                server_settings={
+                    'jit': 'off',
+                    'application_name': 'hospital_vitals'
+                }
             )
             logger.info("✅ TimescaleDB connection pool created for vitals")
         except Exception as e:
             logger.error(f"❌ Failed to create TimescaleDB pool: {e}")
             raise
     
-    return _timescaledb_pool
+    return _timescaledbPool
 
 @asynccontextmanager
-async def get_db_connection():
+async def getDbConnection():
     """Get PostgreSQL database connection context manager"""
-    pool = await get_connection_pool()
+    pool = await getConnectionPool()
     async with pool.acquire() as conn:
         yield conn
 
 @asynccontextmanager
-async def get_timescale_connection():
+async def getTimescaleConnection():
     """Get TimescaleDB connection context manager for vitals data"""
-    pool = await get_timescaledb_pool()
+    pool = await getTimescaleDbPool()
     async with pool.acquire() as conn:
         yield conn
 
-async def create_tables():
+async def migrateDeviceTable(conn):
+    """Add missing columns to devices table for device management system"""
+    try:
+        # Add missing columns to devices table
+        missingColumns = [
+            ("name", "TEXT"),
+            ("model", "TEXT"),
+            ("manufacturer", "TEXT"),
+            ("description", "TEXT")
+        ]
+
+        for columnName, columnType in missingColumns:
+            try:
+                await conn.execute(f"ALTER TABLE devices ADD COLUMN IF NOT EXISTS {columnName} {columnType}")
+                logger.info(f"✅ Added column {columnName} to devices table")
+            except Exception as e:
+                logger.debug(f"Column {columnName} might already exist: {e}")
+
+        # Update any existing devices that have null names
+        await conn.execute("""
+            UPDATE devices
+            SET name = COALESCE(name, 'Device ' || id)
+            WHERE name IS NULL
+        """)
+
+        logger.info("✅ Device table migration completed successfully")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Device table migration error: {e}")
+
+async def createTables():
     """Create PostgreSQL database tables"""
-    
-    tables_sql = """
+
+    # Force reset connection pools to ensure fresh connections
+    await resetConnectionPools()
+
+    tablesSql = """
         -- Staff table
         CREATE TABLE IF NOT EXISTS staff (
             id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
             role TEXT NOT NULL,
             email TEXT UNIQUE,
-            phoneNumber TEXT,
+            "phoneNumber" TEXT,
             department TEXT,
             pin TEXT,
             password TEXT,
-            isActive BOOLEAN DEFAULT true,
-            lastSeen TIMESTAMPTZ,
-            nfcCardId TEXT UNIQUE,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "isActive" BOOLEAN DEFAULT true,
+            "lastSeen" TIMESTAMPTZ,
+            "nfcCardId" TEXT UNIQUE,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
+            "firstName" TEXT,
+            "lastName" TEXT
         );
         
         -- Patients table
         CREATE TABLE IF NOT EXISTS patients (
             id TEXT PRIMARY KEY,
-            firstname TEXT NOT NULL,
-            lastname TEXT NOT NULL,
-            dateofbirth DATE,
+            "firstName" TEXT NOT NULL,
+            "lastName" TEXT NOT NULL,
+            "dateOfBirth" DATE,
             gender TEXT,
-            phonenumber TEXT,
-            emergencycontactname TEXT,
-            emergencycontactphone TEXT,
-            bloodtype TEXT,
+            "phoneNumber" TEXT,
+            "emergencyContactName" TEXT,
+            "emergencyContactPhone" TEXT,
+            "bloodType" TEXT,
             allergies TEXT,
-            medicalhistory TEXT,
-            currentmedications TEXT,
-            admissiondate TIMESTAMPTZ,
-            dischargedate TIMESTAMPTZ,
-            roomnumber TEXT,
-            bednumber TEXT,
-            assigneddeviceid TEXT,
-            attendingphysician TEXT,
-            nurseincharge TEXT,
+            "medicalHistory" TEXT,
+            "currentMedications" TEXT,
+            "admissionDate" TIMESTAMPTZ,
+            "dischargeDate" TIMESTAMPTZ,
+            "roomNumber" TEXT,
+            "bedNumber" TEXT,
+            "assignedDeviceId" TEXT,
+            "attendingPhysician" TEXT,
+            "nurseInCharge" TEXT,
             status TEXT DEFAULT 'active',
-            dischargerstatus TEXT DEFAULT 'active',
-            createdat TIMESTAMPTZ DEFAULT NOW(),
-            updatedat TIMESTAMPTZ DEFAULT NOW()
+            "dischargeStatus" TEXT DEFAULT 'active',
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
+            "recommendedFrom" TEXT
         );
         
         -- Devices table
         CREATE TABLE IF NOT EXISTS devices (
             id TEXT PRIMARY KEY,
-            deviceType TEXT NOT NULL,
-            serialNumber TEXT UNIQUE NOT NULL,
-            macAddress TEXT UNIQUE,
-            firmwareVersion TEXT,
-            batteryLevel INTEGER,
+            "deviceType" TEXT NOT NULL,
+            name TEXT NOT NULL,
+            model TEXT,
+            manufacturer TEXT,
+            "serialNumber" TEXT UNIQUE NOT NULL,
+            "macAddress" TEXT UNIQUE,
+            "firmwareVersion" TEXT,
+            "batteryLevel" INTEGER,
             status TEXT DEFAULT 'available',
-            lastSeen TIMESTAMPTZ,
-            assignedPatientId TEXT,
+            "lastSeen" TIMESTAMPTZ,
+            "assignedPatientId" TEXT,
             location TEXT,
-            calibrationDate TIMESTAMPTZ,
-            nextMaintenanceDate TIMESTAMPTZ,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            description TEXT,
+            "calibrationDate" TIMESTAMPTZ,
+            "nextMaintenanceDate" TIMESTAMPTZ,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Device Assignments table
-        CREATE TABLE IF NOT EXISTS deviceAssignments (
+        CREATE TABLE IF NOT EXISTS deviceassignments (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
-            deviceId TEXT NOT NULL,
-            assignedBy TEXT NOT NULL,
-            assignedAt TIMESTAMPTZ DEFAULT NOW(),
-            unassignedAt TIMESTAMPTZ,
+            "patientId" TEXT NOT NULL,
+            "deviceId" TEXT NOT NULL,
+            "assignedBy" TEXT NOT NULL,
+            "assignedAt" TIMESTAMPTZ DEFAULT NOW(),
+            "unassignedAt" TIMESTAMPTZ,
             status TEXT DEFAULT 'active',
             notes TEXT
         );
         
         -- Audit Log table
-        CREATE TABLE IF NOT EXISTS auditLog (
+        CREATE TABLE IF NOT EXISTS auditlog (
             id SERIAL PRIMARY KEY,
-            userId TEXT NOT NULL,
+            "userId" TEXT NOT NULL,
             action TEXT NOT NULL,
-            resourceType TEXT NOT NULL,
-            resourceId TEXT,
+            "resourceType" TEXT NOT NULL,
+            "resourceId" TEXT,
             details TEXT,
-            ipAddress TEXT,
-            userAgent TEXT,
+            "ipAddress" TEXT,
+            "userAgent" TEXT,
             timestamp TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Medications table
         CREATE TABLE IF NOT EXISTS medications (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
             name TEXT NOT NULL,
             dosage TEXT NOT NULL,
             frequency TEXT NOT NULL,
             route TEXT NOT NULL,
             status TEXT DEFAULT 'active',
-            startDate TIMESTAMPTZ,
-            endDate TIMESTAMPTZ,
+            "startDate" TIMESTAMPTZ,
+            "endDate" TIMESTAMPTZ,
             duration TEXT,
-            prescribedBy TEXT NOT NULL,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "prescribedBy" TEXT NOT NULL,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Medication Administrations table
-        CREATE TABLE IF NOT EXISTS medicationAdministrations (
+        CREATE TABLE IF NOT EXISTS medicationadministrations (
             id TEXT PRIMARY KEY,
-            medicationId TEXT NOT NULL,
-            patientId TEXT NOT NULL,
-            scheduledTime TIMESTAMPTZ NOT NULL,
-            administeredAt TIMESTAMPTZ,
-            administeredBy TEXT,
-            dosageGiven TEXT,
+            "medicationId" TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
+            "scheduledTime" TIMESTAMPTZ NOT NULL,
+            "administeredAt" TIMESTAMPTZ,
+            "administeredBy" TEXT,
+            "dosageGiven" TEXT,
             route TEXT,
             status TEXT DEFAULT 'scheduled',
             notes TEXT,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
-        -- Investigations table  
+        -- Investigations table
         CREATE TABLE IF NOT EXISTS investigations (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
             type TEXT NOT NULL,
             name TEXT NOT NULL,
-            scheduledAt TIMESTAMPTZ,
-            completedAt TIMESTAMPTZ,
+            "scheduledAt" TIMESTAMPTZ,
+            "completedAt" TIMESTAMPTZ,
             priority TEXT DEFAULT 'routine',
             status TEXT DEFAULT 'ordered',
-            performedBy TEXT,
+            "performedBy" TEXT,
             results TEXT,
             notes TEXT,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Therapy table
         CREATE TABLE IF NOT EXISTS therapy (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
             type TEXT NOT NULL,
             description TEXT NOT NULL,
-            startDate TIMESTAMPTZ,
-            endDate TIMESTAMPTZ,
+            "startDate" TIMESTAMPTZ,
+            "endDate" TIMESTAMPTZ,
             frequency TEXT,
             duration TEXT,
             status TEXT DEFAULT 'active',
-            performedBy TEXT,
+            "performedBy" TEXT,
             notes TEXT,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Therapy Sessions table
-        CREATE TABLE IF NOT EXISTS therapySessions (
+        CREATE TABLE IF NOT EXISTS therapysessions (
             id TEXT PRIMARY KEY,
-            therapyId TEXT NOT NULL,
-            patientId TEXT NOT NULL,
-            sessionNumber INTEGER NOT NULL,
-            scheduledDate TIMESTAMPTZ,
-            completedAt TIMESTAMPTZ,
-            performedBy TEXT,
-            sessionNotes TEXT,
+            "therapyId" TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
+            "sessionNumber" INTEGER NOT NULL,
+            "scheduledDate" TIMESTAMPTZ,
+            "completedAt" TIMESTAMPTZ,
+            "performedBy" TEXT,
+            "sessionNotes" TEXT,
             status TEXT DEFAULT 'scheduled',
             duration TEXT,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Patient Notes table
-        CREATE TABLE IF NOT EXISTS patientNotes (
+        CREATE TABLE IF NOT EXISTS patientnotes (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
             content TEXT NOT NULL,
-            authorId TEXT NOT NULL,
-            authorName TEXT NOT NULL,
-            authorRole TEXT NOT NULL,
+            "authorId" TEXT NOT NULL,
+            "authorName" TEXT NOT NULL,
+            "authorRole" TEXT NOT NULL,
             timestamp TIMESTAMPTZ DEFAULT NOW(),
-            editedAt TIMESTAMPTZ,
-            isEdited BOOLEAN DEFAULT FALSE
+            "editedAt" TIMESTAMPTZ,
+            "isEdited" BOOLEAN DEFAULT FALSE
         );
         
         -- Case Sheet Entries table
-        CREATE TABLE IF NOT EXISTS caseSheetEntries (
+        CREATE TABLE IF NOT EXISTS casesheetentries (
             id SERIAL PRIMARY KEY,
-            patientId TEXT NOT NULL,
-            entryType TEXT NOT NULL,
+            "patientId" TEXT NOT NULL,
+            "entryType" TEXT NOT NULL,
             description TEXT NOT NULL,
-            performedBy TEXT NOT NULL,
+            "performedBy" TEXT NOT NULL,
             timestamp TIMESTAMPTZ DEFAULT NOW(),
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         
         -- Admission Recommendations table
-        CREATE TABLE IF NOT EXISTS admissionRecommendations (
+        CREATE TABLE IF NOT EXISTS admissionrecommendations (
             id SERIAL PRIMARY KEY,
-            patientName TEXT NOT NULL,
+            "patientName" TEXT NOT NULL,
             age INTEGER,
-            dateOfBirth DATE,
+            "dateOfBirth" DATE,
             gender TEXT NOT NULL,
             diagnosis TEXT NOT NULL,
             priority TEXT NOT NULL DEFAULT 'routine',
             department TEXT NOT NULL,
-            recommendedWard TEXT NOT NULL,
-            assignedDoctor TEXT NOT NULL,
-            recommendedBy TEXT NOT NULL,
+            "recommendedWard" TEXT NOT NULL,
+            "assignedDoctor" TEXT NOT NULL,
+            "recommendedBy" TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
             weight NUMERIC,
-            admissionDate DATE,
-            insuranceType TEXT,
-            emergencyContact TEXT,
+            "admissionDate" DATE,
+            "insuranceType" TEXT,
+            "emergencyContact" TEXT,
             allergies TEXT,
-            admissionNotes TEXT,
-            processedBy TEXT,
-            processedAt TIMESTAMPTZ,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW(),
-            CONSTRAINT check_age_or_dob CHECK (age IS NOT NULL OR dateOfBirth IS NOT NULL)
+            "admissionNotes" TEXT,
+            "processedBy" TEXT,
+            "processedAt" TIMESTAMPTZ,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT checkAgeOrDob CHECK (age IS NOT NULL OR "dateOfBirth" IS NOT NULL)
         );
         
         -- Beds table
         CREATE TABLE IF NOT EXISTS beds (
             id TEXT PRIMARY KEY,
-            bedNumber TEXT NOT NULL,
-            roomNumber TEXT NOT NULL,
-            wardType TEXT NOT NULL,
+            "bedNumber" TEXT NOT NULL,
+            "roomNumber" TEXT NOT NULL,
+            "wardType" TEXT NOT NULL,
             department TEXT NOT NULL,
             status TEXT DEFAULT 'available',
-            occupiedBy TEXT,
-            lastCleaned TIMESTAMPTZ,
-            createdAt TIMESTAMPTZ DEFAULT NOW(),
-            updatedAt TIMESTAMPTZ DEFAULT NOW()
+            "occupiedBy" TEXT,
+            "lastCleaned" TIMESTAMPTZ,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
         """
     
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Execute tables creation
-            await conn.execute(tables_sql)
+            await conn.execute(tablesSql)
             logger.info("✅ Tables created successfully")
             
             # Add migrations for existing tables
             try:
-                # Add dateOfBirth column to admissionRecommendations if it doesn't exist
+                # Add dateOfBirth column to admissionrecommendations if it doesn't exist
                 await conn.execute("""
-                    ALTER TABLE admissionRecommendations 
-                    ADD COLUMN IF NOT EXISTS dateOfBirth DATE;
+                    ALTER TABLE admissionrecommendations
+                    ADD COLUMN IF NOT EXISTS "dateOfBirth" DATE;
                 """)
-                
+
                 # Modify age column to allow NULL (ignore error if already nullable)
                 try:
                     await conn.execute("""
-                        ALTER TABLE admissionRecommendations 
+                        ALTER TABLE admissionrecommendations
                         ALTER COLUMN age DROP NOT NULL;
                     """)
                 except:
                     pass  # Column might already be nullable
                 
                 logger.info("✅ Database migrations completed successfully")
-            except Exception as migration_error:
-                logger.warning(f"⚠️ Migration warning (may be expected): {migration_error}")
+
+                # Apply device table migrations for device management system
+                await migrateDeviceTable(conn)
+
+            except Exception as migrationError:
+                logger.warning(f"⚠️ Migration warning (may be expected): {migrationError}")
         
         logger.info("✅ Database tables created successfully")
         
@@ -342,23 +405,23 @@ async def create_tables():
         logger.error(f"❌ Failed to create tables: {e}")
         raise
 
-async def create_timescale_tables():
+async def createTimescaleTables():
     """Create TimescaleDB hypertables for vitals data"""
     
-    timescale_sql = """
+    timescaleSql = """
     -- Enable TimescaleDB extension
     CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
     
-    -- Create vitals_timeseries table (using existing schema for compatibility)
+    -- Create vitals_timeseries table (using camelCase schema)
     CREATE TABLE IF NOT EXISTS vitals_timeseries (
         time TIMESTAMPTZ NOT NULL,
-        patientid TEXT NOT NULL,
-        deviceid TEXT NOT NULL,
-        vitaltype TEXT NOT NULL,
+        "patientId" TEXT NOT NULL,
+        "deviceId" TEXT NOT NULL,
+        "vitalType" TEXT NOT NULL,
         value DOUBLE PRECISION,
         unit TEXT,
         quality TEXT DEFAULT 'good',
-        rawdata JSONB,
+        "rawData" JSONB,
         metadata JSONB
     );
     
@@ -366,16 +429,79 @@ async def create_timescale_tables():
     SELECT create_hypertable('vitals_timeseries', 'time', if_not_exists => TRUE);
     
     -- Create indexes
-    CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals_timeseries (patientid, time);
-    CREATE INDEX IF NOT EXISTS idx_vitals_device_time ON vitals_timeseries (deviceid, time);
-    CREATE INDEX IF NOT EXISTS idx_vitals_metric ON vitals_timeseries (patientid, vitaltype, time);
+    CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals_timeseries ("patientId", time);
+    CREATE INDEX IF NOT EXISTS idx_vitals_device_time ON vitals_timeseries ("deviceId", time);
+    CREATE INDEX IF NOT EXISTS idx_vitals_metric ON vitals_timeseries ("patientId", "vitalType", time);
     """
     
     try:
-        async with get_timescale_connection() as conn:
-            await conn.execute(timescale_sql)
+        async with getTimescaleConnection() as conn:
+            await conn.execute(timescaleSql)
             logger.info("✅ TimescaleDB hypertables created successfully")
             
     except Exception as e:
         logger.error(f"❌ Failed to create TimescaleDB tables: {e}")
+
+async def seedStaffCredentials():
+    """
+    Seed staff credentials for authentication testing
+    """
+    from .security import hash_pin, hash_password
+
+    staffCredentials = [
+        {
+            "id": "DOC0001",
+            "pin": hash_pin("1234"),
+            "password": hash_password("doctor123")
+        },
+        {
+            "id": "DOC0002",
+            "pin": hash_pin("1235"),
+            "password": hash_password("doctor124")
+        },
+        {
+            "id": "NUR0001",
+            "pin": hash_pin("5678"),
+            "password": hash_password("nurse123")
+        },
+        {
+            "id": "NUR0002",
+            "pin": hash_pin("5679"),
+            "password": hash_password("nurse124")
+        },
+        {
+            "id": "ADM0001",
+            "pin": hash_pin("9999"),
+            "password": hash_password("admin123")
+        },
+        {
+            "id": "PRV0001",
+            "pin": hash_pin("1111"),
+            "password": hash_password("prov123")
+        },
+        {
+            "id": "TEC0001",
+            "pin": hash_pin("2222"),
+            "password": hash_password("tech123")
+        }
+    ]
+
+    try:
+        async with getDbConnection() as conn:
+            for staff in staffCredentials:
+                # Update existing staff with credentials
+                result = await conn.execute(
+                    "UPDATE staff SET pin = $1, password = $2 WHERE id = $3",
+                    staff["pin"], staff["password"], staff["id"]
+                )
+
+                if result == "UPDATE 0":
+                    logger.warning(f"⚠️ Staff member {staff['id']} not found in database")
+                else:
+                    logger.info(f"✅ Updated credentials for {staff['id']}")
+
+            logger.info("✅ Staff credentials seeded successfully")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to seed staff credentials: {e}")
         logger.warning("⚠️ Continuing without TimescaleDB - vitals storage may be limited")

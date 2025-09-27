@@ -9,94 +9,94 @@ import logging
 from datetime import datetime
 import uuid
 
-from ...core.database import get_db_connection, get_timescale_connection
-from ...services.websocket_manager import connection_manager
-from ...services.audit import log_audit_event
+from ...core.database import getDbConnection, getTimescaleConnection
+from ...services.websocket_manager import connectionManager
+from ...services.audit import logAuditEvent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Device ID counter for auto-assignment
-device_counter = 1
+deviceCounter = 1
 
 @router.post("/provision")
-async def provision_esp32_device(provision_data: Dict[str, Any]):
+async def provisionEsp32Device(provisionData: Dict[str, Any]):
     """
     Provision new ESP32 device with automatic serial assignment
     Validates provisioner credentials and assigns device ID/serial
     """
     try:
-        mac_address = provision_data.get('macAddress')
-        device_type = provision_data.get('deviceType', 'esp32_watch')
-        provisioner_id = provision_data.get('provisioner_id')
-        provisioner_password = provision_data.get('provisioner_password')
-        firmware_version = provision_data.get('firmwareVersion', '3.0.0')
+        macAddress = provisionData.get('macAddress')
+        deviceType = provisionData.get('deviceType', 'esp32Watch')
+        provisionerId = provisionData.get('provisionerId')
+        provisionerPassword = provisionData.get('provisionerPassword')
+        firmwareVersion = provisionData.get('firmwareVersion', '3.0.0')
         
-        if not mac_address or not provisioner_id or not provisioner_password:
+        if not macAddress or not provisionerId or not provisionerPassword:
             raise HTTPException(status_code=400, detail="MAC address and provisioner credentials required")
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Validate provisioner credentials
             provisioner = await conn.fetchrow(
                 "SELECT id, name, role, password FROM staff WHERE id = $1 AND role = 'Provisioner'",
-                provisioner_id
+                provisionerId
             )
             
             if not provisioner:
-                logger.warning(f"❌ Invalid provisioner ID: {provisioner_id}")
+                logger.warning(f"❌ Invalid provisioner ID: {provisionerId}")
                 raise HTTPException(status_code=403, detail="Invalid provisioner credentials")
             
             # Validate provisioner password
-            if provisioner['password'] != provisioner_password:
-                logger.warning(f"❌ Invalid provisioner password for ID: {provisioner_id}")
+            if provisioner['password'] != provisionerPassword:
+                logger.warning(f"❌ Invalid provisioner password for ID: {provisionerId}")
                 raise HTTPException(status_code=403, detail="Invalid provisioner credentials")
             
             # Check if device already exists by MAC address
-            existing_device = await conn.fetchrow(
-                "SELECT id, serialNumber FROM devices WHERE macAddress = $1",
-                mac_address
+            existingDevice = await conn.fetchrow(
+                'SELECT id, serialNumber FROM devices WHERE macAddress = $1',
+                macAddress
             )
-            
-            if existing_device:
-                logger.info(f"📱 Device with MAC {mac_address} already provisioned as {existing_device['id']}")
+
+            if existingDevice:
+                logger.info(f"📱 Device with MAC {macAddress} already provisioned as {existingDevice['id']}")
                 return JSONResponse({
                     "success": True,
                     "message": "Device already provisioned",
-                    "deviceId": existing_device['id'],
-                    "serialNumber": existing_device['serialnumber'],
+                    "deviceId": existingDevice['id'],
+                    "serialNumber": existingDevice['serialNumber'],
                     "status": "existing"
                 })
             
             # Generate new device ID and serial number
-            device_count = await conn.fetchval("SELECT COUNT(*) FROM devices WHERE devicetype = $1", device_type)
-            new_device_number = device_count + 1
+            deviceCount = await conn.fetchval('SELECT COUNT(*) FROM devices WHERE deviceType = $1', deviceType)
+            newDeviceNumber = deviceCount + 1
             
-            device_id = f"ESP32_WATCH_{new_device_number:03d}"  # ESP32_WATCH_001, ESP32_WATCH_002, etc.
-            serial_number = f"SN_W{new_device_number:03d}"     # SN_W001, SN_W002, etc.
+            deviceId = f"ESP32_WATCH_{newDeviceNumber:03d}"  # ESP32_WATCH_001, ESP32_WATCH_002, etc.
+            serialNumber = f"SN_W{newDeviceNumber:03d}"     # SN_W001, SN_W002, etc.
             
             # Create new device record
             await conn.execute("""
-                INSERT INTO devices (id, devicetype, serialnumber, macaddress, 
-                                   firmwareversion, batterylevel, status, location, 
-                                   lastseen, createdat, updatedat)
+                INSERT INTO devices (id, deviceType, serialNumber, macAddress,
+                                   firmwareVersion, batteryLevel, status, location,
+                                   lastSeen, createdAt, updatedAt)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW())
-            """, device_id, device_type, serial_number, mac_address,
-                 firmware_version, 100, 'available', 'Device Pool')
+            """, deviceId, deviceType, serialNumber, macAddress,
+                 firmwareVersion, 100, 'available', 'Device Pool')
             
             # Log provisioning action
-            await log_audit_event(
-                conn, provisioner_id, 'provision_device', 'device', device_id,
-                f"Provisioned new {device_type} with serial {serial_number}"
+            await logAuditEvent(
+                conn, provisionerId, 'provisionDevice', 'device', deviceId,
+                f"Provisioned new {deviceType} with serial {serialNumber}"
             )
             
-            logger.info(f"✅ New ESP32 device provisioned: {device_id} (Serial: {serial_number}) by {provisioner['name']}")
+            logger.info(f"✅ New ESP32 device provisioned: {deviceId} (Serial: {serialNumber}) by {provisioner['name']}")
         
         return JSONResponse({
             "success": True,
             "message": "Device provisioned successfully",
-            "deviceId": device_id,
-            "serialNumber": serial_number,
-            "provisionedBy": provisioner['name'],
+            "deviceId": deviceId,
+            "serialNumber": serialNumber,
+            "provisionedby": provisioner['name'],
             "status": "new"
         })
         
@@ -107,32 +107,32 @@ async def provision_esp32_device(provision_data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail="Device provisioning failed")
 
 @router.post("/online")
-async def device_online(status_data: Dict[str, Any]):
+async def deviceOnline(statusData: Dict[str, Any]):
     """
     Mark device as online after successful provisioning
     """
     try:
-        device_id = status_data.get('deviceId')
-        serial_number = status_data.get('serialNumber')
-        battery_level = status_data.get('batteryLevel', 100)
+        deviceId = statusData.get('deviceId')
+        serialNumber = statusData.get('serialNumber')
+        batteryLevel = statusData.get('batteryLevel', 100)
         
-        if not device_id:
+        if not deviceId:
             raise HTTPException(status_code=400, detail="Device ID required")
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Update device status
             await conn.execute("""
-                UPDATE devices 
-                SET status = 'available', batterylevel = $2, lastseen = NOW(), updatedat = NOW()
+                UPDATE devices
+                SET status = 'available', batteryLevel = $2, lastSeen = NOW(), updatedAt = NOW()
                 WHERE id = $1
-            """, device_id, battery_level)
+            """, deviceId, batteryLevel)
             
-            logger.info(f"📱 Device {device_id} marked as online")
+            logger.info(f"📱 Device {deviceId} marked as online")
         
         return JSONResponse({
             "success": True,
             "message": "Device marked as online",
-            "deviceId": device_id
+            "deviceId": deviceId
         })
         
     except Exception as e:
@@ -140,107 +140,107 @@ async def device_online(status_data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail="Device status update failed")
 
 @router.post("/register")
-async def register_esp32_device(device_data: Dict[str, Any]):
+async def registerEsp32Device(deviceData: Dict[str, Any]):
     """
     Register ESP32 device in the system
     Called by ESP32 on startup
     """
     try:
-        device_id = device_data.get('deviceId')
-        device_type = device_data.get('deviceType', 'esp32_watch')
-        mac_address = device_data.get('macAddress')
-        firmware_version = device_data.get('firmwareVersion', '1.0.0')
-        battery_level = device_data.get('batteryLevel', 100)
-        location = device_data.get('location', 'Mobile')
+        deviceId = deviceData.get('deviceId')
+        deviceType = deviceData.get('deviceType', 'esp32Watch')
+        macAddress = deviceData.get('macAddress')
+        firmwareVersion = deviceData.get('firmwareVersion', '1.0.0')
+        batteryLevel = deviceData.get('batteryLevel', 100)
+        location = deviceData.get('location', 'Mobile')
         
-        if not device_id or not mac_address:
+        if not deviceId or not macAddress:
             raise HTTPException(status_code=400, detail="Device ID and MAC address required")
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Check if device already exists
-            existing_device = await conn.fetchrow(
-                "SELECT id FROM devices WHERE id = $1 OR macAddress = $2",
-                device_id, mac_address
+            existingDevice = await conn.fetchrow(
+                'SELECT id FROM devices WHERE id = $1 OR macAddress = $2',
+                deviceId, macAddress
             )
-            
-            if existing_device:
+
+            if existingDevice:
                 # Update existing device
                 await conn.execute("""
-                    UPDATE devices 
-                    SET devicetype = $2, batterylevel = $3, firmwareversion = $4,
-                        lastseen = NOW(), updatedat = NOW(), status = 'available'
+                    UPDATE devices
+                    SET deviceType = $2, batteryLevel = $3, firmwareVersion = $4,
+                        lastSeen = NOW(), updatedAt = NOW(), status = 'available'
                     WHERE id = $1
-                """, device_id, device_type, battery_level, firmware_version)
+                """, deviceId, deviceType, batteryLevel, firmwareVersion)
                 
-                logger.info(f"📱 ESP32 device updated: {device_id}")
+                logger.info(f"📱 ESP32 device updated: {deviceId}")
             else:
                 # Create new device
                 await conn.execute("""
-                    INSERT INTO devices (id, devicetype, serialnumber, macaddress, 
-                                       batterylevel, firmwareversion, location, status, 
-                                       lastseen, createdat, updatedat)
+                    INSERT INTO devices (id, deviceType, serialNumber, macAddress,
+                                       batteryLevel, firmwareVersion, location, status,
+                                       lastSeen, createdAt, updatedAt)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW())
-                """, device_id, device_type, f"ESP32_{device_id[-4:]}", mac_address,
-                     battery_level, firmware_version, location, 'available')
+                """, deviceId, deviceType, f"ESP32_{deviceId[-4:]}", macAddress,
+                     batteryLevel, firmwareVersion, location, 'available')
                 
-                logger.info(f"✅ New ESP32 device registered: {device_id}")
+                logger.info(f"✅ New ESP32 device registered: {deviceId}")
         
         return JSONResponse({
             "success": True,
-            "deviceId": device_id,
+            "deviceId": deviceId,
             "message": "Device registered successfully",
-            "serverTime": datetime.now().isoformat()
+            "servertime": datetime.now().isoformat()
         })
         
     except Exception as e:
         logger.error(f"❌ ESP32 registration error: {e}")
         raise HTTPException(status_code=500, detail="Device registration failed")
 
-@router.post("/{device_id}/heartbeat")
-async def device_heartbeat(
-    device_id: str,
-    heartbeat_data: Dict[str, Any]
+@router.post("/{deviceId}/heartbeat")
+async def deviceHeartbeat(
+    deviceId: str,
+    heartbeatData: Dict[str, Any]
 ):
     """
     Receive heartbeat from ESP32 device
     Updates device status and battery level
     """
     try:
-        battery_level = heartbeat_data.get('batteryLevel', 100)
-        signal_strength = heartbeat_data.get('signalStrength', -50)
-        device_status = heartbeat_data.get('status', 'active')
+        batteryLevel = heartbeatData.get('batteryLevel', 100)
+        signalStrength = heartbeatData.get('signalstrength', -50)
+        deviceStatus = heartbeatData.get('status', 'active')
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Update device status
             await conn.execute("""
-                UPDATE devices 
-                SET batterylevel = $2, status = $3, lastseen = NOW(), updatedat = NOW()
+                UPDATE devices
+                SET batteryLevel = $2, status = $3, lastSeen = NOW(), updatedAt = NOW()
                 WHERE id = $1
-            """, device_id, battery_level, device_status)
+            """, deviceId, batteryLevel, deviceStatus)
             
             # Check if device exists
-            device = await conn.fetchrow("SELECT id, assignedpatientid FROM devices WHERE id = $1", device_id)
+            device = await conn.fetchrow('SELECT id, assignedPatientId FROM devices WHERE id = $1', deviceId)
             if not device:
                 raise HTTPException(status_code=404, detail="Device not found")
         
-        logger.info(f"💓 Heartbeat from {device_id}: Battery {battery_level}%, Signal {signal_strength}dBm")
+        logger.info(f"💓 Heartbeat from {deviceId}: Battery {batteryLevel}%, Signal {signalStrength}dBm")
         
         return JSONResponse({
             "success": True,
             "message": "Heartbeat received",
-            "serverTime": datetime.now().isoformat(),
-            "batteryLevel": battery_level
+            "servertime": datetime.now().isoformat(),
+            "batteryLevel": batteryLevel
         })
         
     except Exception as e:
         logger.error(f"❌ ESP32 heartbeat error: {e}")
         raise HTTPException(status_code=500, detail="Heartbeat processing failed")
 
-@router.post("/{device_id}/vitals/{patient_id}")
-async def receive_vitals_data(
-    device_id: str,
-    patient_id: str,
-    vitals_data: Dict[str, Any]
+@router.post("/{deviceId}/vitals/{patientId}")
+async def receiveVitalsData(
+    deviceId: str,
+    patientId: str,
+    vitalsData: Dict[str, Any]
 ):
     """
     Receive vitals data from ESP32 device
@@ -248,80 +248,80 @@ async def receive_vitals_data(
     """
     try:
         # Validate that device is assigned to this patient
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             patient = await conn.fetchrow(
-                "SELECT id, assigneddeviceid FROM patients WHERE id = $1",
-                patient_id
+                'SELECT id, assignedDeviceId FROM patients WHERE id = $1',
+                patientId
             )
-            
+
             if not patient:
                 raise HTTPException(status_code=404, detail="Patient not found")
-            
-            if patient['assigneddeviceid'] != device_id:
-                logger.warning(f"⚠️ Device {device_id} sent vitals for patient {patient_id} but not assigned")
+
+            if patient['assignedDeviceId'] != deviceId:
+                logger.warning(f"⚠️ Device {deviceId} sent vitals for patient {patientId} but not assigned")
                 raise HTTPException(status_code=403, detail="Device not assigned to this patient")
         
         # Store vitals in TimescaleDB
         try:
-            async with get_timescale_connection() as ts_conn:
+            async with getTimescaleConnection() as tsConn:
                 timestamp = datetime.now()
                 
                 # Store each vital type (optimized for frontend format)
-                vital_types = {
-                    'heartRate': vitals_data.get('heartRate'),
-                    'temperature': vitals_data.get('temperature'),
-                    'oxygenSaturation': vitals_data.get('oxygenSat'),  # ESP32 sends 'oxygenSat'
-                    'respiratoryRate': vitals_data.get('respiratoryRate'),
-                    'bloodPressureSystolic': vitals_data.get('bloodPressureValue'),
-                    'ecg': vitals_data.get('ecg'),
-                    'eeg': vitals_data.get('eeg'),
-                    'bioimpedance': vitals_data.get('bioimpedance'),
-                    'tremor': vitals_data.get('tremor')
+                vitalTypes = {
+                    'heartrate': vitalsData.get('heartrate'),
+                    'temperature': vitalsData.get('temperature'),
+                    'oxygensaturation': vitalsData.get('oxygensat'),  # ESP32 sends 'oxygenSat'
+                    'respiratoryrate': vitalsData.get('respiratoryrate'),
+                    'bloodpressuresystolic': vitalsData.get('bloodpressurevalue'),
+                    'ecg': vitalsData.get('ecg'),
+                    'eeg': vitalsData.get('eeg'),
+                    'bioimpedance': vitalsData.get('bioimpedance'),
+                    'tremor': vitalsData.get('tremor')
                 }
                 
-                for vital_type, value in vital_types.items():
+                for vitalType, value in vitalTypes.items():
                     if value is not None:
-                        await ts_conn.execute("""
-                            INSERT INTO vitals_timeseries (patientid, deviceid, vitaltype, value, unit, time, quality)
+                        await tsConn.execute("""
+                            INSERT INTO vitals_timeseries (patientId, deviceId, vitaltype, value, unit, time, quality)
                             VALUES ($1, $2, $3, $4, $5, $6, $7)
-                        """, patient_id, device_id, vital_type, float(value), 
-                             get_unit_for_vital_fix(vital_type), timestamp, 
-                             vitals_data.get('quality', 95))
+                        """, patientId, deviceId, vitalType, float(value),
+                             getUnitForVitalFix(vitalType), timestamp,
+                             vitalsData.get('quality', 95))
                 
-                logger.info(f"📊 Vitals stored for patient {patient_id} from device {device_id}")
+                logger.info(f"📊 Vitals stored for patient {patientId} from device {deviceId}")
         
         except Exception as e:
             logger.warning(f"⚠️ TimescaleDB storage failed: {e}, continuing with broadcast")
         
         # Update device last seen
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             await conn.execute(
-                "UPDATE devices SET lastseen = NOW(), batterylevel = $2 WHERE id = $1",
-                device_id, vitals_data.get('deviceBattery', 100)
+                "UPDATE devices SET lastSeen = NOW(), batteryLevel = $2 WHERE id = $1",
+                deviceId, vitalsData.get('devicebattery', 100)
             )
         
         # Broadcast to WebSocket subscribers with frontend-compatible format
-        frontend_vitals = {
-            'heartRate': vitals_data.get('heartRate'),
-            'bloodPressure': vitals_data.get('bloodPressure'),
-            'bloodPressureValue': vitals_data.get('bloodPressureValue'),
-            'respiratoryRate': vitals_data.get('respiratoryRate'),
-            'oxygenSat': vitals_data.get('oxygenSat'),
-            'temperature': vitals_data.get('temperature'),
-            'ecg': vitals_data.get('ecg'),
-            'eeg': vitals_data.get('eeg'),
-            'bioimpedance': vitals_data.get('bioimpedance'),
-            'tremor': vitals_data.get('tremor'),
-            'lastUpdated': datetime.now().isoformat(),
-            'lastSync': datetime.now().isoformat()
+        frontendVitals = {
+            'heartrate': vitalsData.get('heartrate'),
+            'bloodpressure': vitalsData.get('bloodpressure'),
+            'bloodpressurevalue': vitalsData.get('bloodpressurevalue'),
+            'respiratoryrate': vitalsData.get('respiratoryrate'),
+            'oxygensat': vitalsData.get('oxygensat'),
+            'temperature': vitalsData.get('temperature'),
+            'ecg': vitalsData.get('ecg'),
+            'eeg': vitalsData.get('eeg'),
+            'bioimpedance': vitalsData.get('bioimpedance'),
+            'tremor': vitalsData.get('tremor'),
+            'lastupdated': datetime.now().isoformat(),
+            'lastsync': datetime.now().isoformat()
         }
-        await connection_manager.send_vitals_update(patient_id, device_id, frontend_vitals)
+        await connectionManager.sendVitalsUpdate(patientId, deviceId, frontendVitals)
         
         return JSONResponse({
             "success": True,
             "message": "Vitals received and broadcasted",
-            "patientId": patient_id,
-            "deviceId": device_id,
+            "patientId": patientId,
+            "deviceId": deviceId,
             "timestamp": datetime.now().isoformat()
         })
         
@@ -331,37 +331,37 @@ async def receive_vitals_data(
         logger.error(f"❌ ESP32 vitals error: {e}")
         raise HTTPException(status_code=500, detail="Vitals processing failed")
 
-@router.post("/{device_id}/alert")
-async def receive_emergency_alert(
-    device_id: str,
-    alert_data: Dict[str, Any]
+@router.post("/{deviceId}/alert")
+async def receiveEmergencyAlert(
+    deviceId: str,
+    alertData: Dict[str, Any]
 ):
     """
     Receive emergency alert from ESP32 device
     """
     try:
-        patient_id = alert_data.get('patientId')
-        alert_type = alert_data.get('alertType', 'warning')
-        message = alert_data.get('message', 'Device alert')
-        vitals = alert_data.get('vitals', {})
+        patientId = alertData.get('patientId')
+        alertType = alertData.get('alerttype', 'warning')
+        message = alertData.get('message', 'Device alert')
+        vitals = alertData.get('vitals', {})
         
         # Broadcast emergency alert
-        alert_payload = {
-            'severity': alert_type,
+        alertPayload = {
+            'severity': alertType,
             'message': message,
-            'source': f'Device {device_id}',
+            'source': f'Device {deviceId}',
             'vitals': vitals,
-            'deviceId': device_id
+            'deviceId': deviceId
         }
         
-        await connection_manager.send_alert(patient_id, alert_payload)
+        await connectionManager.sendAlert(patientId, alertPayload)
         
-        logger.warning(f"🚨 Emergency alert from {device_id} for patient {patient_id}: {message}")
+        logger.warning(f"🚨 Emergency alert from {deviceId} for patient {patientId}: {message}")
         
         return JSONResponse({
             "success": True,
             "message": "Emergency alert broadcasted",
-            "alertId": str(uuid.uuid4())
+            "alertid": str(uuid.uuid4())
         })
         
     except Exception as e:
@@ -369,85 +369,85 @@ async def receive_emergency_alert(
         raise HTTPException(status_code=500, detail="Alert processing failed")
 
 @staticmethod
-def get_unit_for_vital(vital_type: str) -> str:
+def getUnitForVital(vitalType: str) -> str:
     """Get the unit for a given vital type"""
     units = {
-        'heartRate': 'bpm',
+        'heartrate': 'bpm',
         'temperature': 'F',
-        'oxygenSaturation': '%',
-        'respiratoryRate': '/min',
-        'bloodPressureSystolic': 'mmHg',
-        'bloodPressureDiastolic': 'mmHg'
+        'oxygensaturation': '%',
+        'respiratoryrate': '/min',
+        'bloodpressuresystolic': 'mmHg',
+        'bloodpressurediastolic': 'mmHg'
     }
-    return units.get(vital_type, '')
+    return units.get(vitalType, '')
 
 # Fix the self reference in the static method
-def get_unit_for_vital_fix(vital_type: str) -> str:
+def getUnitForVitalFix(vitalType: str) -> str:
     """Get the unit for a given vital type"""
     units = {
-        'heartRate': 'bpm',
+        'heartrate': 'bpm',
         'temperature': 'F', 
-        'oxygenSaturation': '%',
-        'respiratoryRate': '/min',
-        'bloodPressureSystolic': 'mmHg',
-        'bloodPressureDiastolic': 'mmHg'
+        'oxygensaturation': '%',
+        'respiratoryrate': '/min',
+        'bloodpressuresystolic': 'mmHg',
+        'bloodpressurediastolic': 'mmHg'
     }
-    return units.get(vital_type, '')
+    return units.get(vitalType, '')
 
 # Door Scanner ESP32 endpoints
-@router.post("/door-scanner/{scanner_id}/scan")
-async def door_scanner_detection(
-    scanner_id: str,
-    scan_data: Dict[str, Any]
+@router.post("/door-scanner/{scannerId}/scan")
+async def doorScannerDetection(
+    scannerId: str,
+    scanData: Dict[str, Any]
 ):
     """
     Receive BLE device detection from door scanner ESP32
     Tracks which devices (watches/tablets) are in which rooms
     """
     try:
-        detected_devices = scan_data.get('detectedDevices', [])
-        room_id = scan_data.get('roomId')
-        scanner_location = scan_data.get('location')
+        detectedDevices = scanData.get('detecteddevices', [])
+        roomId = scanData.get('roomid')
+        scannerLocation = scanData.get('location')
         
-        if not room_id:
+        if not roomId:
             raise HTTPException(status_code=400, detail="Room ID required")
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Update scanner heartbeat
             await conn.execute("""
-                UPDATE devices 
-                SET lastseen = NOW(), status = 'active'
-                WHERE id = $1 AND devicetype = 'door_scanner'
-            """, scanner_id)
+                UPDATE devices
+                SET lastSeen = NOW(), status = 'active'
+                WHERE id = $1 AND deviceType = 'doorScanner'
+            """, scannerId)
             
             # Process detected devices
-            for device_info in detected_devices:
-                device_id = device_info.get('deviceId')
-                rssi = device_info.get('rssi', -50)
+            for deviceInfo in detectedDevices:
+                deviceId = deviceInfo.get('deviceId')
+                rssi = deviceInfo.get('rssi', -50)
                 
-                if device_id:
+                if deviceId:
                     # Update device location based on door scanner detection
                     await conn.execute("""
-                        UPDATE devices 
-                        SET location = $2, lastseen = NOW()
+                        UPDATE devices
+                        SET location = $2, lastSeen = NOW()
                         WHERE id = $1
-                    """, device_id, room_id)
+                    """, deviceId, roomId)
                     
                     # Find patient assigned to this device
                     patient = await conn.fetchrow("""
-                        SELECT id, firstname, lastname 
-                        FROM patients 
-                        WHERE assigneddeviceid = $1 AND status = 'active'
-                    """, device_id)
+                        SELECT id, firstName, lastName
+                        FROM patients
+                        WHERE assignedDeviceId = $1 AND status = 'active'
+                    """, deviceId)
                     
                     if patient:
-                        logger.info(f"🚪 Door scanner {scanner_id}: Patient {patient['firstname']} {patient['lastname']} detected in {room_id}")
+                        logger.info(f"🚪 Door scanner {scannerId}: Patient {patient['firstName']} {patient['lastName']} detected in {roomId}")
         
         return JSONResponse({
             "success": True,
-            "scannerId": scanner_id,
-            "roomId": room_id,
-            "devicesDetected": len(detected_devices),
+            "scannerid": scannerId,
+            "roomid": roomId,
+            "devicesdetected": len(detectedDevices),
             "timestamp": datetime.now().isoformat()
         })
         

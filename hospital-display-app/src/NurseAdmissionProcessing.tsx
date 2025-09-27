@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users, Bed, Clock, AlertCircle, CheckCircle, User,
-  Heart, MapPin, Calendar, Phone, Activity
+  Heart, MapPin, Calendar, Phone
 } from 'lucide-react';
 import { user as UserType } from './types';
 import { getApiUrl } from './config/apiConfig';
@@ -30,18 +30,6 @@ interface AdmissionRecommendation {
   status: string;
 }
 
-interface AvailableBed {
-  wardId: string;
-  wardName: string;
-  wardtype: string;
-  roomId: string;
-  roomNumber: string;
-  roomType: string;
-  bedId: string;
-  bedNumber: string;
-  bedType: string;
-  equipment: any;
-}
 
 interface AvailableDevice {
   id: string;
@@ -63,7 +51,6 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
   onBack 
 }) => {
   const [recommendations, setRecommendations] = useState<AdmissionRecommendation[]>([]);
-  const [availableBeds, setAvailableBeds] = useState<AvailableBed[]>([]);
   const [availableDevices, setAvailableDevices] = useState<AvailableDevice[]>([]);
   const [selectedRecommendation, setSelectedRecommendation] = useState<AdmissionRecommendation | null>(null);
   const [bedNumber, setBedNumber] = useState<string>('');
@@ -96,7 +83,6 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
       setRecommendations(transformedRecommendations);
 
       // Skip loading beds - manual entry only
-      setAvailableBeds([]);
 
       // Load available devices
       const devicesResponse = await fetch(getApiUrl('/admission/available-devices?devicetype=watch'));
@@ -177,14 +163,6 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
     }
   };
 
-  const getBedTypeIcon = (bedType: string) => {
-    switch (bedType) {
-      case 'ICU': return '🏥';
-      case 'cardiac': return '❤️';
-      case 'emergency': return '🚨';
-      default: return '🛏️';
-    }
-  };
 
   if (loading) {
     return (

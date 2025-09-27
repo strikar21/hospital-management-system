@@ -1,6 +1,7 @@
 // BaseService.ts - Shared functionality for all services
 import SecureStorage from '../utils/secureStorage';
 import { API_CONFIG, getApiUrl, getWsUrl } from '../config/apiConfig';
+import { DataTransformer } from '../utils/dataTransformer';
 
 export abstract class BaseService {
   protected static readonly BACKEND_BASE_URL = API_CONFIG.BACKEND_BASE_URL;
@@ -112,7 +113,11 @@ export abstract class BaseService {
       }
 
       const data = await response.json();
-      return data;
+
+      // Transform all API responses to consistent camelCase format
+      const transformedData = DataTransformer.transformApiResponse(data);
+
+      return transformedData;
     } catch (error) {
       console.error(`❌ Network error for ${endpoint}:`, error);
       throw error;

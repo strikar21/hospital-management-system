@@ -1,7 +1,6 @@
 // MedicationService.ts - Medication management and administration (V2)
 import { medication } from '../types';
 import { BaseService } from './BaseService';
-import { getApiUrl } from '../config/apiConfig';
 
 export class MedicationService extends BaseService {
 
@@ -21,7 +20,7 @@ export class MedicationService extends BaseService {
 
   static async getPatientMedications(patientId: string): Promise<medication[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/medications/patient/${patientId}`));
+      const response = await this.fetchFromBackend(`/medications/patient/${patientId}`);
       const medications = this.handleV2Response<medication>(response);
 
       console.log(`✅ Retrieved ${medications.length} medications for patient ${patientId}`);
@@ -34,7 +33,7 @@ export class MedicationService extends BaseService {
 
   static async getActiveMedications(patientId: string): Promise<medication[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/medications/patient/${patientId}/active`));
+      const response = await this.fetchFromBackend(`/medications/patient/${patientId}/active`);
       const medications = this.handleV2Response<medication>(response);
 
       console.log(`✅ Retrieved ${medications.length} active medications for patient ${patientId}`);
@@ -45,23 +44,27 @@ export class MedicationService extends BaseService {
     }
   }
 
-  static async addMedication(patientId: string, medication: Omit<medication, 'id' | 'history'>, userId: string): Promise<boolean> {
+  static async addMedication(patientId: string, medication: Omit<medication, 'id' | 'history'>, userId: string): Promise<medication | null> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/medications/patient/${patientId}/add`), {
+      const response = await this.fetchFromBackend(`/medications/patient/${patientId}/add`, {
         method: 'POST',
         body: JSON.stringify({
-          ...medication,
-          prescribedBy: userId,
+          medicationName: medication.name, // Map 'name' to 'medicationName' for backend
+          dosage: medication.dosage,
+          frequency: medication.frequency,
+          route: medication.route,
+          duration: medication.duration,
+          prescribedBy: medication.prescribedBy || userId,
           createdAt: new Date().toISOString(),
           status: 'active'
         })
       });
 
       console.log('✅ Medication added successfully');
-      return true;
+      return response; // Return the actual medication object from backend
     } catch (error) {
       console.error('❌ Error adding medication:', error);
-      return false;
+      return null;
     }
   }
 
@@ -74,7 +77,7 @@ export class MedicationService extends BaseService {
         ? { status: statusOrUpdates }
         : statusOrUpdates;
 
-      await this.fetchFromBackend(getApiUrl(`/medications/${medicationId}/status`), {
+      await this.fetchFromBackend(`/medications/${medicationId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
           ...updates,
@@ -93,7 +96,7 @@ export class MedicationService extends BaseService {
 
   static async discontinueMedication(patientId: string, medicationId: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/medications/${medicationId}/status`), {
+      await this.fetchFromBackend(`/medications/${medicationId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
           status: 'discontinued',
@@ -117,7 +120,7 @@ export class MedicationService extends BaseService {
 
   static async recordMedicationAdministration(patientId: string, medicationId: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(getApiUrl(`/medications/${medicationId}/complete`), {
+      await this.fetchFromBackend(`/medications/${medicationId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
           administeredBy: userId,
@@ -140,7 +143,7 @@ export class MedicationService extends BaseService {
 
   static async getMedicationTypes(): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(getApiUrl(`/medications/types`));
+      const response = await this.fetchFromBackend(`/medications/types`);
       const types = this.handleV2Response<any>(response);
 
       console.log(`✅ Retrieved ${types.length} medication types`);
@@ -275,7 +278,7 @@ export class MedicationService extends BaseService {
     try {
       // V2 doesn't have dedicated medication alerts endpoint yet
       // Fall back to v1 for now
-      const response = await this.fetchFromBackend(getApiUrl(`/patients/${patientId}/medications/alerts`));
+      const response = await this.fetchFromBackend(`/patients/${patientId}/medications/alerts`);
       return Array.isArray(response) ? response : [];
     } catch (error) {
       console.warn('⚠️ Medication alerts not available in v2, falling back to empty array');
@@ -287,7 +290,7 @@ export class MedicationService extends BaseService {
     try {
       // V2 doesn't have dedicated medication alerts endpoint yet
       // Fall back to v1 for now
-      await this.fetchFromBackend(getApiUrl(`/patients/${patientId}/medications/alerts/${alertId}/acknowledge`), {
+      await this.fetchFromBackend(`/patients/${patientId}/medications/alerts/${alertId}/acknowledge`, {
         method: 'POST',
         body: JSON.stringify({
           acknowledgedBy: userId,
@@ -311,7 +314,7 @@ export class MedicationService extends BaseService {
     try {
       // V2 doesn't have medication interactions endpoint yet
       // Fall back to v1 for now
-      const response = await this.fetchFromBackend(getApiUrl(`/patients/${patientId}/medications/check-interactions`), {
+      const response = await this.fetchFromBackend(`/patients/${patientId}/medications/check-interactions`, {
         method: 'POST',
         body: JSON.stringify(newMedication)
       });

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap, TrendingUp, AlertTriangle, 
-  Plus, Edit, Save, X, Pause, Play, StopCircle, FileText, Calendar, Clock, User as UserIcon,
-  TestTube, Stethoscope, Clipboard, History, Shield, CheckCircle, XCircle, MessageCircle,
-  Send, Reply
+  ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap, AlertTriangle, 
+  Plus, Edit, Save, X, Pause, Play, StopCircle, FileText, Clock, User as UserIcon,
+  TestTube, Stethoscope, Shield, CheckCircle, XCircle, MessageCircle,
+  Send
 } from 'lucide-react';
 import { patient, user, medication, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
 import {
@@ -83,7 +83,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   // New medication form
   const [isAddingMedication, setIsAddingMedication] = useState(false);
   const [newMedication, setNewMedication] = useState({
-    name: '', dosage: '', frequency: '', route: 'PO'
+    name: '', dosage: '', frequency: '', route: 'PO', duration: ''
   });
   
   // Investigation form
@@ -116,10 +116,8 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   const [addingNote, setAddingNote] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [acknowledgingAlert, setAcknowledgingAlert] = useState<string | null>(null);
-  const [addingMedication, setAddingMedication] = useState(false);
   const [addingInvestigation, setAddingInvestigation] = useState(false);
   const [addingTherapy, setAddingTherapy] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   // Sync local states with props
   useEffect(() => {
@@ -345,46 +343,11 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     setEditingNoteContent('');
   };
 
-  // Handle Patient Discharge
-  const handleDischargePatient = async () => {
-    setIsLoading(true);
-    try {
-      await PatientService.dischargePatient(patient.id, currentUser.id);
-      
-      const newCaseEntry: caseSheetEntry = {
-        id: 'cs_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        type: 'doctorNotes',
-        description: `Patient discharged by ${currentUser.name} (${currentUser.role})`,
-        performedBy: currentUser.name,
-        canEdit: false
-      };
-      addCaseSheetEntry(newCaseEntry);
-
-      // Notify parent to remove from list
-      if (onPatientDischarge) {
-        onPatientDischarge(patient.id);
-      }
-      
-      // Close the detail view
-      setTimeout(() => {
-        onClose();
-      }, 1000);
-      
-      alert(`${patient.name} has been successfully discharged and removed from the active patient list.`);
-    } catch (error) {
-      console.error('Failed to discharge patient:', error);
-      alert('Failed to discharge patient. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Real Hospital Discharge Workflow Functions
   const handleDoctorRequestDischarge = async () => {
     if (window.confirm(`Request discharge for ${patient.name}?\n\nThis will:\n• Send request to Hospital Administration for approval\n• Patient will remain active until fully processed\n\nConfirm discharge request?`)) {
-      setIsLoading(true);
-      try {
+            try {
         const response = await fetch(`/api/v2/patients/${patient.id}/discharge-request`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -401,15 +364,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       } catch (error) {
         alert('Failed to submit discharge request. Please try again.');
       } finally {
-        setIsLoading(false);
-      }
+              }
     }
   };
 
   const handleAdminApproveDischarge = async () => {
     if (window.confirm(`Approve discharge for ${patient.name}?\n\nThis confirms:\n• Insurance/billing clearance\n• Administrative approval\n• Ready for nurse to complete discharge\n\nApprove discharge?`)) {
-      setIsLoading(true);
-      try {
+            try {
         const response = await fetch(`/api/v2/patients/${patient.id}/discharge-approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -426,15 +387,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       } catch (error) {
         alert('Failed to approve discharge. Please try again.');
       } finally {
-        setIsLoading(false);
-      }
+              }
     }
   };
 
   const handleNurseCompleteDischarge = async () => {
     if (window.confirm(`Complete discharge for ${patient.name}?\n\nThis will:\n• Remove patient from active list\n• Free up bed and equipment\n• Generate discharge summary\n• Complete the discharge process\n\nComplete discharge?`)) {
-      setIsLoading(true);
-      try {
+            try {
         const response = await fetch(`/api/v2/patients/${patient.id}/discharge-complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -469,8 +428,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       } catch (error) {
         alert('Failed to complete discharge. Please try again.');
       } finally {
-        setIsLoading(false);
-      }
+              }
     }
   };
 
@@ -589,7 +547,14 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   // Enhanced case sheet that includes all activities, with only notes categorized by staff role
   const getEnhancedCaseSheet = () => {
     const enhancedEntries = [...caseSheet];
-    
+
+    // Ensure arrays are properly handled - backend might return non-arrays
+    const ensureArray = (item: any) => {
+      if (!item) return [];
+      if (Array.isArray(item)) return item;
+      if (typeof item === 'object') return Object.values(item);
+      return [];
+    };
 
     // For existing entries where we need to guess from performer name (legacy data)
     const getRoleFromPerformer = (performedBy: string): 'doctorNotes' | 'nursingNotes' | 'therapistNotes' | 'technicianNotes' | 'pharmacyNotes' | 'otherNotes' => {
@@ -604,9 +569,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
       if (name.match(/^[a-z]+ [a-z]$/)) return 'doctorNotes'; // "Srikar A" pattern
       return 'otherNotes';
     };
-    
+
     // Add medication entries - keep as MEDICATION type
-    medications.forEach((med: any) => {
+    ensureArray(medications).forEach((med: any) => {
       enhancedEntries.push({
         id: `med-${med.id}`,
         timestamp: med.createdAt,
@@ -618,7 +583,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     });
     
     // Add investigation entries - keep as INVESTIGATION type
-    investigations.forEach((inv: any) => {
+    ensureArray(investigations).forEach((inv: any) => {
       enhancedEntries.push({
         id: `inv-${inv.id}`,
         timestamp: inv.createdAt ? `${inv.createdAt}T00:00:00Z` : new Date().toISOString(),
@@ -630,7 +595,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     });
     
     // Add therapy entries - keep as THERAPY type
-    therapies.forEach((therapy: any) => {
+    ensureArray(therapies).forEach((therapy: any) => {
       enhancedEntries.push({
         id: `therapy-${therapy.id}`,
         timestamp: therapy.startDate ? `${therapy.startDate}T00:00:00Z` : new Date().toISOString(),
@@ -642,7 +607,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     });
 
     // Add written notes - categorize by staff role based on who authored them
-    notes.forEach((note: any) => {
+    ensureArray(notes).forEach((note: any) => {
       enhancedEntries.push({
         id: `note-${note.id}`,
         timestamp: note.timestamp,
@@ -670,13 +635,6 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   // Clinical Decision Support - Check for alerts when patient data changes
   useEffect(() => {
     const checkClinicalAlerts = () => {
-      const patientData = {
-        ...patient,
-        medications: medications,
-        investigations: investigations,
-        therapies: therapies
-      };
-      
       // Clinical decision support temporarily disabled
       const alerts: clinicalAlert[] = [];
       setClinicalAlerts(alerts);
@@ -724,7 +682,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
     };
     
     fetchLabResults();
-  }, [patient.id, investigations.length]); // Re-run when new investigations are added
+  }, [patient.id]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Imaging Integration - Auto-fetch imaging studies
   useEffect(() => {
@@ -841,7 +799,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
             </div>
             {renderDischargeWorkflowButton()}
             <div className="text-xs text-gray-500">
-              Updated: {formatTimeOnly((patient.vitals?.lastSync || new Date()).toString())}
+              Updated: {formatTimeOnly((patient.vitals?.lastDataReceived || new Date()).toString())}
             </div>
             <div className="text-xs text-gray-500">
               <Shield className="w-4 h-4 inline mr-1" />
@@ -1061,7 +1019,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       ))}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {patient.vitals?.heartRate || 70} BPM •
+                      {patient.vitals?.heartRate || 0} BPM •
                       <span className="text-green-600 ml-1">↗ Stable</span>
                     </div>
                   </div>
@@ -1083,7 +1041,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       ))}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {patient.vitals?.bloodPressure || '120/80'} •
+                      {patient.vitals?.systolicPressure || '--'}/{patient.vitals?.diastolicPressure || '--'} •
                       <span className="text-green-600 ml-1">→ Normal</span>
                     </div>
                   </div>
@@ -1105,7 +1063,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       ))}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {patient.vitals?.temperature || 98.6}°F •
+                      {patient.vitals?.skinTemperature ? patient.vitals.skinTemperature.toFixed(1) : '--'}°F •
                       <span className="text-green-600 ml-1">→ Normal</span>
                     </div>
                   </div>
@@ -1127,7 +1085,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       ))}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {patient.vitals?.oxygenSat || 98}% •
+                      {patient.vitals?.oxygenSaturation || '--'}% •
                       <span className="text-green-600 ml-1">→ Good</span>
                     </div>
                   </div>
@@ -1143,11 +1101,11 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Heart Rate</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.heartRate || 70, 'heartRate'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.heartRate || 0, 'heartRate'))}`}>
                         <Heart className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-red-600">{patient.vitals?.heartRate || 70}</span>
+                        <span className="font-bold text-xl text-red-600">{patient.vitals?.heartRate || '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">BPM</span>
                       </div>
                     </div>
@@ -1155,15 +1113,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, 'bloodPressure')}
+                    onClick={() => onVitalClick(patient, 'systolicPressure')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Blood Pressure</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.bloodPressureValue || 120, 'bloodPressure'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.systolicPressure || 0, 'systolicPressure', patient.vitals?.diastolicPressure || 0))}`}>
                         <Droplets className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-lg text-purple-600">{patient.vitals?.bloodPressure || '120/80'}</span>
+                        <span className="font-bold text-lg text-purple-600">{patient.vitals?.systolicPressure || '--'}/{patient.vitals?.diastolicPressure || '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">mmHg</span>
                       </div>
                     </div>
@@ -1171,15 +1129,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, 'oxygenSat')}
+                    onClick={() => onVitalClick(patient, 'oxygenSaturation')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Oxygen Sat</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.oxygenSat || 98, 'oxygenSat'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.oxygenSaturation || 0, 'oxygenSaturation'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-blue-600">{patient.vitals?.oxygenSat || 98}</span>
+                        <span className="font-bold text-xl text-blue-600">{patient.vitals?.oxygenSaturation || '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">%</span>
                       </div>
                     </div>
@@ -1187,15 +1145,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, 'temperature')}
+                    onClick={() => onVitalClick(patient, 'skinTemperature')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Temperature</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.temperature || 98.6, 'temperature'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.skinTemperature || 0, 'skinTemperature'))}`}>
                         <Thermometer className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-orange-600">{(patient.vitals?.temperature || 98.6).toFixed(1)}</span>
+                        <span className="font-bold text-xl text-orange-600">{patient.vitals?.skinTemperature ? patient.vitals.skinTemperature.toFixed(1) : '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">°F</span>
                       </div>
                     </div>
@@ -1207,11 +1165,11 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Respiratory Rate</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.respiratoryRate || 16, 'respiratoryRate'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.respiratoryRate || 0, 'respiratoryRate'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-cyan-600">{patient.vitals?.respiratoryRate || 16}</span>
+                        <span className="font-bold text-xl text-cyan-600">{patient.vitals?.respiratoryRate || '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">/min</span>
                       </div>
                     </div>
@@ -1219,15 +1177,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, patient.vitals?.isEcgMode ? 'ecg' : 'eeg')}
+                    onClick={() => onVitalClick(patient, patient.vitals?.isEcgMode ? 'ecgReading' : 'eegReading')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">{patient.vitals?.isEcgMode ? 'ECG' : 'EEG'}</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45), patient.vitals?.isEcgMode ? 'ecg' : 'eeg'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.isEcgMode ? (patient.vitals?.ecgReading || 0) : (patient.vitals?.eegReading || 0), patient.vitals?.isEcgMode ? 'ecgReading' : 'eegReading'))}`}>
                         <Zap className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-green-600">{patient.vitals?.isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45)}</span>
+                        <span className="font-bold text-xl text-green-600">{patient.vitals?.isEcgMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}</span>
                         <span className="text-xs text-gray-500 ml-1">{patient.vitals?.isEcgMode ? 'mV' : 'μV'}</span>
                       </div>
                     </div>
@@ -1235,15 +1193,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, 'bioImpedance')}
+                    onClick={() => onVitalClick(patient, 'bioelectricalImpedance')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Bioimpedance</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.bioImpedance || 500, 'bioImpedance'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.bioelectricalImpedance || 0, 'bioelectricalImpedance'))}`}>
                         <Zap className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-teal-600">{patient.vitals?.bioImpedance || 500}</span>
+                        <span className="font-bold text-xl text-teal-600">{patient.vitals?.bioelectricalImpedance || '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">Ω</span>
                       </div>
                     </div>
@@ -1251,15 +1209,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
 
                   <div 
                     className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-                    onClick={() => onVitalClick(patient, 'tremor')}
+                    onClick={() => onVitalClick(patient, 'tremorIntensity')}
                   >
                     <p className="text-xs text-gray-600 mb-2 text-center font-medium">Tremor Level</p>
                     <div className="flex items-center justify-between">
-                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.tremor || 0, 'tremor'))}`}>
+                      <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(patient.vitals?.tremorIntensity || 0, 'tremorIntensity'))}`}>
                         <Activity className="w-5 h-5" />
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-xl text-pink-600">{(patient.vitals?.tremor || 0).toFixed(1)}</span>
+                        <span className="font-bold text-xl text-pink-600">{patient.vitals?.tremorIntensity ? patient.vitals.tremorIntensity.toFixed(1) : '--'}</span>
                         <span className="text-xs text-gray-500 ml-1">/10</span>
                       </div>
                     </div>
@@ -1280,7 +1238,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         {isEcgMode ? 'Cardiac Rhythm' : 'Brain Activity'}
                       </p>
                       <p className="text-lg font-bold text-green-600">
-                        {isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45)}
+                        {isEcgMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}
                         {isEcgMode ? ' mV' : ' μV'}
                       </p>
                     </div>
@@ -1344,7 +1302,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       )}
                     </select>
                     <button
-                      onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecg' : 'eeg')}
+                      onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecgReading' : 'eegReading')}
                       className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
                     >
                       Full View
@@ -1356,7 +1314,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                 <div 
                   className="bg-gray-900 rounded-lg cursor-pointer flex flex-col hover:bg-gray-800 transition-colors p-2"
                   style={{ height: 'calc(100% - 60px)' }}
-                  onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecg' : 'eeg')}
+                  onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecgReading' : 'eegReading')}
                 >
                   <div className="flex items-center justify-between mb-2 flex-shrink-0">
                     <div className="flex items-center space-x-3">
@@ -1367,7 +1325,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                         isEcgMode ? 'text-green-400' : 'text-blue-400'
                       }`}>
                         {isEcgMode ? 'Cardiac Signal' : 'Brain Signal'} • 
-                        {isEcgMode ? (patient.vitals?.ecg || 75) : (patient.vitals?.eeg || 45)}
+                        {isEcgMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}
                         {isEcgMode ? 'mV' : 'μV'}
                       </span>
                       <span className="text-green-300 text-sm">25mm/s • 10mm/mV</span>
@@ -1582,7 +1540,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                     </div>
                   </div>
                 ))}
-                {notes.length === 0 && (
+                {(notes || []).length === 0 && (
                   <div className="text-center py-6 text-gray-500">
                     <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
                     <p>No clinical notes yet</p>
@@ -1726,7 +1684,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       placeholder="Medication name"
                       value={newMedication.name}
                       onChange={(e) => setNewMedication(prev => ({ ...prev, name: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm"
+                      className="px-2 py-1 border rounded text-sm col-span-2"
                     />
                     <input
                       type="text"
@@ -1740,6 +1698,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                       placeholder="Frequency (e.g., Twice daily)"
                       value={newMedication.frequency}
                       onChange={(e) => setNewMedication(prev => ({ ...prev, frequency: e.target.value }))}
+                      className="px-2 py-1 border rounded text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Duration (e.g., 7 days)"
+                      value={newMedication.duration}
+                      onChange={(e) => setNewMedication(prev => ({ ...prev, duration: e.target.value }))}
                       className="px-2 py-1 border rounded text-sm"
                     />
                     <select
@@ -1758,8 +1723,8 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                   <div className="flex space-x-2 mt-2">
                     <button
                       onClick={async () => {
-                        if (addingMedication) return; // Prevent multiple simultaneous calls
-                        if (!newMedication.name || !newMedication.dosage || !newMedication.frequency) return;
+                        if (isAddingMedication) return; // Prevent multiple simultaneous calls
+                        if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
                         setIsAddingMedication(true);
                         try {
                           const timestamp = new Date().toISOString();
@@ -1771,19 +1736,26 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                             createdAt: timestamp,
                             canEdit: true
                           };
-                          await MedicationService.addMedication(patient.id, medicationData, currentUser.id);
-                          const newMed: medication = {
-                            id: 'med_' + Date.now(),
-                            ...medicationData,
-                            history: [{
-                              id: 'hist_' + Date.now(),
-                              action: 'prescribed' as const,
-                              timestamp,
-                              performedBy: currentUser.name
-                            }]
-                          };
-                          setMedications(prev => [...prev, newMed]);
-                          setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO' });
+                          const newMed = await MedicationService.addMedication(patient.id, medicationData, currentUser.id);
+                          if (newMed) {
+                            // Add history if not present from backend
+                            const medicationWithHistory: medication = {
+                              ...newMed,
+                              history: newMed.history || [{
+                                id: 'hist_' + Date.now(),
+                                action: 'prescribed' as const,
+                                timestamp,
+                                performedBy: currentUser.name
+                              }]
+                            };
+                            setMedications(prev => [...prev, medicationWithHistory]);
+                          } else {
+                            console.error('Failed to add medication - no response from backend');
+                            alert('Failed to add medication. Please try again.');
+                            setIsAddingMedication(false);
+                            return;
+                          }
+                          setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
                           setIsAddingMedication(false);
 
                           // Add case sheet entry to backend
@@ -1795,7 +1767,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                               },
                               body: JSON.stringify({
                                 entrytype: 'medication',
-                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}) prescribed by ${currentUser.name}`,
+                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
                                 performedBy: currentUser.name
                               })
                             });
@@ -1806,7 +1778,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                                 id: caseResult.id || 'cs_' + Date.now(),
                                 timestamp,
                                 type: 'pharmacyNotes',
-                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}) prescribed by ${currentUser.name}`,
+                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
                                 performedBy: currentUser.name,
                                 canEdit: true
                               };
@@ -1821,10 +1793,10 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                           setIsAddingMedication(false);
                         }
                       }}
-                      disabled={addingMedication || !newMedication.name || !newMedication.dosage || !newMedication.frequency}
+                      disabled={isAddingMedication || !newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration}
                       className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
                     >
-                      {addingMedication ? (
+                      {isAddingMedication ? (
                         <>
                           <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                           <span>Adding...</span>
@@ -1839,7 +1811,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
                     <button
                       onClick={() => {
                         setIsAddingMedication(false);
-                        setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO' });
+                        setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
                       }}
                       className="flex items-center space-x-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
                     >

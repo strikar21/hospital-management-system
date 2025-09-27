@@ -1,0 +1,97 @@
+# Prometheus Configuration for Hospital Management System
+# Scrape interval and evaluation interval
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Rules and alerts
+rule_files:
+  - "hospital_alerts.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+  # Hospital Backend API
+  - job_name: 'hospital-backend'
+    static_configs:
+      - targets: ['hospital-backend:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # PostgreSQL Database
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres_exporter:9187']
+    scrape_interval: 30s
+
+  # TimescaleDB
+  - job_name: 'timescaledb'
+    static_configs:
+      - targets: ['timescale_exporter:9187']
+    scrape_interval: 30s
+
+  # Redis Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis_exporter:9121']
+    scrape_interval: 30s
+
+  # MQTT Broker
+  - job_name: 'mqtt'
+    static_configs:
+      - targets: ['mqtt_exporter:9234']
+    scrape_interval: 30s
+
+  # Node Exporter (System Metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node_exporter:9100']
+    scrape_interval: 15s
+
+  # Docker Container Metrics
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 15s
+
+  # Hospital Frontend (if metrics endpoint available)
+  - job_name: 'hospital-frontend'
+    static_configs:
+      - targets: ['hospital-frontend:80']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+
+  # Grafana Monitoring
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+# Remote write configuration for long-term storage (optional)
+# remote_write:
+#   - url: "https://your-remote-storage/api/v1/write"
+#     basic_auth:
+#       username: "your-username"
+#       password: "your-password"
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 200h
+    retention.size: 10GB
+    path: /prometheus

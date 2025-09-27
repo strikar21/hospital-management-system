@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Pill, TrendingUp, TrendingDown, ArrowLeft } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Pill, ArrowLeft } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { patient } from './types';
 import { VitalService } from './services';
 import auditService from './services/auditService';
@@ -67,16 +67,21 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
   // Map frontend vital types to backend types
   const mapVitalType = (frontendType: string): string => {
     const mapping: { [key: string]: string } = {
-      'heartrate': 'heartrate',
-      'temperature': 'temperature',
-      'bloodpressure': 'bloodpressureSystolic',
-      'oxygenSat': 'oxygensaturation',
-      'respiratoryrate': 'respiratoryrate'
+      'heartRate': 'heartRate',
+      'skinTemperature': 'skinTemperature',
+      'systolicPressure': 'systolicPressure',
+      'diastolicPressure': 'diastolicPressure',
+      'oxygenSaturation': 'oxygenSaturation',
+      'respiratoryRate': 'respiratoryRate',
+      'ecgReading': 'ecgReading',
+      'eegReading': 'eegReading',
+      'bioelectricalImpedance': 'bioelectricalImpedance',
+      'tremorIntensity': 'tremorIntensity'
     };
     return mapping[frontendType] || frontendType;
   };
 
-  const loadVitalData = async () => {
+  const loadVitalData = useCallback(async () => {
     setLoading(true);
     console.log('=== LOADING VITALS DATA ===');
     
@@ -115,7 +120,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       
       if (vitalHistoryData && vitalHistoryData.length > 0) {
         // Convert VitalHistory format to chart data format
-        const isBloodPressure = vitalType === 'bloodpressure';
+        const isBloodPressure = vitalType === 'systolicPressure' || vitalType === 'diastolicPressure';
         
         if (isBloodPressure) {
           console.log('Processing blood pressure data');
@@ -123,15 +128,15 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           // Convert to systolic BP data
           const systolicData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
-            value: point.bloodPressure || 0,
+            value: point.systolicPressure || 0,
             qualityScore: 0.9,
             dataPoints: 1
           }));
-          
+
           // Convert to diastolic BP data
           const diastolicData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
-            value: point.bloodPressureDiastolic || 0,
+            value: point.diastolicPressure || 0,
             qualityScore: 0.9,
             dataPoints: 1
           }));
@@ -153,17 +158,17 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           // Convert single vital data
           // Map frontend vital types to VitalHistory property names
           const vitalKeyMap: { [key: string]: keyof typeof vitalHistoryData[0] } = {
-            'heartrate': 'heartRate',
-            'temperature': 'temperature',
-            'oxygensat': 'oxygenSat',
-            'respiratoryrate': 'respiratoryRate',
-            'ecg': 'ecg',
-            'eeg': 'eeg',
-            'bioimpedance': 'bioImpedance',
-            'tremor': 'tremor'
+            'heartRate': 'heartRate',
+            'skinTemperature': 'skinTemperature',
+            'oxygenSaturation': 'oxygenSaturation',
+            'respiratoryRate': 'respiratoryRate',
+            'ecgReading': 'ecgReading',
+            'eegReading': 'eegReading',
+            'bioelectricalImpedance': 'bioelectricalImpedance',
+            'tremorIntensity': 'tremorIntensity'
           };
           
-          const vitalKey = vitalKeyMap[vitalType] || 'heartrate';
+          const vitalKey = vitalKeyMap[vitalType] || 'heartRate';
           console.log('Mapping vitalType:', vitalType, 'to key:', vitalKey);
           
           const chartData = vitalHistoryData.map((point: any) => ({
@@ -215,7 +220,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       setLoading(false);
       console.log('=== LOADING COMPLETE ===');
     }
-  };
+  }, [vitalType, selectedTimeframe, selectedHours, showRawData, patient, showMedications]);
 
   useEffect(() => {
     loadVitalData();
@@ -230,7 +235,7 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
         { timeframe: selectedTimeframe }
       ).catch(e => console.warn('Audit logging failed:', e));
     }
-  }, [patient.id, vitalType, selectedTimeframe, showMedications, showRawData]);
+  }, [patient.id, vitalType, selectedTimeframe, showMedications, showRawData, loadVitalData, vitalData.length]);
 
   // Handle click outside to close modal
   useEffect(() => {
@@ -306,22 +311,21 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
     return null; // Use default dot for normal values
   };
   
-  const isBloodPressure = vitalType === 'bloodpressure';
+  const isBloodPressure = vitalType === 'systolicPressure' || vitalType === 'diastolicPressure';
   
   // Function to check if a vital value is abnormal
   const isAbnormal = (value: number, vitalType: string, isDiastolic: boolean = false) => {
     const ranges: { [key: string]: { min: number; max: number } } = {
-      heartrate: { min: 60, max: 100 },
-      temperature: { min: 97.0, max: 100.4 }, // °F
-      oxygenSat: { min: 95, max: 100 },
-      respiratoryrate: { min: 12, max: 20 },
-      bloodpressure: isDiastolic 
-        ? { min: 60, max: 90 }   // Diastolic: 60-90 mmHg 
-        : { min: 90, max: 140 },  // Systolic: 90-140 mmHg
-      ecg: { min: 80, max: 160 },
-      eeg: { min: 30, max: 60 },
-      bioimpedance: { min: 400, max: 600 },
-      tremor: { min: 0, max: 0.5 }
+      heartRate: { min: 60, max: 100 },
+      skinTemperature: { min: 97.0, max: 100.4 }, // °F
+      oxygenSaturation: { min: 95, max: 100 },
+      respiratoryRate: { min: 12, max: 20 },
+      systolicPressure: { min: 90, max: 140 },  // Systolic: 90-140 mmHg
+      diastolicPressure: { min: 60, max: 90 },   // Diastolic: 60-90 mmHg
+      ecgReading: { min: 80, max: 160 },
+      eegReading: { min: 30, max: 60 },
+      bioelectricalImpedance: { min: 400, max: 600 },
+      tremorIntensity: { min: 0, max: 0.5 }
     };
     
     const range = ranges[vitalType] || { min: 0, max: 100 };
@@ -431,11 +435,16 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
 
   const getvitaldisplayname = () => {
     const names: { [key: string]: string } = {
-      'heartrate': 'Heart Rate',
-      'temperature': 'Temperature', 
-      'bloodpressure': 'Blood Pressure',
-      'oxygenSat': 'Oxygen Saturation',
-      'respiratoryrate': 'Respiratory Rate'
+      'heartRate': 'Heart Rate',
+      'skinTemperature': 'Skin Temperature',
+      'systolicPressure': 'Systolic Pressure',
+      'diastolicPressure': 'Diastolic Pressure',
+      'oxygenSaturation': 'Oxygen Saturation',
+      'respiratoryRate': 'Respiratory Rate',
+      'ecgReading': 'ECG Reading',
+      'eegReading': 'EEG Reading',
+      'bioelectricalImpedance': 'Bioelectrical Impedance',
+      'tremorIntensity': 'Tremor Intensity'
     };
     return names[vitalType] || vitalType;
   };
@@ -516,20 +525,6 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
     ];
   };
 
-  // Determine color based on vital value and thresholds
-  const getVitalColor = (value: number, thresholds: any) => {
-    if (!thresholds) return '#3B82F6'; // Default blue
-    
-    const { normalMin, normalMax, warningMin, warningMax } = thresholds;
-    
-    if (value < warningMin || value > warningMax) {
-      return '#EF4444'; // Red for critical/abnormal
-    } else if (value < normalMin || value > normalMax) {
-      return '#F59E0B'; // Yellow/orange for warning/edge
-    } else {
-      return '#10B981'; // Green for normal
-    }
-  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

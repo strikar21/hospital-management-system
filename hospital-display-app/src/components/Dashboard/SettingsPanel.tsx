@@ -55,10 +55,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.enableautoscroll || false}
+                  checked={settings.enableAutoScroll || false}
                   onChange={(e) => onUpdateSettings({
                     ...settings,
-                    enableautoscroll: e.target.checked
+                    enableAutoScroll: e.target.checked
                   })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   aria-describedby="autoscroll-description"
@@ -67,16 +67,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <span className="text-sm">Enable auto-scroll for patient rows</span>
               </label>
 
-              {settings.enableautoscroll && (
+              {settings.enableAutoScroll && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Scroll speed (pixels/second):
                   </label>
                   <select
-                    value={settings.autoscrollspeed || 30}
+                    value={settings.autoScrollSpeed || 30}
                     onChange={(e) => onUpdateSettings({
                       ...settings,
-                      autoscrollspeed: parseInt(e.target.value)
+                      autoScrollSpeed: parseInt(e.target.value)
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -98,26 +98,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={settings.enableautologout}
+                  checked={settings.enableAutoLogout}
                   onChange={(e) => onUpdateSettings({
                     ...settings,
-                    enableautologout: e.target.checked
+                    enableAutoLogout: e.target.checked
                   })}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm">Enable auto-logout after inactivity</span>
               </label>
 
-              {settings.enableautologout && (
+              {settings.enableAutoLogout && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Auto-logout after (minutes):
                   </label>
                   <select
-                    value={settings.autologoutminutes}
+                    value={settings.autoLogoutMinutes}
                     onChange={(e) => onUpdateSettings({
                       ...settings,
-                      autologoutminutes: parseInt(e.target.value)
+                      autoLogoutMinutes: parseInt(e.target.value)
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -156,8 +156,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <h4 className="font-medium mb-2">Current Status</h4>
             <div className="text-sm space-y-1">
               <p><strong>User:</strong> {currentUser.name} ({currentUser.role})</p>
-              <p><strong>Auto-logout:</strong> {settings.enableautologout ? `Enabled (${settings.autologoutminutes}min)` : 'Disabled'}</p>
-              <p><strong>Auto-scroll:</strong> {settings.enableautoscroll ? `Enabled (${settings.autoscrollspeed || 30}px/s)` : 'Disabled'}</p>
+              <p><strong>Auto-logout:</strong> {settings.enableAutoLogout ? `Enabled (${settings.autoLogoutMinutes}min)` : 'Disabled'}</p>
+              <p><strong>Auto-scroll:</strong> {settings.enableAutoScroll ? `Enabled (${settings.autoScrollSpeed || 30}px/s)` : 'Disabled'}</p>
               <p><strong>Layout:</strong> 2 cards per row (same direction scrolling)</p>
               <p><strong>Patients:</strong> {patients.length} loaded</p>
             </div>

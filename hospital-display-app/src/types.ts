@@ -24,12 +24,17 @@ export interface alert {
 export interface patient {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   bedNumber: string;
+  roomNumber: string;
   ward: string;
   room: string;
   department: string;
   assignedDoctor: string;
+  attendingPhysician: string;
   attendingPhysicianName?: string;
+  nurseInCharge: string;
   assignedDeviceId?: string;  // ID of assigned ESP32 watch device
   deviceStatus?: 'connected' | 'disconnected' | 'offline' | 'lowBattery';  // Real-time device status
   deviceBattery?: number;  // Device battery level (0-100)
@@ -40,31 +45,31 @@ export interface patient {
   lastMedicationTime?: string;
   nextMedicationDue?: string;
   vitals: {
-    // Cardiovascular
+    // Cardiovascular - STANDARDIZED NAMES
     heartRate: number; // Always integer - BPM
-    bloodPressure: string; // Formatted string "120/80"
-    bloodPressureValue: number; // Always integer - systolic pressure
+    systolicPressure: number; // Always integer - systolic pressure in mmHg
+    diastolicPressure: number; // Always integer - diastolic pressure in mmHg
 
-    // Respiratory
+    // Respiratory - STANDARDIZED NAMES
     respiratoryRate: number; // Always integer - breaths per minute
-    oxygenSat: number; // Always integer - percentage
+    oxygenSaturation: number; // Always integer - percentage
 
-    // Temperature
-    temperature: number; // Can have decimals - Fahrenheit
+    // Temperature - STANDARDIZED NAME
+    skinTemperature: number; // Can have decimals - Fahrenheit
 
-    // Neurological/Cardiac Monitoring
-    ecg: number; // Always integer - mV * 100 (so 120 = 1.2mV)
-    eeg: number; // Always integer - μV (microvolts)
+    // Neurological/Cardiac Monitoring - STANDARDIZED NAMES
+    ecgReading: number; // Always integer - mV * 100 (so 120 = 1.2mV)
+    eegReading: number; // Always integer - μV (microvolts)
     isEcgMode: boolean; // true = ECG, false = EEG
 
-    // Advanced Monitoring
-    bioImpedance: number; // Ohms - bioelectrical impedance
-    tremor: number; // 0-10 scale tremor intensity
+    // Advanced Monitoring - STANDARDIZED NAMES
+    bioelectricalImpedance: number; // Ohms - bioelectrical impedance
+    tremorIntensity: number; // 0-10 scale tremor intensity
     fallRisk: 'low' | 'medium' | 'high'; // Fall risk assessment
 
-    // Metadata
-    lastUpdated: string;
-    lastSync: string;
+    // Metadata - STANDARDIZED NAMES
+    lastDataReceived: string;
+    dataQualityScore: number; // 0-1 scale for data quality
   };
   status: 'stable' | 'critical' | 'emergency' | 'active' | 'pendingDischarge' | 'readyForNurse' | 'discharged' | 'dischargeApproved';
   dischargeStatus?: 'active' | 'requested' | 'adminapproved' | 'discharged';
@@ -198,15 +203,15 @@ export interface caseSheetEntry {
 export interface vitalhistory {
   time: string;
   heartRate: number;
-  temperature: number;
-  oxygenSat: number;
+  skinTemperature: number;
+  oxygenSaturation: number;
   respiratoryRate: number;
-  bloodPressure: number; // systolic
-  bloodPressureDiastolic?: number;
-  ecg: number;
-  eeg: number;
-  bioImpedance: number;
-  tremor: number;
+  systolicPressure: number; // systolic pressure in mmHg
+  diastolicPressure: number; // diastolic pressure in mmHg
+  ecgReading: number;
+  eegReading: number;
+  bioelectricalImpedance: number;
+  tremorIntensity: number;
 }
 
 export interface ecgreading {
@@ -258,18 +263,18 @@ export interface auditlog {
 }
 
 export interface appsettings {
-  autologoutminutes: number;
-  enableautologout: boolean;
-  bedsidemode: boolean;
+  autoLogoutMinutes: number;
+  enableAutoLogout: boolean;
+  bedsideMode: boolean;
   // New settings for extended monitoring
-  arrhythmiadetection?: boolean;
-  eegmonitoring?: boolean;
-  tremordetection?: boolean;
-  falldetection?: boolean;
-  audioalarms?: boolean;
-  privacymode?: boolean;
-  autoscrollspeed?: number; // pixels per second for auto-scroll
-  enableautoscroll?: boolean;
+  arrhythmiaDetection?: boolean;
+  eegMonitoring?: boolean;
+  tremorDetection?: boolean;
+  fallDetection?: boolean;
+  audioAlarms?: boolean;
+  privacyMode?: boolean;
+  autoScrollSpeed?: number; // pixels per second for auto-scroll
+  enableAutoScroll?: boolean;
 }
 
 // Enhanced vital sign monitoring types
@@ -345,7 +350,7 @@ export interface systemstatus {
 }
 
 // Extended vital types
-export type vitaltype = 'heartRate' | 'oxygenSat' | 'temperature' | 'skintemperature' | 'ecg' | 'eeg' | 'bloodPressure' | 'respiratoryRate' | 'bioImpedance' | 'tremor';
+export type vitaltype = 'heartRate' | 'oxygenSaturation' | 'skinTemperature' | 'ecgReading' | 'eegReading' | 'systolicPressure' | 'diastolicPressure' | 'respiratoryRate' | 'bioelectricalImpedance' | 'tremorIntensity';
 export type vitalstatus = 'normal' | 'warning' | 'critical';
 export type timerange = '1h' | '6h' | '24h' | '7d';
 export type authmethod = 'nfc' | 'credentials';
@@ -355,21 +360,21 @@ export type alertseverity = 'low' | 'medium' | 'high' | 'critical';
 export type medicationstatus = 'active' | 'stopped' | 'held';
 export type investigationstatus = 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
 export type therapystatus = 'active' | 'completed' | 'cancelled';
-export type MonitoringMode = 'ecg' | 'eeg';
+export type MonitoringMode = 'ecgReading' | 'eegReading';
 
 // Enhanced monitoring configuration
 export interface monitoringconfig {
   vitalSignThresholds: {
     heartRate: { min: number; max: number; criticalMin: number; criticalMax: number };
-    bloodPressure: { min: number; max: number; criticalMin: number; criticalMax: number };
-    temperature: { min: number; max: number; criticalMin: number; criticalMax: number };
+    systolicPressure: { min: number; max: number; criticalMin: number; criticalMax: number };
+    diastolicPressure: { min: number; max: number; criticalMin: number; criticalMax: number };
     skinTemperature: { min: number; max: number; criticalMin: number; criticalMax: number };
-    oxygenSat: { min: number; max: number; criticalMin: number; criticalMax: number };
+    oxygenSaturation: { min: number; max: number; criticalMin: number; criticalMax: number };
     respiratoryRate: { min: number; max: number; criticalMin: number; criticalMax: number };
-    ecg: { min: number; max: number; criticalMin: number; criticalMax: number };
-    eeg: { min: number; max: number; criticalMin: number; criticalMax: number };
-    bioImpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
-    tremor: { maxIntensity: number; maxDuration: number };
+    ecgReading: { min: number; max: number; criticalMin: number; criticalMax: number };
+    eegReading: { min: number; max: number; criticalMin: number; criticalMax: number };
+    bioelectricalImpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
+    tremorIntensity: { maxIntensity: number; maxDuration: number };
   };
   arrhythmiaDetection: {
     enabled: boolean;

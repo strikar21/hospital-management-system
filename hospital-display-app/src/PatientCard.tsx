@@ -48,9 +48,9 @@ const PatientCard: React.FC<PatientCardProps> = ({
   const pathData = "M 0 25 L 250 25"; // Flat line placeholder
 
   // Detect various conditions
-  const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecg || 120);
-  const seizureActivity = patient.vitals?.eeg ? MedicalUtils.detectSeizureActivity(patient.vitals?.eeg, patient.vitals?.heartRate || 0) : false;
-  const fallRisk = MedicalUtils.assessFallRisk(patient.vitals?.tremor || 0, patient.vitals?.heartRate || 0, patient.age);
+  const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecgReading || 0);
+  const seizureActivity = patient.vitals?.eegReading ? MedicalUtils.detectSeizureActivity(patient.vitals?.eegReading, patient.vitals?.heartRate || 0) : false;
+  const fallRisk = MedicalUtils.assessFallRisk(patient.vitals?.tremorIntensity || 0, patient.vitals?.heartRate || 0, patient.age);
 
   // Add fall risk alert to displayed alerts if high or medium risk
   const alertsWithFallRisk = [...(displayedAlerts || [])];
@@ -88,91 +88,127 @@ const PatientCard: React.FC<PatientCardProps> = ({
     );
   };
 
-  // Helper function to get vital alert status
+  // Helper function to get vital alert status based on medical ranges and alerts
   const getVitalAlertStatus = (vitalKey: string) => {
+    // First check actual vital value using medical ranges
+    let vitalStatus = 'normal';
+
+    if (patient.vitals) {
+      switch (vitalKey) {
+        case 'heartRate':
+          if (patient.vitals.heartRate) {
+            vitalStatus = MedicalUtils.getVitalStatus(patient.vitals.heartRate, 'heartRate');
+          }
+          break;
+        case 'oxygenSaturation':
+          if (patient.vitals.oxygenSaturation) {
+            vitalStatus = MedicalUtils.getVitalStatus(patient.vitals.oxygenSaturation, 'oxygenSaturation');
+          }
+          break;
+        case 'skinTemperature':
+          if (patient.vitals.skinTemperature) {
+            vitalStatus = MedicalUtils.getVitalStatus(patient.vitals.skinTemperature, 'skinTemperature');
+          }
+          break;
+        case 'systolicPressure':
+          if (patient.vitals.systolicPressure) {
+            vitalStatus = MedicalUtils.getVitalStatus(patient.vitals.systolicPressure, 'systolicPressure', patient.vitals.diastolicPressure);
+          }
+          break;
+        case 'respiratoryRate':
+          if (patient.vitals.respiratoryRate) {
+            vitalStatus = MedicalUtils.getVitalStatus(patient.vitals.respiratoryRate, 'respiratoryRate');
+          }
+          break;
+      }
+    }
+
     // Check if there are any unacknowledged alerts related to this vital
     const vitalAlerts = unacknowledgedAlerts.filter(alert => {
       const message = alert.message.toLowerCase();
       return (
         (vitalKey === 'heartRate' && (message.includes('heart') || message.includes('cardiac') || message.includes('hr'))) ||
-        (vitalKey === 'oxygenSat' && (message.includes('oxygen') || message.includes('spo2') || message.includes('sat'))) ||
-        (vitalKey === 'temperature' && (message.includes('temp') || message.includes('fever'))) ||
-        (vitalKey === 'bloodPressure' && (message.includes('pressure') || message.includes('bp') || message.includes('hyper') || message.includes('hypo'))) ||
+        (vitalKey === 'oxygenSaturation' && (message.includes('oxygen') || message.includes('spo2') || message.includes('sat'))) ||
+        (vitalKey === 'skinTemperature' && (message.includes('temp') || message.includes('fever'))) ||
+        (vitalKey === 'systolicPressure' && (message.includes('pressure') || message.includes('bp') || message.includes('hyper') || message.includes('hypo'))) ||
         (vitalKey === 'respiratoryRate' && (message.includes('respiratory') || message.includes('breathing') || message.includes('rr'))) ||
-        (vitalKey === 'bioImpedance' && message.includes('bioimpedance')) ||
-        (vitalKey === 'tremor' && message.includes('tremor'))
+        (vitalKey === 'bioelectricalImpedance' && message.includes('bioimpedance')) ||
+        (vitalKey === 'tremorIntensity' && message.includes('tremorIntensity'))
       );
     });
 
-    if (vitalAlerts.length === 0) return 'normal';
-    
-    const hasCritical = vitalAlerts.some(alert => alert.severity === 'critical');
-    const hasHigh = vitalAlerts.some(alert => alert.severity === 'high');
-    const hasMedium = vitalAlerts.some(alert => alert.severity === 'medium');
-    
-    if (hasCritical) return 'critical';
-    if (hasHigh) return 'high';
-    if (hasMedium) return 'medium';
-    return 'low';
+    // Alert status overrides vital value status (alerts are higher priority)
+    if (vitalAlerts.some(alert => alert.severity === 'critical')) return 'critical';
+    if (vitalAlerts.some(alert => alert.severity === 'high')) return 'critical';
+    if (vitalAlerts.some(alert => alert.severity === 'medium')) return 'warning';
+    if (vitalAlerts.some(alert => alert.severity === 'low')) return 'warning';
+
+    // Return the medical assessment if no alerts
+    return vitalStatus;
   };
 
-  // All vitals in compact format - neutral colors by default
+  // Check watch assignment and connection status
+  const hasWatchAssigned = patient.assignedDeviceId;
+
+  // All vitals in compact format - show based on watch status
   const allVitals = [
     {
       key: 'heartRate',
       icon: Heart,
       label: 'HR',
-      value: patient.vitals?.heartRate || 0,
-      unit: '',
-      alertStatus: getVitalAlertStatus('heartRate')
+      value: hasWatchAssigned ? (patient.vitals?.heartRate || '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.heartRate ? 'BPM' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('heartRate') : 'normal'
     },
     {
-      key: 'oxygenSat',
+      key: 'oxygenSaturation',
       icon: Activity,
       label: 'SpO2',
-      value: patient.vitals?.oxygenSat || 0,
-      unit: '%',
-      alertStatus: getVitalAlertStatus('oxygenSat')
+      value: hasWatchAssigned ? (patient.vitals?.oxygenSaturation || '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.oxygenSaturation ? '%' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('oxygenSaturation') : 'normal'
     },
     {
-      key: 'temperature',
+      key: 'skinTemperature',
       icon: Thermometer,
       label: 'Temp',
-      value: (patient.vitals?.temperature || 0).toFixed(1),
-      unit: '°F',
-      alertStatus: getVitalAlertStatus('temperature')
+      value: hasWatchAssigned ? (patient.vitals?.skinTemperature ? patient.vitals.skinTemperature.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.skinTemperature ? '°F' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('skinTemperature') : 'normal'
     },
     {
-      key: 'bloodPressure',
+      key: 'systolicPressure',
       icon: Droplets,
       label: 'BP',
-      value: patient.vitals?.bloodPressure || '0/0',
-      unit: '',
-      alertStatus: getVitalAlertStatus('bloodPressure')
+      value: hasWatchAssigned ?
+        (patient.vitals?.systolicPressure && patient.vitals?.diastolicPressure ?
+          `${patient.vitals.systolicPressure}/${patient.vitals.diastolicPressure}` : '--/--') : '--/--',
+      unit: hasWatchAssigned && patient.vitals?.systolicPressure && patient.vitals?.diastolicPressure ? 'mmHg' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('systolicPressure') : 'normal'
     },
     {
       key: 'respiratoryRate',
       icon: Wind,
       label: 'RR',
-      value: patient.vitals?.respiratoryRate || 16,
-      unit: '/min',
-      alertStatus: getVitalAlertStatus('respiratoryRate')
+      value: hasWatchAssigned ? (patient.vitals?.respiratoryRate || '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.respiratoryRate ? '/min' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('respiratoryRate') : 'normal'
     },
     {
-      key: 'bioImpedance',
+      key: 'bioelectricalImpedance',
       icon: Waves,
       label: 'BioZ',
-      value: patient.vitals?.bioImpedance || 500,
-      unit: 'Ω',
-      alertStatus: getVitalAlertStatus('bioImpedance')
+      value: hasWatchAssigned ? (patient.vitals?.bioelectricalImpedance || '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.bioelectricalImpedance ? 'Ω' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('bioelectricalImpedance') : 'normal'
     },
     {
-      key: 'tremor',
+      key: 'tremorIntensity',
       icon: Activity,
       label: 'Tremor',
-      value: (patient.vitals?.tremor || 0).toFixed(1),
-      unit: '/10',
-      alertStatus: getVitalAlertStatus('tremor')
+      value: hasWatchAssigned ? (patient.vitals?.tremorIntensity ? patient.vitals.tremorIntensity.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && patient.vitals?.tremorIntensity ? '/10' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('tremorIntensity') : 'normal'
     }
   ];
 
@@ -181,6 +217,8 @@ const PatientCard: React.FC<PatientCardProps> = ({
     switch (alertStatus) {
       case 'critical':
         return 'text-red-600 bg-red-50 border-l-4 border-red-500'; // Red for critical
+      case 'warning':
+        return 'text-yellow-600 bg-yellow-50 border-l-4 border-yellow-500'; // Yellow for warning
       case 'high':
         return 'text-orange-600 bg-orange-50 border-l-4 border-orange-500'; // Orange for high
       case 'medium':
@@ -247,10 +285,17 @@ const PatientCard: React.FC<PatientCardProps> = ({
               <h3 className="font-semibold text-base text-gray-900 truncate">{patient.name}</h3>
               {/* Watch Status Indicator */}
               {patient.assignedDeviceId ? (
-                <div className="flex items-center space-x-1" title="Watch assigned and monitoring">
-                  <Watch className="w-3 h-3 text-green-600" />
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                </div>
+                patient.deviceStatus === 'connected' ? (
+                  <div className="flex items-center space-x-1" title="Watch connected and monitoring">
+                    <Watch className="w-3 h-3 text-green-600" />
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1" title="Watch assigned but disconnected">
+                    <Watch className="w-3 h-3 text-amber-600" />
+                    <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  </div>
+                )
               ) : (
                 <div className="flex items-center space-x-1" title="No watch assigned">
                   <WifiOff className="w-3 h-3 text-gray-400" />
@@ -261,8 +306,12 @@ const PatientCard: React.FC<PatientCardProps> = ({
             <p className="text-xs text-gray-600">
               {patient.age}y, {patient.gender}
               {patient.assignedDeviceId && (
-                <span className="ml-2 text-xs bg-green-100 text-green-800 px-1 py-0.5 rounded">
-                  Watch Monitoring
+                <span className={`ml-2 text-xs px-1 py-0.5 rounded ${
+                  patient.deviceStatus === 'connected'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {patient.deviceStatus === 'connected' ? 'Watch Connected' : 'Watch Disconnected'}
                 </span>
               )}
             </p>
@@ -345,7 +394,7 @@ const PatientCard: React.FC<PatientCardProps> = ({
               Bed {patient.bedNumber} • {patient.ward}
             </div>
             <div className="text-xs text-gray-500">
-              Updated: {formatTimeOnly((patient.vitals?.lastSync || new Date()).toString())}
+              Updated: {formatTimeOnly((patient.vitals?.lastDataReceived || new Date()).toString())}
             </div>
           </div>
         </div>
@@ -389,6 +438,8 @@ const PatientCard: React.FC<PatientCardProps> = ({
                       switch (vital.alertStatus) {
                         case 'critical':
                           return 'bg-red-500 animate-pulse';
+                        case 'warning':
+                          return 'bg-yellow-500 animate-pulse';
                         case 'high':
                           return 'bg-orange-500 animate-pulse';
                         case 'medium':
@@ -410,14 +461,14 @@ const PatientCard: React.FC<PatientCardProps> = ({
                   className="flex flex-col items-center justify-center py-2 px-2 rounded hover:bg-blue-50 cursor-pointer transition-colors min-w-[65px] flex-shrink-0 h-full bg-green-50 text-green-600"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onVitalClick(patient, isECGMode ? 'eeg' : 'ecg');
+                    onVitalClick(patient, isECGMode ? 'eegReading' : 'ecgReading');
                   }}
                 >
                   <div className="flex items-center space-x-1 mb-1">
                     {isECGMode ? <Brain className="w-3 h-3" /> : <Heart className="w-3 h-3" />}
                     <span className="text-sm font-medium">{isECGMode ? 'EEG' : 'ECG'}</span>
                   </div>
-                  <span className="text-sm font-bold">{isECGMode ? (patient.vitals?.eeg || 45) : (patient.vitals?.ecg || 0)}</span>
+                  <span className="text-sm font-bold">{isECGMode ? (patient.vitals?.eegReading || '--') : (patient.vitals?.ecgReading || '--')}</span>
                   <div className={`w-1.5 h-1.5 rounded-full mt-1 ${
                     isECGMode ? (seizureActivity ? 'bg-red-500 animate-pulse' : 'bg-green-500') :
                     (arrhythmiaDetected ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')
@@ -434,7 +485,7 @@ const PatientCard: React.FC<PatientCardProps> = ({
             className="h-[85px] p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer flex flex-col"
             onClick={(e) => {
               e.stopPropagation();
-              onVitalClick(patient, isECGMode ? 'ecg' : 'eeg');
+              onVitalClick(patient, isECGMode ? 'ecgReading' : 'eegReading');
             }}
           >
             {/* All ECG/EEG text consolidated at top with smaller font */}
@@ -448,7 +499,7 @@ const PatientCard: React.FC<PatientCardProps> = ({
                 <span className={`text-[10px] ${
                   isECGMode ? 'text-green-400' : 'text-blue-400'
                 }`}>
-                  {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecg || 0) : (patient.vitals?.eeg || 45)}{isECGMode ? 'mV' : 'μV'}
+                  {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}{isECGMode ? 'mV' : 'μV'}
                 </span>
                 <span className="text-green-300 text-[10px]">25mm/s</span>
                 <select 

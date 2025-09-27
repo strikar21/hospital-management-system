@@ -1,7 +1,7 @@
 // PatientService.ts - Patient data and case management
 import { patient, noteComment } from '../types';
 import { BaseService } from './BaseService';
-import { MedicalDataTransformer } from '../utils/dataTransformers';
+import { DataTransformer } from '../utils/dataTransformer';
 
 export class PatientService extends BaseService {
 
@@ -27,7 +27,7 @@ export class PatientService extends BaseService {
       console.log(`✅ Raw patient data received for ${patientId}:`, response);
 
       // Transform and return patient data
-      const transformedPatient = MedicalDataTransformer.transformPatientData(response);
+      const transformedPatient = DataTransformer.transformPatientData(response);
 
       console.log(`🔄 Transformed patient data for ${patientId}:`, transformedPatient);
 
@@ -64,7 +64,7 @@ export class PatientService extends BaseService {
       console.log(`✅ Retrieved ${patients.length} patients`);
 
       // Transform all patient data
-      return patients.map(p => MedicalDataTransformer.transformPatientData(p));
+      return patients.map(p => DataTransformer.transformPatientData(p));
     } catch (error) {
       console.error('❌ Error fetching patients:', error);
       return [];
@@ -74,7 +74,7 @@ export class PatientService extends BaseService {
   static async searchPatients(query: string): Promise<patient[]> {
     try {
       const response = await this.fetchFromBackend(`/patients/search?q=${encodeURIComponent(query)}`);
-      return Array.isArray(response) ? response.map(p => MedicalDataTransformer.transformPatientData(p)) : [];
+      return Array.isArray(response) ? response.map(p => DataTransformer.transformPatientData(p)) : [];
     } catch (error) {
       console.error('❌ Error searching patients:', error);
       return [];
@@ -84,7 +84,7 @@ export class PatientService extends BaseService {
   static async getPatientsByStatus(status: 'stable' | 'critical' | 'emergency'): Promise<patient[]> {
     try {
       const response = await this.fetchFromBackend(`/patients/list?status=${status}`);
-      return Array.isArray(response) ? response.map(p => MedicalDataTransformer.transformPatientData(p)) : [];
+      return Array.isArray(response) ? response.map(p => DataTransformer.transformPatientData(p)) : [];
     } catch (error) {
       console.error('❌ Error fetching patients by status:', error);
       return [];

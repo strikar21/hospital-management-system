@@ -1,0 +1,46 @@
+# Grafana Datasource Configuration for Hospital Management System
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    version: 1
+    jsonData:
+      httpMethod: POST
+      queryTimeout: 60s
+      timeInterval: 5s
+    secureJsonData: {}
+
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: hospitaldb
+    user: hospital_user
+    editable: true
+    version: 1
+    jsonData:
+      sslmode: require
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: hospital_prod_2024_CHANGE_ME
+
+  - name: TimescaleDB
+    type: postgres
+    access: proxy
+    url: timescaledb:5432
+    database: hospital_timeseries
+    user: timescale_user
+    editable: true
+    version: 1
+    jsonData:
+      sslmode: require
+      postgresVersion: 1500
+      timescaledb: true
+    secureJsonData:
+      password: timescale_prod_2024_CHANGE_ME

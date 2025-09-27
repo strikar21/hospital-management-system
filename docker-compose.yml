@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: hospital_postgres
+    environment:
+      POSTGRES_USER: hospital_user
+      POSTGRES_PASSWORD: hospital123
+      POSTGRES_DB: hospitaldb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hospital -d hospitaldb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: hospital_timescaledb
+    environment:
+      POSTGRES_USER: hospital_user
+      POSTGRES_PASSWORD: hospital123
+      POSTGRES_DB: hospitaltimescale
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hospital -d hospitaltimescale"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  timescale_data:

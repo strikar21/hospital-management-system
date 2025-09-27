@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Smartphone, Delete, CheckCircle, XCircle } from 'lucide-react';
+import { Smartphone, Delete, XCircle } from 'lucide-react';
 
 interface PINLoginProps {
   staffId?: string;

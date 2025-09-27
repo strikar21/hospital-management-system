@@ -1,4 +1,4 @@
-"""
+w"""
 Patient management API endpoints
 """
 
@@ -145,28 +145,32 @@ async def get_all_patients(
     try:
         async with get_db_connection() as conn:
             query = """
-                SELECT p.id, p.firstname, p.lastname, p.dateofbirth, p.gender,
+                SELECT p.id, p.firstname, p.lastname, p.dateofbirth, p.gender, 
                        p.phonenumber, p.emergencycontactname, p.emergencycontactphone, p.bloodtype, p.allergies,
-                       p.medicalhistory, p.admissiondate, p.dischargedate,
+                       p.medicalhistory, p.admissiondate, p.dischargedate, 
                        p.roomnumber, p.bednumber, p.assigneddeviceid, p.attendingphysician, p.nurseincharge,
-                       p.status, p.createdat, p.updatedat, s.firstname || ' ' || s.lastname as attendingphysicianname
+                       p.status, p.createdat, p.updatedat, TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) as attendingphysicianname
                 FROM patients p
                 LEFT JOIN staff s ON p.attendingphysician = s.id
                 WHERE 1=1"""
             params = []
             
+            param_count = 0
             if status is not None and status != "":
-                query += " AND p.status = ?"
+                param_count += 1
+                query += f" AND p.status = ${param_count}"
                 params.append(status)
             
             if room_number is not None and room_number != "":
-                query += " AND p.roomNumber = ?"
+                param_count += 1
+                query += f" AND p.roomnumber = ${param_count}"
                 params.append(room_number)
             
-            query += " ORDER BY p.createdAt DESC LIMIT ?"
+            param_count += 1
+            query += f" ORDER BY p.createdat DESC LIMIT ${param_count}"
             params.append(limit)
             
-            rows = await fetch_all(conn, query, tuple(params))
+            rows = await conn.fetch(query, *params) if params else await conn.fetch(query)
             
             patients = []
             for row in rows:
@@ -175,11 +179,6 @@ async def get_all_patients(
                 transformed_dict = transform_patient_to_camel(patient_dict)
                 patients.append(transformed_dict)
             
-            # Debug logging to check device assignments
-            for patient in patients:
-                if patient.get('firstName') == 'Sarah' and patient.get('lastName') == 'Johnson':
-                    logger.info(f"🔍 Sarah Johnson patient data: assignedDeviceId={patient.get('assignedDeviceId')}")
-
             logger.info(f"📋 Retrieved {len(patients)} patients")
             return JSONResponse(content=patients)
             
@@ -194,79 +193,186 @@ async def get_patient(patient_id: str):
     """
     try:
         async with get_db_connection() as conn:
-            # Simple patient query first - avoid complex JOINs that might hang
-            patient_query = "SELECT * FROM patients WHERE id = ?"
-            patient_row = await fetch_one(conn, patient_query, (patient_id,))
-
+            # Get patient details with attending physician name and device status
+            patient_query = """
+                SELECT p.id, p.firstname, p.lastname, p.dateofbirth, p.gender,
+                       p.phonenumber, p.emergencycontactname, p.emergencycontactphone, p.bloodtype, p.allergies,
+                       p.medicalhistory, p.admissiondate, p.dischargedate,
+                       p.roomnumber, p.bednumber, p.assigneddeviceid, p.attendingphysician, p.nurseincharge,
+                       p.status, p.createdat, p.updatedat, TRIM(COALESCE(s.firstname, '') || ' ' || COALESCE(s.lastname, '')) as attendingphysicianname,
+                       d.status as devicestatus, d.batterylevel as devicebattery, d.lastseen as devicelastseen
+                FROM patients p
+                LEFT JOIN staff s ON p.attendingphysician = s.id
+                LEFT JOIN devices d ON p.assigneddeviceid = d.id
+                WHERE p.id = $1
+            """
+            patient_row = await conn.fetchrow(patient_query, patient_id)
+            
             if not patient_row:
                 raise HTTPException(status_code=404, detail="Patient not found")
-
+            
             patient_dict = dict(patient_row) if hasattr(patient_row, 'keys') else patient_row
-
+            
+            # Map device status to frontend values
+            if patient_dict.get('devicestatus'):
+                device_status = patient_dict['devicestatus']
+                device_battery = patient_dict.get('devicebattery', 100)
+                device_last_seen = patient_dict.get('devicelastseen')
+                
+                # Determine device status based on backend status, battery, and last seen
+                if device_status in ['active', 'connected']:
+                    if device_battery and device_battery < 20:
+                        patient_dict['devicestatus'] = 'low_battery'
+                    elif device_last_seen:
+                        from datetime import datetime, timedelta
+                        last_seen_dt = device_last_seen if isinstance(device_last_seen, datetime) else datetime.fromisoformat(str(device_last_seen))
+                        if datetime.now() - last_seen_dt > timedelta(minutes=5):
+                            patient_dict['devicestatus'] = 'disconnected'
+                        else:
+                            patient_dict['devicestatus'] = 'connected'
+                    else:
+                        patient_dict['devicestatus'] = 'connected'
+                else:
+                    patient_dict['devicestatus'] = 'offline'
+            else:
+                # No device assigned
+                patient_dict['devicestatus'] = None
+            
+            # Get current vital signs from TimescaleDB
+            current_vitals_dict = await get_patient_current_vitals(patient_id)
+            current_vitals_row = None
+            if current_vitals_dict and current_vitals_dict.get('timestamp'):
+                # Format as expected by VitalSigns model (camelCase)
+                current_vitals_row = {
+                    'patientid': patient_id,
+                    'deviceId': patient_dict.get('assigneddeviceid', ''),
+                    'timestamp': current_vitals_dict['timestamp'],
+                    'heartRate': int(current_vitals_dict['heartRate']) if current_vitals_dict['heartRate'] else None,
+                    'bloodPressureSystolic': int(current_vitals_dict['bloodPressureSystolic']) if current_vitals_dict['bloodPressureSystolic'] else None,
+                    'bloodPressureDiastolic': int(current_vitals_dict['bloodPressureDiastolic']) if current_vitals_dict['bloodPressureDiastolic'] else None,
+                    'temperature': current_vitals_dict['temperature'],
+                    'oxygenSaturation': int(current_vitals_dict['oxygenSaturation']) if current_vitals_dict['oxygenSaturation'] else None,
+                    'respiratoryRate': int(current_vitals_dict['respiratoryRate']) if current_vitals_dict['respiratoryRate'] else None,
+                    'glucoseLevel': current_vitals_dict.get('glucoseLevel'),
+                    'id': 0
+                }
+            
+            # Get recent vital signs history from TimescaleDB  
+            recent_vitals_list = await get_patient_vital_history(patient_id, 24)
+            recent_vitals_rows = []
+            for i, vital_dict in enumerate(recent_vitals_list):
+                if vital_dict.get('timestamp'):
+                    row = {
+                        'id': i,
+                        'patientid': patient_id,
+                        'deviceId': patient_dict.get('assigneddeviceid', ''),
+                        'timestamp': vital_dict['timestamp'],
+                        'heartRate': int(vital_dict['heartRate']) if vital_dict['heartRate'] else None,
+                        'bloodPressureSystolic': int(vital_dict['bloodPressureSystolic']) if vital_dict['bloodPressureSystolic'] else None,
+                        'bloodPressureDiastolic': int(vital_dict['bloodPressureDiastolic']) if vital_dict['bloodPressureDiastolic'] else None,
+                        'temperature': vital_dict['temperature'],
+                        'oxygenSaturation': int(vital_dict['oxygenSaturation']) if vital_dict['oxygenSaturation'] else None,
+                        'respiratoryRate': int(vital_dict['respiratoryRate']) if vital_dict['respiratoryRate'] else None,
+                        'glucoseLevel': vital_dict.get('glucoseLevel')
+                    }
+                    recent_vitals_rows.append(row)
+            
             # Get medications
-            medications_query = "SELECT m.*, s.name as prescribedbyname FROM medications m LEFT JOIN staff s ON m.prescribedby = s.id WHERE m.patientid = ? ORDER BY m.createdat DESC"
+            medications_query = """
+                SELECT m.*, (s.firstname || ' ' || s.lastname) as prescribedbyname
+                FROM medications m
+                LEFT JOIN staff s ON m.prescribedBy = s.id
+                WHERE m.patientid = ? 
+                ORDER BY m.createdAt DESC
+            """
             medications_rows = await fetch_all(conn, medications_query, (patient_id,))
-
+            
             # Get investigations
-            investigations_query = "SELECT i.*, s.name as performedbyname FROM investigations i LEFT JOIN staff s ON i.performedby = s.id WHERE i.patientid = ? ORDER BY i.createdat DESC"
+            investigations_query = """
+                SELECT i.*, (s.firstname || ' ' || s.lastname) as performedbyname
+                FROM investigations i
+                LEFT JOIN staff s ON i.performedBy = s.id
+                WHERE i.patientid = ? 
+                ORDER BY i.createdAt DESC
+            """
             investigations_rows = await fetch_all(conn, investigations_query, (patient_id,))
-
+            
             # Get therapy
-            therapy_query = "SELECT t.*, s.name as performedbyname FROM therapy t LEFT JOIN staff s ON t.performedby = s.id WHERE t.patientid = ? ORDER BY t.createdat DESC"
+            therapy_query = """
+                SELECT t.*, (s.firstname || ' ' || s.lastname) as performedbyname
+                FROM therapy t
+                LEFT JOIN staff s ON t.performedBy = s.id
+                WHERE t.patientid = ? 
+                ORDER BY t.createdAt DESC
+            """
             therapy_rows = await fetch_all(conn, therapy_query, (patient_id,))
-
+            
             # Get patient notes
-            notes_query = "SELECT pn.*, s.name as authorname FROM patient_notes pn LEFT JOIN staff s ON pn.authorid = s.id WHERE pn.patientid = ? ORDER BY pn.createdat DESC"
+            notes_query = """
+                SELECT pn.*, (s.firstname || ' ' || s.lastname) as authorname 
+                FROM patientnotes pn
+                LEFT JOIN staff s ON pn.authorId = s.id
+                WHERE pn.patientid = ? 
+                ORDER BY pn.timestamp DESC
+            """
             notes_rows = await fetch_all(conn, notes_query, (patient_id,))
-
+            
+            # Build response
+            current_vitals = None
+            if current_vitals_row:
+                vitals_dict = dict(current_vitals_row) if hasattr(current_vitals_row, 'keys') else current_vitals_row
+                current_vitals = VitalSigns(**vitals_dict)
+            
+            recent_vitals = []
+            for row in recent_vitals_rows or []:
+                vitals_dict = dict(row) if hasattr(row, 'keys') else row
+                recent_vitals.append(VitalSigns(**vitals_dict))
+            
             # Process medications
             medications = []
             for row in medications_rows or []:
                 med_dict = dict(row) if hasattr(row, 'keys') else row
                 medications.append(med_dict)
-
+            
             # Process investigations
             investigations = []
             for row in investigations_rows or []:
                 inv_dict = dict(row) if hasattr(row, 'keys') else row
                 investigations.append(inv_dict)
-
+            
             # Process therapy
             therapies = []
             for row in therapy_rows or []:
                 therapy_dict = dict(row) if hasattr(row, 'keys') else row
                 therapies.append(therapy_dict)
-
+            
             # Process notes
             notes = []
             for row in notes_rows or []:
                 note_dict = dict(row) if hasattr(row, 'keys') else row
                 notes.append(note_dict)
-
-            # Create complete patient data with actual clinical data
+            
+            # Build the complete patient data
             complete_patient_data = {
                 **patient_dict,
-                'currentVitals': None,
-                'recentVitals': [],
+                'currentVitals': current_vitals.dict() if current_vitals else None,
+                'recentVitals': [v.dict() for v in recent_vitals],
                 'medications': medications,
                 'investigations': investigations,
                 'therapies': therapies,
                 'notes': notes
             }
-
+            
             # Transform to camelCase for frontend compatibility
             transformed_data = transform_patient_to_camel(complete_patient_data)
-
+            
             return transformed_data
-
+            
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Get patient error: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Failed to retrieve patient")
-
 
 @router.post("/", response_model=Patient)
 async def create_patient(patient_data: PatientCreate, created_by: str):
@@ -284,20 +390,20 @@ async def create_patient(patient_data: PatientCreate, created_by: str):
                 INSERT INTO patients (
                     id, firstName, lastName, dateOfBirth, gender, phoneNumber,
                     emergencyContactName, emergencyContactPhone, bloodType, allergies,
-                    medicalHistory, currentMedications, roomNumber, bedNumber,
+                    medicalHistory, roomNumber, bedNumber,
                     attendingPhysician, nurseInCharge, admissionDate, createdAt, updatedat
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             """
             
             now = datetime.now()
-            await conn.execute(query, (
+            await conn.execute(query,
                 patient_id, patient_data.firstName, patient_data.lastName,
                 patient_data.dateOfBirth, patient_data.gender, patient_data.phoneNumber,
                 patient_data.emergencyContactName, patient_data.emergencyContactPhone,
                 patient_data.bloodType, patient_data.allergies, patient_data.medicalHistory,
-                patient_data.currentMedications, patient_data.roomNumber, patient_data.bedNumber,
+                patient_data.roomNumber, patient_data.bedNumber,
                 patient_data.attendingPhysician, patient_data.nurseInCharge, now, now, now
-            ))
+            )
                         
             # Log audit event
             await log_audit_event(
@@ -327,28 +433,33 @@ async def update_patient(patient_id: str, patient_data: PatientUpdate, updated_b
     try:
         async with get_db_connection() as conn:
             # Check if patient exists
-            existing = await fetch_one(conn, "SELECT * FROM patients WHERE id = ?", (patient_id,))
+            existing = await conn.fetchrow("SELECT * FROM patients WHERE id = $1", patient_id)
             if not existing:
                 raise HTTPException(status_code=404, detail="Patient not found")
             
             # Build update query for non-None fields
             update_fields = []
             params = []
+            param_count = 0
             
-            for field, value in patient_data.dict(exclude_unset=True).items():
+            for field, value in patient_data.model_dump(exclude_unset=True).items():
                 if value is not None:
-                    update_fields.append(f"{field} = ?")
+                    param_count += 1
+                    update_fields.append(f"{field} = ${param_count}")
                     params.append(value)
             
             if not update_fields:
                 raise HTTPException(status_code=400, detail="No fields to update")
             
-            update_fields.append("updatedat = ?")
+            param_count += 1
+            update_fields.append(f"updatedat = ${param_count}")
             params.append(datetime.now())
+            
+            param_count += 1
             params.append(patient_id)
             
-            query = f"UPDATE patients SET {', '.join(update_fields)} WHERE id = ?"
-            await conn.execute(query, params)
+            query = f"UPDATE patients SET {', '.join(update_fields)} WHERE id = ${param_count}"
+            await conn.execute(query, *params)
                         
             # Log audit event
             await log_audit_event(
@@ -379,14 +490,14 @@ async def doctor_request_discharge(patient_id: str, discharge_data: dict):
     """
     try:
         async with get_db_connection() as conn:
-            existing = await fetch_one(conn, "SELECT * FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            existing = await conn.fetchrow("SELECT * FROM patients WHERE id = $1 AND status = 'active'", patient_id)
             if not existing:
                 raise HTTPException(status_code=404, detail="Active patient not found")
             
             # Update patient status to pending discharge
-            await execute_query(conn, 
-                "UPDATE patients SET status = ?, updatedat = ? WHERE id = ?",
-                ('pending_discharge', datetime.now(), patient_id)
+            await conn.execute(
+                "UPDATE patients SET status = $1, updatedat = $2 WHERE id = $3",
+                'pending_discharge', datetime.now(), patient_id
             )
             
             # Log for admin notification
@@ -414,14 +525,14 @@ async def admin_approve_discharge(patient_id: str, approval_data: dict):
     """
     try:
         async with get_db_connection() as conn:
-            existing = await fetch_one(conn, "SELECT * FROM patients WHERE id = ? AND status = 'pending_discharge'", (patient_id,))
+            existing = await conn.fetchrow("SELECT * FROM patients WHERE id = $1 AND status = 'pending_discharge'", patient_id)
             if not existing:
                 raise HTTPException(status_code=404, detail="Patient not pending discharge")
             
             # Update to approved status
-            await execute_query(conn,
-                "UPDATE patients SET status = ?, updatedat = ? WHERE id = ?",
-                ('discharge_approved', datetime.now(), patient_id)
+            await conn.execute(
+                "UPDATE patients SET status = $1, updatedat = $2 WHERE id = $3",
+                'discharge_approved', datetime.now(), patient_id
             )
             
             await log_audit_event(
@@ -448,49 +559,27 @@ async def nurse_complete_discharge(patient_id: str, completion_data: dict):
     """
     try:
         async with get_db_connection() as conn:
-            existing = await fetch_one(conn, "SELECT * FROM patients WHERE id = ? AND status = 'discharge_approved'", (patient_id,))
+            existing = await conn.fetchrow("SELECT * FROM patients WHERE id = $1 AND status = 'discharge_approved'", patient_id)
             if not existing:
                 raise HTTPException(status_code=404, detail="Patient not approved for discharge")
             
             now = datetime.now()
             
             # Complete discharge
-            await execute_query(conn,
-                "UPDATE patients SET status = ?, dischargedate = ?, updatedat = ? WHERE id = ?",
-                ('discharged', now, now, patient_id)
+            await conn.execute(
+                "UPDATE patients SET status = $1, dischargedate = $2, updatedat = $3 WHERE id = $4",
+                'discharged', now, now, patient_id
             )
             
-            # Remove watch and return to pool
-            # First get the assigned device
-            assigned_device = await conn.fetchrow(
-                "SELECT deviceid FROM deviceassignments WHERE patientid = $1 AND status = 'active'",
-                patient_id
+            # Remove watch
+            await execute_query(conn,
+                "UPDATE deviceassignments SET status = ?, unassignedat = ? WHERE patientid = ? AND status = ?",
+                ('inactive', now, patient_id, 'active')
             )
-
-            if assigned_device:
-                device_id = assigned_device['deviceid']
-
-                # Update assignment status
-                await conn.execute(
-                    "UPDATE deviceassignments SET status = 'inactive', unassignedat = $1, unassignedby = $2, unassignmentreason = 'Patient discharged' WHERE patientid = $3 AND status = 'active'",
-                    now, completion_data.get('nurseId', 'System'), patient_id
-                )
-
-                # Return device to available pool
-                await conn.execute(
-                    "UPDATE devices SET status = 'available', assignedpatientid = NULL, updatedat = $1 WHERE id = $2",
-                    now, device_id
-                )
-
-                # Clear patient device assignment
-                await conn.execute(
-                    "UPDATE patients SET assigneddeviceid = NULL WHERE id = $1",
-                    patient_id
-                )
-
-                logger.info(f"✅ Watch {device_id} returned to pool from patient {patient_id}")
-            else:
-                logger.info(f"ℹ️ No watch assigned to patient {patient_id} during discharge")
+            await execute_query(conn,
+                "UPDATE devices SET status = ? WHERE id IN (SELECT deviceid FROM deviceassignments WHERE patientid = ? AND status = 'active')",
+                ('available', patient_id)
+            )
             
             # Generate discharge summary
             discharge_summary = await generate_discharge_summary(conn, patient_id, completion_data)
@@ -551,7 +640,7 @@ async def generate_discharge_summary(conn, patient_id: str, completion_data: dic
         # Format discharge summary
         summary = {
             "patientInfo": {
-                "name": f"{patient_dict.get('firstname', '')} {patient_dict.get('lastname', '')}",
+                "name": " ".join(filter(None, [patient_dict.get('firstname', ''), patient_dict.get('lastname', '')])),
                 "id": patient_id,
                 "dateOfBirth": patient_dict.get('dateofbirth'),
                 "gender": patient_dict.get('gender'),
@@ -851,19 +940,24 @@ async def add_medication(patient_id: str, medication_data: dict, created_by: str
             # Insert medication using correct lowercase column names
             await conn.execute("""
                 INSERT INTO medications (
-                    id, patientid, name, dosage, frequency, route, status, prescribedby
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            """, 
+                    id, patientid, name, dosage, frequency, route, duration, status, startdate, prescribedby
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            """,
                 medication_id,
-                patient_id, 
+                patient_id,
                 medication_data.get('name', ''),
                 medication_data.get('dosage', ''),
                 medication_data.get('frequency', ''),
                 medication_data.get('route', ''),
+                medication_data.get('duration', ''),
                 medication_data.get('status', 'active'),
+                medication_data.get('startDate') or datetime.now(),
                 created_by
             )
-            
+
+            # Auto-schedule medication administrations based on frequency
+            await auto_schedule_medication(conn, medication_id, patient_id, medication_data)
+
             return {"message": "Medication added successfully", "id": medication_id}
             
     except Exception as e:
@@ -991,20 +1085,19 @@ async def add_note(patient_id: str, note_data: dict, created_by: str = Query(...
                 raise HTTPException(status_code=400, detail="Note content is required")
             
             # Generate patient-specific note ID (PAT20250911005-NOTE1, PAT20250911005-NOTE2, etc.)
-            count_result = await conn.fetchval('SELECT COUNT(*) FROM patient_notes WHERE patientid = $1', patient_id)
+            count_result = await conn.fetchval('SELECT COUNT(*) FROM patientnotes WHERE patientid = $1', patient_id)
             next_note_number = (count_result or 0) + 1
             patient_note_id = f"{patient_id}-NOTE{next_note_number}"
             
-            # Insert the note with patient-specific sequential ID
+            # Insert the note with custom patient-specific ID
             await conn.execute("""
-                INSERT INTO patient_notes (
-                    id, patientid, notecontent, notetype, authorid, authorname, authorrole
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            """, 
-                patient_note_id, patient_id, content.strip(), note_data.get('category', 'General'), created_by,
-                note_data.get('authorName', 'Unknown'), note_data.get('authorRole', 'Staff')
+                INSERT INTO patientnotes (
+                    id, patientid, content, authorid
+                ) VALUES ($1, $2, $3, $4)
+            """,
+                patient_note_id, patient_id, content.strip(), created_by
             )
-            
+
             logger.info(f"✅ Note added successfully: {patient_note_id}")
             return {"message": "Note added successfully", "noteId": patient_note_id}
             
@@ -1106,31 +1199,203 @@ async def add_case_entry(patient_id: str, case_data: dict):
 @router.get("/{patient_id}/case-entries")
 async def get_case_entries(patient_id: str):
     """
-    Get all case sheet entries for a patient
+    Get comprehensive case sheet with complete clinical history timeline
+    Includes: medications, investigations, therapies, vital alerts, device changes, 
+    admissions, discharges, notes, and all clinical activities
     """
     try:
         async with get_db_connection() as conn:
             # Verify patient exists
-            patient = await fetch_one(conn, "SELECT id FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            patient = await conn.fetchrow("SELECT id FROM patients WHERE id = $1", patient_id)
             if not patient:
-                raise HTTPException(status_code=404, detail="Active patient not found")
+                raise HTTPException(status_code=404, detail="Patient not found")
             
-            query = """
-                SELECT c.*, s.name as performedbyname
-                FROM caseSheetEntries c
-                LEFT JOIN staff s ON c.performedBy = s.id
-                WHERE c.patientid = ? 
-                ORDER BY c.timestamp DESC
+            all_entries = []
+            
+            # 1. Case sheet entries (manual entries only, exclude duplicates)
+            # Exclude entries that duplicate medications, investigations, therapies, and notes
+            case_entries_query = """
+                SELECT
+                    c.entrytype as entry_type,
+                    c.timestamp as event_time,
+                    c.entrytype as sub_type,
+                    c.description,
+                    COALESCE(c.performedby, 'Unknown') as performed_by,
+                    c.performedby as performed_by_id,
+                    c.createdat,
+                    c.id::text as record_id
+                FROM casesheetentries c
+                WHERE c.patientid = $1
             """
+            case_entries = await conn.fetch(case_entries_query, patient_id)
+            for entry in case_entries:
+                all_entries.append(dict(entry))
             
-            rows = await fetch_all(conn, query, (patient_id,))
-            entries = []
-            for row in rows:
-                entry_dict = dict(row) if hasattr(row, 'keys') else row
-                entries.append(entry_dict)
+            # 2. Medication administrations only (prescriptions are in dedicated Medications tab)
+            # Only include actual administration events, not routine prescriptions
+            medications_query = """
+                SELECT
+                    'medication_administration' as entry_type,
+                    COALESCE(ma.administeredat, ma.scheduledtime) as event_time,
+                    ma.status as sub_type,
+                    (m.name || ' - ' || COALESCE(ma.dosagegiven, m.dosage) ||
+                     CASE WHEN ma.notes IS NOT NULL THEN ' (' || ma.notes || ')' ELSE '' END) as description,
+                    COALESCE(ma.administeredby, 'System') as performed_by,
+                    ma.administeredby as performed_by_id,
+                    ma.createdat,
+                    ma.id::text as record_id
+                FROM medicationadministrations ma
+                JOIN medications m ON ma.medicationid::text = m.id::text
+                WHERE ma.patientid = $1
+                AND (ma.notes IS NULL OR ma.notes NOT ILIKE '%Auto-scheduled%')
+            """
+            med_entries = await conn.fetch(medications_query, patient_id)
+            for entry in med_entries:
+                all_entries.append(dict(entry))
             
-            logger.info(f"📋 Retrieved {len(entries)} case entries for patient: {patient_id}")
-            return entries
+            # 3. Investigation results only (routine orders are in dedicated Investigations tab)
+            # Only include completed investigations with results or critical status changes
+            investigations_query = """
+                SELECT
+                    'investigation' as entry_type,
+                    COALESCE(i.completedat, i.scheduledat, i.createdat) as event_time,
+                    i.status as sub_type,
+                    (i.name ||
+                     CASE WHEN i.results IS NOT NULL THEN ' - ' || i.results
+                          WHEN i.status = 'cancelled' THEN ' - Cancelled'
+                          WHEN i.status = 'critical' THEN ' - Critical'
+                          ELSE ' - ' || i.status END) as description,
+                    COALESCE(i.performedby, 'System') as performed_by,
+                    i.performedby as performed_by_id,
+                    i.createdat,
+                    i.id::text as record_id
+                FROM investigations i
+                WHERE i.patientid = $1
+            """
+            inv_entries = await conn.fetch(investigations_query, patient_id)
+            for entry in inv_entries:
+                all_entries.append(dict(entry))
+            
+            # 4. Therapy sessions only (routine prescriptions are in dedicated Therapy tab)
+            # Only include actual therapy sessions and significant therapy events
+            therapies_query = """
+                SELECT
+                    'therapy_session' as entry_type,
+                    COALESCE(ts.completedat, ts.scheduleddate) as event_time,
+                    ts.status as sub_type,
+                    (th.type || ' session #' || ts.sessionnumber ||
+                     CASE WHEN ts.sessionnotes IS NOT NULL THEN ' (' || ts.sessionnotes || ')' ELSE '' END) as description,
+                    COALESCE(ts.performedby, 'System') as performed_by,
+                    ts.performedby as performed_by_id,
+                    ts.createdat,
+                    ts.id::text as record_id
+                FROM therapysessions ts
+                JOIN therapy th ON ts.therapyid::text = th.id::text
+                WHERE ts.patientid = $1
+            """
+            therapy_entries = await conn.fetch(therapies_query, patient_id)
+            for entry in therapy_entries:
+                all_entries.append(dict(entry))
+            
+            # 5. Patient notes
+            notes_query = """
+                SELECT
+                    'note' as entry_type,
+                    pn.timestamp as event_time,
+                    CASE WHEN pn.isedited THEN 'edited' ELSE 'added' END as sub_type,
+                    (CASE WHEN LENGTH(pn.content) > 100 THEN LEFT(pn.content, 100) || '...'
+                          ELSE pn.content END) as description,
+                    COALESCE(s.firstname || ' ' || s.lastname, pn.authorid) as performed_by,
+                    pn.authorid as performed_by_id,
+                    pn.timestamp as createdat,
+                    pn.id::text as record_id
+                FROM patientnotes pn
+                LEFT JOIN staff s ON pn.authorid = s.id
+                WHERE pn.patientid = $1
+            """
+            notes_entries = await conn.fetch(notes_query, patient_id)
+            for entry in notes_entries:
+                all_entries.append(dict(entry))
+            
+            # 6. Device assignments and changes
+            device_query = """
+                SELECT 
+                    'device' as entry_type,
+                    da.assignedat as event_time,
+                    CASE WHEN da.unassignedat IS NOT NULL THEN 'unassigned' ELSE 'assigned' END as sub_type,
+                    (CASE WHEN da.unassignedat IS NOT NULL
+                          THEN 'Unassigned ' || d.devicetype || ' (' || d.serialnumber || ')'
+                          ELSE 'Assigned ' || d.devicetype || ' (' || d.serialnumber || ')' END ||
+                     CASE WHEN da.notes IS NOT NULL THEN ' - ' || da.notes ELSE '' END) as description,
+                    (s.firstname || ' ' || s.lastname) as performed_by,
+                    da.assignedby as performed_by_id,
+                    da.assignedat as createdat,
+                    da.id::text as record_id
+                FROM deviceassignments da
+                JOIN devices d ON da.deviceid = d.id
+                LEFT JOIN staff s ON da.assignedby = s.id
+                WHERE da.patientid = $1
+            """
+            device_entries = await conn.fetch(device_query, patient_id)
+            for entry in device_entries:
+                all_entries.append(dict(entry))
+            
+            # 7. Admission and discharge events
+            admission_query = """
+                SELECT 
+                    'admission' as entry_type,
+                    p.createdat as event_time,
+                    'admitted' as sub_type,
+                    ('Admitted to ' || COALESCE(p.roomnumber, 'unassigned room') ||
+                     CASE WHEN p.bednumber IS NOT NULL THEN ' - Bed ' || p.bednumber ELSE '' END ||
+                     CASE WHEN p.attendingphysician IS NOT NULL THEN ' - ' || p.attendingphysician ELSE '' END) as description,
+                    COALESCE(p.nurseincharge, 'System') as performed_by,
+                    NULL as performed_by_id,
+                    p.createdat,
+                    p.id as record_id
+                FROM patients p
+                WHERE p.id = $1
+                
+                UNION ALL
+                
+                SELECT 
+                    'discharge' as entry_type,
+                    p.dischargedate as event_time,
+                    'discharged' as sub_type,
+                    'Patient discharged' as description,
+                    'System' as performed_by,
+                    NULL as performed_by_id,
+                    p.dischargedate as createdat,
+                    p.id as record_id
+                FROM patients p
+                WHERE p.id = $1 AND p.dischargedate IS NOT NULL
+            """
+            admission_entries = await conn.fetch(admission_query, patient_id)
+            for entry in admission_entries:
+                all_entries.append(dict(entry))
+            
+            # Audit entries are excluded from case sheet timeline - they're for compliance tracking only
+            
+            # Sort all entries by event time (most recent first)
+            all_entries.sort(key=lambda x: x['event_time'] if x['event_time'] else x['createdat'], reverse=True)
+            
+            # Format entries for consistent display
+            formatted_entries = []
+            for entry in all_entries:
+                formatted_entry = {
+                    'id': entry.get('record_id'),
+                    'entryType': entry['entry_type'],
+                    'subType': entry.get('sub_type'),
+                    'description': entry['description'],
+                    'performedBy': entry.get('performed_by', 'System'),
+                    'performedById': entry.get('performed_by_id'),
+                    'timestamp': entry['event_time'] if entry['event_time'] else entry['createdat'],
+                    'createdAt': entry['createdat']
+                }
+                formatted_entries.append(formatted_entry)
+            
+            logger.info(f"📋 Retrieved {len(formatted_entries)} case entries (complete history) for patient: {patient_id}")
+            return formatted_entries
             
     except HTTPException:
         raise
@@ -1141,28 +1406,80 @@ async def get_case_entries(patient_id: str):
 @router.get("/{patient_id}/medications")
 async def get_medications(patient_id: str):
     """
-    Get all medications for a patient
+    Get all medications for a patient with administration history
     """
     try:
         async with get_db_connection() as conn:
             # Verify patient exists
-            patient = await fetch_one(conn, "SELECT id FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            patient = await conn.fetchrow("SELECT id FROM patients WHERE id = $1", patient_id)
             if not patient:
-                raise HTTPException(status_code=404, detail="Active patient not found")
+                raise HTTPException(status_code=404, detail="Patient not found")
             
-            query = """
-                SELECT * FROM medications 
-                WHERE patientid = ? 
-                ORDER BY createdAt DESC
+            # Get medications with prescriber info
+            medications_query = """
+                SELECT m.*, (s.firstname || ' ' || s.lastname) as prescribedbyname
+                FROM medications m
+                LEFT JOIN staff s ON m.prescribedby = s.id
+                WHERE m.patientid = $1 
+                ORDER BY m.createdat DESC
             """
             
-            rows = await fetch_all(conn, query, (patient_id,))
+            med_rows = await conn.fetch(medications_query, patient_id)
             medications = []
-            for row in rows:
-                med_dict = dict(row) if hasattr(row, 'keys') else row
+            
+            for med_row in med_rows:
+                med_dict = dict(med_row)
+                
+                # Get administration history for this medication
+                administrations_query = """
+                    SELECT 
+                        ma.id,
+                        ma.scheduledtime,
+                        ma.administeredat,
+                        ma.status,
+                        ma.dosagegiven,
+                        ma.route,
+                        ma.administeredby,
+                        ma.notes,
+                        (s.firstname || ' ' || s.lastname) as administeredbyname
+                    FROM medicationadministrations ma
+                    LEFT JOIN staff s ON ma.administeredby = s.id
+                    WHERE ma.medicationid::text = $1::text AND ma.patientid = $2
+                    ORDER BY ma.scheduledtime DESC
+                """
+                
+                admin_rows = await conn.fetch(administrations_query, str(med_dict['id']), patient_id)
+                administrations = [dict(admin_row) for admin_row in admin_rows]
+                
+                # Calculate administration stats
+                total_scheduled = len([a for a in administrations if a['status'] in ['scheduled', 'due', 'administered', 'skipped']])
+                total_administered = len([a for a in administrations if a['status'] == 'administered'])
+                total_overdue = len([a for a in administrations if a['status'] == 'overdue'])
+                total_skipped = len([a for a in administrations if a['status'] == 'skipped'])
+                
+                # Get next due administration
+                next_due = None
+                for admin in administrations:
+                    if admin['status'] in ['scheduled', 'due'] and admin['scheduledtime']:
+                        if not next_due or admin['scheduledtime'] < next_due['scheduledtime']:
+                            next_due = admin
+                
+                # Add administration data to medication
+                med_dict.update({
+                    'administrations': administrations,
+                    'administrationStats': {
+                        'totalScheduled': total_scheduled,
+                        'totalAdministered': total_administered,
+                        'totalOverdue': total_overdue,
+                        'totalSkipped': total_skipped,
+                        'adherenceRate': round((total_administered / total_scheduled * 100) if total_scheduled > 0 else 0, 1)
+                    },
+                    'nextDue': next_due
+                })
+                
                 medications.append(med_dict)
             
-            logger.info(f"💊 Retrieved {len(medications)} medications for patient: {patient_id}")
+            logger.info(f"💊 Retrieved {len(medications)} medications with administration history for patient: {patient_id}")
             return medications
             
     except HTTPException:
@@ -1250,11 +1567,11 @@ async def get_notes(patient_id: str):
                 raise HTTPException(status_code=404, detail="Active patient not found")
             
             rows = await conn.fetch("""
-                SELECT pn.*, s.name as authorname 
-                FROM patient_notes pn
+                SELECT pn.*, (s.firstname || ' ' || s.lastname) as authorname 
+                FROM patientnotes pn
                 LEFT JOIN staff s ON pn.authorid = s.id
                 WHERE pn.patientid = $1 
-                ORDER BY pn.createdat DESC
+                ORDER BY pn.timestamp DESC
             """, patient_id)
             notes = []
             for row in rows:
@@ -1365,22 +1682,22 @@ async def administer_medication(patient_id: str, medication_id: str, admin_data:
     try:
         async with get_db_connection() as conn:
             # Verify patient exists
-            patient = await fetch_one(conn, "SELECT id FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            patient = await conn.fetchrow("SELECT id FROM patients WHERE id = $1 AND status = 'active'", patient_id)
             if not patient:
                 raise HTTPException(status_code=404, detail="Active patient not found")
             
-            # Verify medication exists and is active
-            medication = await fetch_one(conn, 
-                "SELECT * FROM medications WHERE id = ? AND patientid = ? AND status = 'active'", 
-                (int(medication_id), patient_id))
+            # Verify medication exists and is active - handle both integer and patient-specific IDs
+            medication = await conn.fetchrow(
+                "SELECT * FROM medications WHERE id = $1 AND patientid = $2 AND status = 'active'", 
+                medication_id, patient_id)
             if not medication:
                 raise HTTPException(status_code=404, detail="Active medication not found")
             
             # Update medication's updatedat timestamp to record administration
             now = datetime.now()
-            await execute_query(conn, 
-                "UPDATE medications SET updatedat = ? WHERE id = ? AND patientid = ?",
-                (now, int(medication_id), patient_id))
+            await conn.execute(
+                "UPDATE medications SET updatedat = $1 WHERE id = $2 AND patientid = $3",
+                now, medication_id, patient_id)
             
             # Log audit event
             await log_audit_event(
@@ -1548,6 +1865,55 @@ async def delete_therapy(patient_id: str, therapy_id: str):
         logger.error(f"❌ Delete therapy error: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete therapy")
 
+@router.post("/{patient_id}/therapies/{therapy_id}/sessions")
+async def add_therapy_session(patient_id: str, therapy_id: str, session_data: dict):
+    """
+    Add a therapy session for a specific therapy
+    """
+    try:
+        async with get_db_connection() as conn:
+            # Verify patient and therapy exist
+            patient = await fetch_one(conn, "SELECT id FROM patients WHERE id = ? AND status = 'active'", (patient_id,))
+            if not patient:
+                raise HTTPException(status_code=404, detail="Patient not found")
+
+            therapy = await fetch_one(conn, "SELECT id FROM therapy WHERE id = ? AND patientid = ?", (therapy_id, patient_id))
+            if not therapy:
+                raise HTTPException(status_code=404, detail="Therapy not found")
+
+            # Generate session ID and get session number
+            session_count = await fetch_one(conn, "SELECT COUNT(*) as count FROM therapysessions WHERE therapyid = ?", (therapy_id,))
+            session_number = (session_count['count'] if session_count else 0) + 1
+            session_id = f"session_{therapy_id}_{session_number}"
+
+            # Insert therapy session
+            await execute_query(conn, """
+                INSERT INTO therapysessions (
+                    id, therapyid, patientid, sessionnumber, completedAt,
+                    performedby, sessionnotes, duration, status
+                ) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, 'completed')
+            """, (
+                session_id, therapy_id, patient_id, session_number,
+                session_data.get('therapist', 'Unknown'),
+                session_data.get('notes', ''),
+                session_data.get('duration', '30 minutes')
+            ))
+
+            logger.info(f"✅ Therapy session added: {session_id} for therapy {therapy_id}")
+
+            return {
+                "success": True,
+                "sessionId": session_id,
+                "sessionNumber": session_number,
+                "message": "Therapy session added successfully"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Add therapy session error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add therapy session")
+
 @router.put("/{patient_id}/notes/{note_id}")
 async def update_note(patient_id: str, note_id: str, note_data: dict):
     """
@@ -1567,22 +1933,33 @@ async def update_note(patient_id: str, note_id: str, note_data: dict):
             # Handle patient-specific IDs (PAT-xxx-NOTEx) and legacy integer IDs
             if note_id.isdigit():
                 # Legacy integer database ID
-                query_find = "SELECT id FROM patient_notes WHERE id = ? AND patientid = ?"
+                query_find = "SELECT id FROM patientnotes WHERE id = ? AND patientid = ?"
                 try:
                     existing_note = await fetch_one(conn, query_find, (int(note_id), patient_id))
                 except ValueError:
                     existing_note = None
             elif note_id.startswith(patient_id) and "-NOTE" in note_id:
                 # Patient-specific ID (PAT-xxx-NOTEx)
-                query_find = "SELECT id FROM patient_notes WHERE id = ? AND patientid = ?"
+                query_find = "SELECT id FROM patientnotes WHERE id = ? AND patientid = ?"
                 existing_note = await fetch_one(conn, query_find, (note_id, patient_id))
             else:
-                # Unknown ID format
-                logger.warning(f"Unknown note ID format: {note_id}")
-                raise HTTPException(
-                    status_code=404, 
-                    detail="Note not found - invalid ID format."
-                )
+                # Handle temporary frontend IDs - find most recent note for this patient
+                # This is a fallback for optimistic UI updates with temporary IDs
+                query_find = """
+                    SELECT id FROM patientnotes
+                    WHERE patientid = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """
+                existing_note = await fetch_one(conn, query_find, (patient_id,))
+                if existing_note:
+                    logger.info(f"Found most recent note {existing_note['id']} for temp ID {note_id}")
+                else:
+                    logger.warning(f"Unknown note ID format and no recent notes: {note_id}")
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Note not found - invalid ID format."
+                    )
             
             if not existing_note:
                 raise HTTPException(status_code=404, detail="Note not found or cannot be updated")
@@ -1637,3 +2014,159 @@ async def delete_note(patient_id: str, note_id: str):
     except Exception as e:
         logger.error(f"❌ Delete note error: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete note")
+
+
+async def auto_schedule_medication(conn, medication_id: str, patient_id: str, medication_data: dict):
+    """
+    Automatically schedule medication administrations based on frequency
+    """
+    import uuid
+    import re
+
+    try:
+        frequency = medication_data.get('frequency', '').lower()
+        start_date = medication_data.get('startDate') or datetime.now()
+        duration_str = medication_data.get('duration', '')
+
+        # Parse frequency to determine doses per day and times
+        doses_per_day = 1
+        times = ['09:00']  # Default morning dose
+
+        # Parse common frequency patterns
+        if 'once daily' in frequency or 'daily' in frequency or frequency == '1':
+            doses_per_day = 1
+            times = ['09:00']
+        elif 'twice daily' in frequency or 'bid' in frequency or frequency == '2':
+            doses_per_day = 2
+            times = ['09:00', '21:00']  # Morning and evening
+        elif 'three times' in frequency or 'tid' in frequency or frequency == '3':
+            doses_per_day = 3
+            times = ['08:00', '14:00', '20:00']  # Breakfast, lunch, dinner
+        elif 'four times' in frequency or 'qid' in frequency or frequency == '4':
+            doses_per_day = 4
+            times = ['08:00', '12:00', '17:00', '22:00']
+        elif 'every 6 hours' in frequency or 'q6h' in frequency:
+            doses_per_day = 4
+            times = ['06:00', '12:00', '18:00', '00:00']
+        elif 'every 8 hours' in frequency or 'q8h' in frequency:
+            doses_per_day = 3
+            times = ['08:00', '16:00', '00:00']
+        elif 'every 12 hours' in frequency or 'q12h' in frequency:
+            doses_per_day = 2
+            times = ['08:00', '20:00']
+        else:
+            # Try to extract number
+            numbers = re.findall(r'\d+', frequency)
+            if numbers:
+                doses_per_day = min(int(numbers[0]), 6)  # Cap at 6 doses per day
+                if doses_per_day == 1:
+                    times = ['09:00']
+                elif doses_per_day == 2:
+                    times = ['09:00', '21:00']
+                elif doses_per_day == 3:
+                    times = ['08:00', '14:00', '20:00']
+                elif doses_per_day == 4:
+                    times = ['08:00', '12:00', '17:00', '22:00']
+                elif doses_per_day == 5:
+                    times = ['08:00', '11:00', '14:00', '17:00', '21:00']
+                elif doses_per_day >= 6:
+                    times = ['08:00', '10:00', '12:00', '15:00', '18:00', '21:00']
+
+        # Parse duration to determine how many days to schedule
+        duration_days = 7  # Default 1 week
+        if duration_str:
+            duration_lower = duration_str.lower()
+            if 'day' in duration_lower:
+                days_match = re.search(r'(\d+)', duration_lower)
+                if days_match:
+                    duration_days = int(days_match.group(1))
+            elif 'week' in duration_lower:
+                weeks_match = re.search(r'(\d+)', duration_lower)
+                if weeks_match:
+                    duration_days = int(weeks_match.group(1)) * 7
+            elif 'month' in duration_lower:
+                months_match = re.search(r'(\d+)', duration_lower)
+                if months_match:
+                    duration_days = int(months_match.group(1)) * 30
+
+        # Cap duration to reasonable limits
+        duration_days = min(duration_days, 90)  # Max 3 months
+
+        logger.info(f"📅 Scheduling {medication_id}: {doses_per_day} doses/day for {duration_days} days")
+
+        # Create scheduled administrations
+        current_date = start_date.date() if isinstance(start_date, datetime) else start_date
+
+        for day in range(duration_days):
+            schedule_date = current_date + timedelta(days=day)
+
+            for time_str in times:
+                hour, minute = map(int, time_str.split(':'))
+                scheduled_time = datetime.combine(schedule_date, datetime.min.time().replace(hour=hour, minute=minute))
+
+                # Only schedule future doses
+                if scheduled_time > datetime.now():
+                    admin_id = str(uuid.uuid4())
+
+                    await conn.execute("""
+                        INSERT INTO medicationadministrations (
+                            id, medicationid, patientid, scheduledtime, dosagegiven,
+                            route, status, notes, createdat, updatedat
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    """,
+                        admin_id,
+                        medication_id,
+                        patient_id,
+                        scheduled_time,
+                        medication_data.get('dosage', ''),
+                        medication_data.get('route', 'PO'),
+                        'scheduled',
+                        f'Auto-scheduled based on frequency: {frequency}',
+                        datetime.now(),
+                        datetime.now()
+                    )
+
+        logger.info(f"✅ Auto-scheduled medication administrations for {medication_id}")
+
+    except Exception as e:
+        logger.error(f"❌ Auto-schedule medication error: {e}")
+        # Don't raise exception as this is a supporting function
+
+
+@router.post("/{patient_id}/medications/{medication_id}/schedule")
+async def schedule_existing_medication(
+    patient_id: str,
+    medication_id: str,
+    created_by: str = Query(..., description="ID of the user scheduling the medication")
+):
+    """Schedule an existing medication for administration"""
+    try:
+        async with get_db_connection() as conn:
+            # Get medication details
+            medication = await conn.fetchrow(
+                "SELECT * FROM medications WHERE id = $1 AND patientid = $2 AND status = 'active'",
+                medication_id, patient_id
+            )
+
+            if not medication:
+                raise HTTPException(status_code=404, detail="Active medication not found")
+
+            # Convert to dict for auto_schedule_medication
+            medication_data = {
+                'frequency': medication['frequency'],
+                'startDate': medication['startdate'],
+                'duration': medication['duration'],
+                'dosage': medication['dosage'],
+                'route': medication['route']
+            }
+
+            # Auto-schedule the medication
+            await auto_schedule_medication(conn, medication_id, patient_id, medication_data)
+
+            return {"message": f"Medication {medication_id} scheduled successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Schedule existing medication error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to schedule medication")

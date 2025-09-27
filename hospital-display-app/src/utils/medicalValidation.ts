@@ -31,41 +31,41 @@ export const medicalValidation = {
     let requiresImmediateAttention = false;
 
     // Heart Rate Validation
-    if (vitals.heartrate !== undefined) {
-      if (vitals.heartrate < 30 || vitals.heartrate > 250) {
-        errors.push(`Heart rate ${vitals.heartrate} BPM outside survivable range (30-250)`);
+    if (vitals.heartRate !== undefined) {
+      if (vitals.heartRate < 30 || vitals.heartRate > 250) {
+        errors.push(`Heart rate ${vitals.heartRate} BPM outside survivable range (30-250)`);
         criticalFlags.push('CRITICAL_HEART_RATE');
         severity = 'critical';
         requiresImmediateAttention = true;
-      } else if (vitals.heartrate < 50 || vitals.heartrate > 180) {
-        warnings.push(`Heart rate ${vitals.heartrate} BPM outside normal range`);
+      } else if (vitals.heartRate < 50 || vitals.heartRate > 180) {
+        warnings.push(`Heart rate ${vitals.heartRate} BPM outside normal range`);
         if (severity !== 'critical' && severity !== 'error') severity = 'warning';
       }
     }
 
     // Blood Pressure Validation
-    if (vitals.bloodpressurevalue !== undefined) {
-      const systolic = vitals.bloodpressurevalue;
+    if (vitals.systolicPressure !== undefined) {
+      const systolic = vitals.systolicPressure;
       if (systolic < 60 || systolic > 250) {
         errors.push(`Systolic BP ${systolic} mmHg outside survivable range (60-250)`);
         criticalFlags.push('CRITICAL_BLOOD_PRESSURE');
         severity = 'critical';
         requiresImmediateAttention = true;
       } else if (systolic < 90 || systolic > 180) {
-        warnings.push(`Blood pressure ${vitals.bloodpressure || systolic} outside normal range`);
+        warnings.push(`Blood pressure ${systolic}/${vitals.diastolicPressure || Math.round(systolic * 0.67)} outside normal range`);
         if (severity !== 'critical' && severity !== 'error') severity = 'warning';
       }
     }
 
     // Oxygen Saturation Validation
-    if (vitals.oxygensat !== undefined) {
-      if (vitals.oxygensat < 70 || vitals.oxygensat > 100) {
-        errors.push(`Oxygen saturation ${vitals.oxygensat}% invalid range - verify sensor`);
+    if (vitals.oxygenSaturation !== undefined) {
+      if (vitals.oxygenSaturation < 70 || vitals.oxygenSaturation > 100) {
+        errors.push(`Oxygen saturation ${vitals.oxygenSaturation}% invalid range - verify sensor`);
         criticalFlags.push('INVALID_OXYGEN_SAT');
         severity = 'critical';
         requiresImmediateAttention = true;
-      } else if (vitals.oxygensat < 90) {
-        warnings.push(`Oxygen saturation ${vitals.oxygensat}% below normal (90-100%)`);
+      } else if (vitals.oxygenSaturation < 90) {
+        warnings.push(`Oxygen saturation ${vitals.oxygenSaturation}% below normal (90-100%)`);
         criticalFlags.push('LOW_OXYGEN_SAT');
         if (severity !== 'critical') severity = 'error';
         requiresImmediateAttention = true;
@@ -73,27 +73,27 @@ export const medicalValidation = {
     }
 
     // Temperature Validation (assuming Fahrenheit)
-    if (vitals.temperature !== undefined) {
-      if (vitals.temperature < 85 || vitals.temperature > 110) {
-        errors.push(`Temperature ${vitals.temperature}°F outside survivable range (85-110°F)`);
+    if (vitals.skinTemperature !== undefined) {
+      if (vitals.skinTemperature < 85 || vitals.skinTemperature > 110) {
+        errors.push(`Temperature ${vitals.skinTemperature}°F outside survivable range (85-110°F)`);
         criticalFlags.push('CRITICAL_TEMPERATURE');
         severity = 'critical';
         requiresImmediateAttention = true;
-      } else if (vitals.temperature < 95 || vitals.temperature > 104) {
-        warnings.push(`Temperature ${vitals.temperature}°F outside normal range (95-104°F)`);
+      } else if (vitals.skinTemperature < 95 || vitals.skinTemperature > 104) {
+        warnings.push(`Temperature ${vitals.skinTemperature}°F outside normal range (95-104°F)`);
         if (severity !== 'critical' && severity !== 'error') severity = 'warning';
       }
     }
 
     // Respiratory Rate Validation
-    if (vitals.respiratoryrate !== undefined) {
-      if (vitals.respiratoryrate < 5 || vitals.respiratoryrate > 60) {
-        errors.push(`Respiratory rate ${vitals.respiratoryrate} breaths/min outside survivable range`);
+    if (vitals.respiratoryRate !== undefined) {
+      if (vitals.respiratoryRate < 5 || vitals.respiratoryRate > 60) {
+        errors.push(`Respiratory rate ${vitals.respiratoryRate} breaths/min outside survivable range`);
         criticalFlags.push('CRITICAL_RESPIRATORY_RATE');
         severity = 'critical';
         requiresImmediateAttention = true;
-      } else if (vitals.respiratoryrate < 12 || vitals.respiratoryrate > 25) {
-        warnings.push(`Respiratory rate ${vitals.respiratoryrate} breaths/min outside normal range (12-25)`);
+      } else if (vitals.respiratoryRate < 12 || vitals.respiratoryRate > 25) {
+        warnings.push(`Respiratory rate ${vitals.respiratoryRate} breaths/min outside normal range (12-25)`);
         if (severity !== 'critical' && severity !== 'error') severity = 'warning';
       }
     }

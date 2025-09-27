@@ -9,42 +9,42 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings"""
     
-    # Database configuration
-    database_url: str = "postgresql://hospital_user:hospital_pass@localhost:5432/hospital_db"
-    database_host: str = "localhost"
-    database_port: int = 5432
-    database_name: str = "hospital_db" 
-    database_user: str = "hospital_user"
-    database_password: str = "hospital_pass"
-    
+    # Database configuration - Updated for hospital_user compatibility
+    databaseUrl: str = os.environ.get("DATABASE_URL", "postgresql://hospital_user:hospital123@localhost:5432/hospitaldb")
+    databaseHost: str = os.environ.get("DATABASE_HOST", "localhost")
+    databasePort: int = int(os.environ.get("DATABASE_PORT", "5432"))
+    databaseName: str = os.environ.get("DATABASE_NAME", "hospitaldb")
+    databaseUser: str = os.environ.get("DATABASE_USER", "hospital_user")
+    databasePassword: str = os.environ.get("DATABASE_PASSWORD", "hospital123")
+
     # TimescaleDB configuration for vitals data
-    timescaledb_url: str = "postgresql://hospital_user:hospital_pass@localhost:5433/hospital_timescale"
-    timescaledb_host: str = "localhost"
-    timescaledb_port: int = 5433
-    timescaledb_name: str = "hospital_timescale"
-    timescaledb_user: str = "hospital_user"
-    timescaledb_password: str = "hospital_pass"
-    
+    timescaledbUrl: str = os.environ.get("TIMESCALEDB_URL", "postgresql://hospital_user:hospital123@localhost:5433/hospitaltimescale")
+    timescaledbHost: str = os.environ.get("TIMESCALEDB_HOST", "localhost")
+    timescaledbPort: int = int(os.environ.get("TIMESCALEDB_PORT", "5433"))
+    timescaledbName: str = os.environ.get("TIMESCALEDB_NAME", "hospitaltimescale")
+    timescaledbUser: str = os.environ.get("TIMESCALEDB_USER", "hospital_user")
+    timescaledbPassword: str = os.environ.get("TIMESCALEDB_PASSWORD", "hospital123")
+
     # PostgreSQL only - no SQLite support
     
     # Security
-    secret_key: str = "your-secret-key-change-in-production"
+    secretKey: str = os.environ.get("SECRET_KEY", "HSM-2024-SecureKey-ChangeInProd-V1.0")
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    accessTokenExpireMinutes: int = 30
     
     # API Settings
-    api_v1_str: str = "/api/v1"
-    project_name: str = "Hospital Management System"
+    apiV1Str: str = "/api/v1"
+    projectName: str = "Hospital Management System"
     
     # CORS
-    backend_cors_origins: list = ["http://localhost:3000"]
+    backendCorsOrigins: list = ["http://localhost:3000"]
     
     # Logging
-    log_level: str = "INFO"
+    logLevel: str = "INFO"
     
     class Config:
-        env_file = ".env"
-        case_sensitive = False
+        envFile = ".env"
+        caseSensitive = False
 
 # Global settings instance
 settings = Settings()

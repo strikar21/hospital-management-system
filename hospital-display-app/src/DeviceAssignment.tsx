@@ -11,31 +11,33 @@ import { DeviceService, PatientService } from './services';
 interface Device {
   id: string;
   deviceId: string;
-  serialnumber: string;
-  macaddress: string;
-  firmwareversion: string;
-  devicetype: string;
+  serialNumber: string;
+  macAddress: string;
+  firmwareVersion: string;
+  deviceType: string;
   location: string;
   status: string;
-  batterylevel: number | null;
-  lastseen: string | null;
-  assignedpatientId: string | null;
-  calibrationdate: string | null;
-  nextmaintenancedate: string | null;
-  createdat: string;
-  updatedat: string;
+  batteryLevel: number | null;
+  lastSeen: string | null;
+  assignedPatientId: string | null;
+  calibrationDate: string | null;
+  nextMaintenanceDate: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface DeviceAssignment {
+interface DeviceAssignmentRecord {
   id: number;
   deviceId: string;
   patientId: string;
-  performedby: string;
+  performedBy: string;
   assignmentReason: string;
-  assignedat: string;
+  assignedAt: string;
   status: string;
   deviceName: string;
-  devicetype: string;
+  deviceType: string;
+  patientName?: string;
+  location?: string;
 }
 
 interface DeviceAssignmentProps {
@@ -51,8 +53,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const [activeTab, setActiveTab] = useState<'assign' | 'assigned' | 'pool'>('assign');
   const [freeDevices, setFreeDevices] = useState<Device[]>([]);
   const [patients, setPatients] = useState<patient[]>([]);
-  const [assignments, setAssignments] = useState<DeviceAssignment[]>([]);
-  const [assignedDevices, setAssignedDevices] = useState<any[]>([]);
+  const [assignedDevices, setAssignedDevices] = useState<DeviceAssignmentRecord[]>([]);
   const [poolStatus, setPoolStatus] = useState<any>(null);
   const [availableWatches, setAvailableWatches] = useState<any[]>([]);
   const [assignedWatches, setAssignedWatches] = useState<any[]>([]);
@@ -75,7 +76,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
     loadPoolStatus();
     loadAssignmentHistory();
     loadAssignedDevices();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showMessage = (message: string, isError = false) => {
     if (isError) {
@@ -131,7 +132,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       const availableDevices = availableWatchesList.length;
       const assignedDevices = assignedWatchesList.length;
       const offlineDevices = availableWatchesList.filter((w: any) => w.connectionStatus === 'offline').length;
-      const lowBatteryDevices = availableWatchesList.filter((w: any) => w.batterylevel && w.batterylevel <= 20).length;
+      const lowBatteryDevices = availableWatchesList.filter((w: any) => w.batteryLevel && w.batteryLevel <= 20).length;
 
       const poolStatusData = {
         summary: {
@@ -162,7 +163,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const loadAssignmentHistory = async () => {
     try {
       const data = await DeviceService.getAssignmentHistory(currentUser.staffId, undefined, undefined, 20);
-      setAssignments(data);
+      setAssignedDevices(data);
     } catch (error) {
       console.error('Error loading assignment history:', error);
     }
@@ -180,7 +181,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
         // Use backend-provided patient data, with fallbacks only if truly missing
         patientName: assignment.patientName || 'Unknown Patient',
         location: assignment.location || 'N/A',
-        deviceName: assignment.watchDisplay || `Watch ${assignment.serialnumber}`
+        deviceName: assignment.watchDisplay || `Watch ${assignment.serialNumber}`
       }));
 
       setAssignedDevices(assignedWithPatients);
@@ -289,14 +290,6 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
     return 'text-green-500';
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'text-green-500';
-      case 'offline': return 'text-red-500';
-      case 'maintenance': return 'text-yellow-500';
-      default: return 'text-gray-500';
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -407,7 +400,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {freeDevices.map((device) => {
-                  const DeviceIcon = getDeviceIcon(device.devicetype);
+                  const DeviceIcon = getDeviceIcon(device.deviceType);
                   return (
                     <div
                       key={device.id}
@@ -429,7 +422,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-gray-900">{device.serialnumber}</span>
+                              <span className="font-medium text-gray-900">{device.serialNumber}</span>
                               <span className={`text-xs px-2 py-1 rounded-full ${
                                 device.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
@@ -444,10 +437,10 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                             <MapPin className="w-4 h-4 text-gray-400" />
                             <span className="text-xs text-gray-600">{device.location}</span>
                           </div>
-                          {device.batterylevel && (
+                          {device.batteryLevel && (
                             <div className="flex items-center space-x-1">
-                              <Battery className={`w-4 h-4 ${getBatteryColor(device.batterylevel)}`} />
-                              <span className="text-xs text-gray-600">{device.batterylevel}%</span>
+                              <Battery className={`w-4 h-4 ${getBatteryColor(device.batteryLevel)}`} />
+                              <span className="text-xs text-gray-600">{device.batteryLevel}%</span>
                             </div>
                           )}
                         </div>
@@ -662,7 +655,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-gray-900">{watch.displayName || `Watch ${watch.serialnumber}`}</span>
+                              <span className="font-medium text-gray-900">{watch.displayName || `Watch ${watch.serialNumber}`}</span>
                               <span className={`text-xs px-2 py-1 rounded-full ${
                                 (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-100 text-green-800' :
                                 (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-100 text-yellow-800' :
@@ -675,13 +668,13 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                          {watch.batterylevel && (
+                          {watch.batteryLevel && (
                             <div className="flex items-center space-x-1">
                               <Battery className={`w-4 h-4 ${
-                                watch.batterylevel >= 60 ? 'text-green-500' :
-                                watch.batterylevel >= 30 ? 'text-yellow-500' : 'text-red-500'
+                                watch.batteryLevel >= 60 ? 'text-green-500' :
+                                watch.batteryLevel >= 30 ? 'text-yellow-500' : 'text-red-500'
                               }`} />
-                              <span className="text-xs text-gray-600">{watch.batterylevel}%</span>
+                              <span className="text-xs text-gray-600">{watch.batteryLevel}%</span>
                             </div>
                           )}
                           <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
@@ -730,7 +723,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           </div>
                           <div>
                             <div className="flex items-center space-x-2">
-                              <span className="font-medium text-gray-900">{watch.watchDisplay || `Watch ${watch.serialnumber}`}</span>
+                              <span className="font-medium text-gray-900">{watch.watchDisplay || `Watch ${watch.serialNumber}`}</span>
                               <span className={`text-xs px-2 py-1 rounded-full ${
                                 (watch.connectionStatus || watch.status) === 'connected' ? 'bg-green-100 text-green-800' :
                                 (watch.connectionStatus || watch.status) === 'recently_seen' ? 'bg-yellow-100 text-yellow-800' :
@@ -744,13 +737,13 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                          {watch.batterylevel && (
+                          {watch.batteryLevel && (
                             <div className="flex items-center space-x-1">
                               <Battery className={`w-4 h-4 ${
-                                watch.batterylevel >= 60 ? 'text-green-500' :
-                                watch.batterylevel >= 30 ? 'text-yellow-500' : 'text-red-500'
+                                watch.batteryLevel >= 60 ? 'text-green-500' :
+                                watch.batteryLevel >= 30 ? 'text-yellow-500' : 'text-red-500'
                               }`} />
-                              <span className="text-xs text-gray-600">{watch.batterylevel}%</span>
+                              <span className="text-xs text-gray-600">{watch.batteryLevel}%</span>
                             </div>
                           )}
                           <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -809,7 +802,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
                           {assignment.location || 'Ward N/A'}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Assigned: {assignment.assignedat ? new Date(assignment.assignedat).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) + ' • ' + new Date(assignment.assignedat).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Unknown date'}
+                          Assigned: {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) + ' • ' + new Date(assignment.assignedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Unknown date'}
                         </div>
                       </div>
                       

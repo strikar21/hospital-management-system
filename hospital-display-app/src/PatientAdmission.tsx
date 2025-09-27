@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
-  User, Save, X, Calendar, MapPin, Stethoscope,
-  Heart, AlertCircle, CheckCircle, UserPlus
+  Save, X, AlertCircle, CheckCircle, UserPlus
 } from 'lucide-react';
 import { user as UserType } from './types';
 import { getApiUrl } from './config/apiConfig';
@@ -65,45 +64,7 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
 
     setLoading(true);
     try {
-      // Backend will assign patient ID - no frontend generation needed
-      
-      const patientData = {
-        // Backend will generate and assign ID
-        name: formData.name,
-        bedNumber: '', // Will be assigned by nursing staff
-        ward: formData.admissionType, // Doctor's recommendation
-        room: '', // Will be assigned by nursing staff
-        department: formData.department,
-        assignedDoctor: formData.assignedDoctor,
-        age: parseInt(formData.age),
-        gender: formData.gender,
-        weight: formData.weight ? parseFloat(formData.weight) : undefined,
-        diagnosis: formData.diagnosis,
-        admissionDate: formData.admissionDate,
-        status: formData.priority === 'Emergency' ? 'critical' : 'stable',
-        admissionType: formData.admissionType,
-        priority: formData.priority,
-        insuranceType: formData.insuranceType,
-        emergencyContact: formData.emergencyContact,
-        allergies: formData.allergies,
-        admissionStatus: 'pendingBedAssignment' // New status for workflow
-      };
-
-      // Create admission recommendation instead of direct admission
-      const recommendationData = {
-        patientName: formData.name,
-        age: parseInt(formData.age),
-        gender: formData.gender,
-        diagnosis: formData.diagnosis,
-        priority: formData.priority.toLowerCase(),
-        recommendedWard: formData.admissionType,
-        department: formData.department,
-        estimatedLengthOfStay: formData.priority === 'Emergency' ? 1 : 3,
-        specialRequirements: formData.allergies ? `Allergies: ${formData.allergies}` : null,
-        insuranceType: formData.insuranceType,
-        emergencyContact: formData.emergencyContact,
-        weight: formData.weight ? parseFloat(formData.weight) : null
-      };
+      // Create admission recommendation directly from formData
 
       const response = await fetch(getApiUrl('/admission/recommendations'), {
         method: 'POST',

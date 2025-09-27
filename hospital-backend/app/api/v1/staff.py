@@ -9,24 +9,24 @@ import uuid
 import logging
 
 from ...models.staff import Staff, StaffDB, StaffCreate, StaffUpdate, StaffLogin, StaffLoginResponse
-from ...core.database import get_db_connection
-from ...core.db_utils import fetch_one, fetch_all, execute_query
+from ...core.database import getDbConnection
+from ...core.db_utils import fetchOne, fetchAll, executeQuery
 from ...core.security import verify_pin, verify_password, validate_pin_format, validate_staff_id_format, hash_pin, hash_password
-from ...services.audit import log_audit_event
+from ...services.audit import logAuditEvent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.get("/test-simple")
-async def test_simple():
+async def testSimple():
     """Simple test endpoint"""
     logger.info("TEST: Simple endpoint called")
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             logger.info("TEST: Database connection established")
-            result = await fetch_one(conn, "SELECT COUNT(*) as count FROM staff")
+            result = await fetchOne(conn, "SELECT COUNT(*) as count FROM staff")
             logger.info(f"TEST: Query result: {result}")
-            return {"message": "Staff router working", "status": "OK", "staff_count": dict(result)['count']}
+            return {"message": "Staff router working", "status": "OK", "staffCount": dict(result)['count']}
     except Exception as e:
         logger.error(f"TEST: Error in simple endpoint: {e}")
         import traceback
@@ -34,51 +34,51 @@ async def test_simple():
         return {"error": str(e), "status": "ERROR"}
 
 # REMOVED - DUPLICATE ROUTE WITH auth.py - Use /api/v1/auth/login instead
-# async def staff_login_disabled(login_data: StaffLogin):
+# async def staffLoginDisabled(loginData: StaffLogin):
     """
     Staff login endpoint - supports staff ID + PIN and password authentication
     """
-    logger.info(f"Login attempt for staff ID: {login_data.staffId}")
+    logger.info(f"Login attempt for staff ID: {loginData.staffId}")
     try:
         # Validate staff ID format
-        if not validate_staff_id_format(login_data.staffId):
+        if not validate_staff_id_format(loginData.staffId):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid staff ID format. Must be DOC/NUR/ADM/PRV/TEC followed by 4 digits."
             )
         
         # If PIN is provided, validate format
-        if login_data.pin and not validate_pin_format(login_data.pin):
+        if loginData.pin and not validate_pin_format(loginData.pin):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid PIN format. Must be 4 digits."
             )
         
         # Check that either PIN or password is provided
-        if not login_data.pin and not login_data.password and not login_data.nfcCardId:
+        if not loginData.pin and not loginData.password and not loginData.nfccardid:
             raise HTTPException(
                 status_code=400,
                 detail="Either PIN, password, or NFC card is required."
             )
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Try to find staff by ID first, then by NFC card ID
-            if login_data.nfcCardId:
+            if loginData.nfcCardId:
                 query = """
-                SELECT * FROM staff 
+                SELECT * FROM staff
                 WHERE (id = ? OR nfcCardId = ?) AND isActive = true
                 """
-                staff_row = await fetch_one(conn, query, (login_data.staffId, login_data.nfcCardId))
+                staffRow = await fetchOne(conn, query, (loginData.staffId, loginData.nfcCardId))
             else:
-                query = "SELECT * FROM staff WHERE id = ? AND isActive = true"
-                staff_row = await fetch_one(conn, query, (login_data.staffId,))
+                query = 'SELECT * FROM staff WHERE id = ? AND \"isActive\" = true'
+                staffRow = await fetchOne(conn, query, (loginData.staffId,))
             
-            if not staff_row:
+            if not staffRow:
                 # Log failed login attempt
-                await log_audit_event(
-                    user_id=login_data.staffId,
+                await logAuditEvent(
+                    userId=loginData.staffId,
                     action="LOGIN_FAILED",
-                    resource_type="AUTHENTICATION",
+                    resourceType="AUTHENTICATION",
                     details=f"Invalid staff ID or NFC card"
                 )
                 raise HTTPException(
@@ -87,21 +87,21 @@ async def test_simple():
                 )
             
             # Convert row to dict
-            staff_dict = dict(staff_row) if hasattr(staff_row, 'keys') else staff_row
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
             
             # If PIN is provided, verify it
-            if login_data.pin:
-                if not staff_dict.get('pin'):
+            if loginData.pin:
+                if not staffDict.get('pin'):
                     raise HTTPException(
                         status_code=401,
                         detail="PIN not set for this staff member"
                     )
                 
-                if not verify_pin(login_data.pin, staff_dict['pin']):
-                    await log_audit_event(
-                        user_id=login_data.staffId,
+                if not verify_pin(loginData.pin, staffDict['pin']):
+                    await logAuditEvent(
+                        userId=loginData.staffId,
                         action="LOGIN_FAILED",
-                        resource_type="AUTHENTICATION",
+                        resourceType="AUTHENTICATION",
                         details="Invalid PIN"
                     )
                     raise HTTPException(
@@ -110,18 +110,18 @@ async def test_simple():
                     )
             
             # If password is provided, verify it
-            if login_data.password:
-                if not staff_dict.get('password'):
+            if loginData.password:
+                if not staffDict.get('password'):
                     raise HTTPException(
                         status_code=401,
                         detail="Password not set for this staff member"
                     )
                 
-                if not verify_password(login_data.password, staff_dict['password']):
-                    await log_audit_event(
-                        user_id=login_data.staffId,
+                if not verify_password(loginData.password, staffDict['password']):
+                    await logAuditEvent(
+                        userId=loginData.staffId,
                         action="LOGIN_FAILED",
-                        resource_type="AUTHENTICATION",
+                        resourceType="AUTHENTICATION",
                         details="Invalid password"
                     )
                     raise HTTPException(
@@ -130,27 +130,27 @@ async def test_simple():
                     )
             
             # Update last seen timestamp
-            await execute_query(conn,
-                "UPDATE staff SET lastSeen = CURRENT_TIMESTAMP WHERE id = ?",
-                (staff_dict['id'],)
+            await executeQuery(conn,
+                'UPDATE staff SET lastSeen = CURRENT_TIMESTAMP WHERE id = ?',
+                (staffDict['id'],)
             )
             
             # Log successful login
-            auth_method = "PIN" if login_data.pin else "Password" if login_data.password else "NFC"
-            await log_audit_event(
-                user_id=staff_dict['id'],
+            authMethod = "PIN" if loginData.pin else "Password" if loginData.password else "NFC"
+            await logAuditEvent(
+                userId=staffDict['id'],
                 action="LOGIN_SUCCESS",
-                resource_type="AUTHENTICATION",
-                details=f"Staff logged in: {staff_dict['name']} ({staff_dict['role']}) via {auth_method}"
+                resourceType="AUTHENTICATION",
+                details=f"Staff logged in: {staffDict['name']} ({staffDict['role']}) via {authMethod}"
             )
             
-            logger.info(f"✅ Staff login successful: {staff_dict['name']} ({staff_dict['role']}) via {auth_method}")
+            logger.info(f"✅ Staff login successful: {staffDict['name']} ({staffDict['role']}) via {authMethod}")
             
             return StaffLoginResponse(
-                id=staff_dict['id'],
-                name=staff_dict['name'],
-                role=staff_dict['role'],
-                department=staff_dict.get('department'),
+                id=staffDict['id'],
+                name=staffDict['name'],
+                role=staffDict['role'],
+                department=staffDict.get('department'),
                 lastSeen=datetime.now()
             )
             
@@ -164,70 +164,64 @@ async def test_simple():
         raise HTTPException(status_code=500, detail="Login failed")
 
 @router.get("/", response_model=List[Staff])
-async def get_all_staff(
+async def getAllStaff(
     role: Optional[str] = Query(None, description="Filter by staff role"),
     department: Optional[str] = Query(None, description="Filter by department"),
-    active_only: bool = Query(True, description="Show only active staff")
+    activeOnly: bool = Query(True, description="Show only active staff")
 ):
     """
     Get all staff members with optional filtering
     """
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             query = "SELECT * FROM staff WHERE 1=1"
             params = []
-            
-            param_count = 0
+
+            paramCount = 0
             if role:
-                param_count += 1
-                query += f" AND role = ${param_count}"
+                paramCount += 1
+                query += f" AND role = ${paramCount}"
                 params.append(role)
-            
+
             if department:
-                param_count += 1
-                query += f" AND department = ${param_count}"
+                paramCount += 1
+                query += f" AND department = ${paramCount}"
                 params.append(department)
-                
-            if active_only:
-                query += " AND isactive = true"
-            
-            query += " ORDER BY firstname, lastname"
-            
+
+            if activeOnly:
+                query += ' AND "isActive" = true'
+
+            query += " ORDER BY \"firstName\", \"lastName\""
+
             rows = await conn.fetch(query, *params) if params else await conn.fetch(query)
-            
-            staff_list = []
+
+            staffList = []
             for row in rows:
-                staff_dict = dict(row) if hasattr(row, 'keys') else row
-                # Create name field from firstname + lastname
-                if 'firstname' in staff_dict and 'lastname' in staff_dict:
-                    staff_dict['name'] = f"{staff_dict['firstname'] or ''} {staff_dict['lastname'] or ''}".strip()
-                staff_list.append(Staff(**staff_dict))
-            
-            logger.info(f"👥 Retrieved {len(staff_list)} staff members")
-            return staff_list
+                staffDict = dict(row) if hasattr(row, 'keys') else row
+                staffList.append(Staff(**staffDict))
+
+            logger.info(f"👥 Retrieved {len(staffList)} staff members")
+            return staffList
             
     except Exception as e:
         logger.error(f"❌ Get staff error: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve staff")
 
-@router.get("/{staff_id}", response_model=Staff)
-async def get_staff_member(staff_id: str):
+@router.get("/{staffId}", response_model=Staff)
+async def getStaffMember(staffId: str):
     """
     Get a specific staff member
     """
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             query = "SELECT * FROM staff WHERE id = $1"
-            staff_row = await conn.fetchrow(query, staff_id)
+            staffRow = await conn.fetchrow(query, staffId)
             
-            if not staff_row:
+            if not staffRow:
                 raise HTTPException(status_code=404, detail="Staff member not found")
             
-            staff_dict = dict(staff_row) if hasattr(staff_row, 'keys') else staff_row
-            # Create name field from firstname + lastname
-            if 'firstname' in staff_dict and 'lastname' in staff_dict:
-                staff_dict['name'] = f"{staff_dict['firstname'] or ''} {staff_dict['lastname'] or ''}".strip()
-            return Staff(**staff_dict)
+            staffDict = dict(staffRow) if hasattr(staffRow, 'keys') else staffRow
+            return Staff(**staffDict)
             
     except HTTPException:
         raise
@@ -236,128 +230,130 @@ async def get_staff_member(staff_id: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve staff member")
 
 @router.post("/", response_model=Staff)
-async def create_staff_member(staff_data: StaffCreate, created_by: str):
+async def createStaffMember(staffData: StaffCreate, createdBy: str):
     """
     Create a new staff member
     """
     try:
         # Generate next sequence number for the role
-        role_prefix = {
-            "Doctor": "DOC",
-            "Nurse": "NUR", 
-            "Technician": "TEC",
-            "Administrator": "ADM",
-            "Provider": "PRV"
-        }.get(staff_data.role, "STF")
+        rolePrefix = {
+            "doctor": "DOC",
+            "nurse": "NUR", 
+            "technician": "TEC",
+            "administrator": "ADM",
+            "provider": "PRV"
+        }.get(staffData.role, "STF")
         
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Find the next sequence number
-            existing_query = f"SELECT id FROM staff WHERE id LIKE '{role_prefix}%' ORDER BY id DESC LIMIT 1"
-            latest_row = await fetch_one(conn, existing_query)
-            
-            if latest_row:
-                latest_id = latest_row[0] if hasattr(latest_row, '__getitem__') else latest_row
-                sequence = int(latest_id[-4:]) + 1
+            existingQuery = f"SELECT id FROM staff WHERE id LIKE '{rolePrefix}%' ORDER BY id DESC LIMIT 1"
+            latestRow = await fetchOne(conn, existingQuery)
+
+            if latestRow:
+                latestId = latestRow[0] if hasattr(latestRow, '__getitem__') else latestRow
+                sequence = int(latestId[-4:]) + 1
             else:
                 sequence = 1
                 
-            staff_id = f"{role_prefix}{sequence:04d}"
+            staffId = f"{rolePrefix}{sequence:04d}"
             
             # Hash PIN and password if provided
-            hashed_pin = hash_pin(staff_data.pin) if staff_data.pin else None
-            hashed_password = hash_password(staff_data.password) if staff_data.password else None
+            hashedPin = hash_pin(staffData.pin) if staffData.pin else None
+            hashedPassword = hash_password(staffData.password) if staffData.password else None
             
             query = """
                 INSERT INTO staff (
-                    id, name, role, email, phoneNumber, department, 
-                    pin, password, nfcCardId, isActive, createdAt, updatedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?)
+                    id, name, role, email, "phoneNumber", department, 
+                    pin, password, nfcCardId, isActive, "createdAt", updatedAt
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11)
             """
             
             now = datetime.now()
             await conn.execute(query, (
-                staff_id, staff_data.name, staff_data.role, staff_data.email,
-                staff_data.phoneNumber, staff_data.department, hashed_pin,
-                hashed_password, staff_data.nfcCardId, now, now
+                staffId, staffData.name, staffData.role, staffData.email,
+                staffData.phoneNumber, staffData.department, hashedPin,
+                hashedPassword, staffData.nfcCardId, now, now
             ))
             await conn.commit()
             
             # Log audit event
-            await log_audit_event(
-                user_id=created_by,
+            await logAuditEvent(
+                userId=createdBy,
                 action="STAFF_CREATED",
-                resource_type="STAFF",
-                resource_id=staff_id,
-                details=f"Created staff: {staff_data.name} ({staff_data.role})"
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Created staff: {staffData.name} ({staffData.role})"
             )
             
             # Get the created staff member
-            created_row = await fetch_one(conn, "SELECT * FROM staff WHERE id = ?", (staff_id,))
-            staff_dict = dict(created_row) if hasattr(created_row, 'keys') else created_row
-            
-            logger.info(f"✅ Created staff member: {staff_id} - {staff_data.name}")
-            return Staff(**staff_dict)
+            createdRow = await fetchOne(conn, "SELECT * FROM staff WHERE id = ?", (staffId,))
+            staffDict = dict(createdRow) if hasattr(createdRow, 'keys') else createdRow
+
+            logger.info(f"✅ Created staff member: {staffId} - {staffData.name}")
+            return Staff(**staffDict)
             
     except Exception as e:
         logger.error(f"❌ Create staff error: {e}")
         raise HTTPException(status_code=500, detail="Failed to create staff member")
 
-# TEMPORARILY COMMENTED OUT - ROUTE ORDERING ISSUE  
-# @router.put("/{staff_id}", response_model=Staff)
-async def update_staff_member(staff_id: str, staff_data: StaffUpdate, updated_by: str):
+@router.put("/update/{staffId}", response_model=Staff)
+async def updateStaffMember(staffId: str, staffData: StaffUpdate, updatedBy: str = Query(..., description="ID of user making the update")):
     """
     Update an existing staff member
     """
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Check if staff member exists
-            existing = await fetch_one(conn, "SELECT * FROM staff WHERE id = ?", (staff_id,))
+            existing = await fetchOne(conn, "SELECT * FROM staff WHERE id = ?", (staffId,))
             if not existing:
                 raise HTTPException(status_code=404, detail="Staff member not found")
-            
+
             # Build update query for non-None fields
-            update_fields = []
+            updateFields = []
             params = []
             
-            for field, value in staff_data.dict(exclude_unset=True).items():
+            paramCounter = 1
+            for field, value in staffData.dict(exclude_unset=True).items():
                 if value is not None:
                     # Hash PIN and password before updating
                     if field == 'pin':
-                        update_fields.append(f"{field} = ?")
+                        updateFields.append(f"{field} = ${paramCounter}")
                         params.append(hash_pin(value))
                     elif field == 'password':
-                        update_fields.append(f"{field} = ?")
+                        updateFields.append(f"{field} = ${paramCounter}")
                         params.append(hash_password(value))
                     else:
-                        update_fields.append(f"{field} = ?")
+                        updateFields.append(f"{field} = ${paramCounter}")
                         params.append(value)
-            
-            if not update_fields:
+                    paramCounter += 1
+
+            if not updateFields:
                 raise HTTPException(status_code=400, detail="No fields to update")
-            
-            update_fields.append("updatedAt = ?")
+
+            updateFields.append(f"updatedAt = ${paramCounter}")
             params.append(datetime.now())
-            params.append(staff_id)
-            
-            query = f"UPDATE staff SET {', '.join(update_fields)} WHERE id = ?"
+            paramCounter += 1
+            params.append(staffId)
+
+            query = f"UPDATE staff SET {', '.join(updateFields)} WHERE id = ${paramCounter}"
             await conn.execute(query, params)
             await conn.commit()
             
             # Log audit event
-            await log_audit_event(
-                user_id=updated_by,
+            await logAuditEvent(
+                userId=updatedBy,
                 action="STAFF_UPDATED",
-                resource_type="STAFF",
-                resource_id=staff_id,
-                details=f"Updated staff fields: {list(staff_data.dict(exclude_unset=True).keys())}"
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Updated staff fields: {list(staffData.dict(exclude_unset=True).keys())}"
             )
-            
+
             # Get updated staff member
-            updated_row = await fetch_one(conn, "SELECT * FROM staff WHERE id = ?", (staff_id,))
-            staff_dict = dict(updated_row) if hasattr(updated_row, 'keys') else updated_row
-            
-            logger.info(f"✅ Updated staff member: {staff_id}")
-            return Staff(**staff_dict)
+            updatedRow = await fetchOne(conn, "SELECT * FROM staff WHERE id = ?", (staffId,))
+            staffDict = dict(updatedRow) if hasattr(updatedRow, 'keys') else updatedRow
+
+            logger.info(f"✅ Updated staff member: {staffId}")
+            return Staff(**staffDict)
             
     except HTTPException:
         raise
@@ -365,40 +361,642 @@ async def update_staff_member(staff_id: str, staff_data: StaffUpdate, updated_by
         logger.error(f"❌ Update staff error: {e}")
         raise HTTPException(status_code=500, detail="Failed to update staff member")
 
-# TEMPORARILY COMMENTED OUT - ROUTE ORDERING ISSUE
-# @router.delete("/{staff_id}")
-async def deactivate_staff_member(staff_id: str, deactivated_by: str):
+@router.put("/deactivate/{staffId}")
+async def deactivateStaffMember(staffId: str, deactivatedBy: str = Query(..., description="ID of user performing deactivation")):
     """
     Deactivate a staff member (soft delete)
     """
     try:
-        async with get_db_connection() as conn:
+        async with getDbConnection() as conn:
             # Check if staff member exists
-            existing = await fetch_one(conn, "SELECT * FROM staff WHERE id = ?", (staff_id,))
+            existing = await fetchOne(conn, "SELECT * FROM staff WHERE id = ?", (staffId,))
             if not existing:
                 raise HTTPException(status_code=404, detail="Staff member not found")
-            
+
             # Deactivate staff member
             await conn.execute(
-                "UPDATE staff SET isActive = false, updatedAt = ? WHERE id = ?",
-                (datetime.now(), staff_id)
+                "UPDATE staff SET isActive = false, updatedAt = $1 WHERE id = $2",
+                datetime.now(), staffId
             )
             await conn.commit()
-            
+
             # Log audit event
-            await log_audit_event(
-                user_id=deactivated_by,
+            await logAuditEvent(
+                userId=deactivatedBy,
                 action="STAFF_DEACTIVATED",
-                resource_type="STAFF",
-                resource_id=staff_id,
+                resourceType="STAFF",
+                resourceId=staffId,
                 details="Staff member deactivated"
             )
-            
-            logger.info(f"✅ Deactivated staff member: {staff_id}")
-            return {"message": "Staff member deactivated successfully", "staffId": staff_id}
+
+            logger.info(f"✅ Deactivated staff member: {staffId}")
+            return {"message": "Staff member deactivated successfully", "staffId": staffId}
             
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Deactivate staff error: {e}")
         raise HTTPException(status_code=500, detail="Failed to deactivate staff member")
+
+# New staff management endpoints for your requirements
+
+@router.put("/change-pin/{staffId}")
+async def changeStaffPin(
+    staffId: str,
+    newPin: str = Query(..., description="New 4-digit PIN"),
+    changedBy: str = Query(..., description="ID of user making the change")
+):
+    """
+    Allow staff to change their PIN (self-service or admin)
+    """
+    try:
+        # Validate PIN format
+        if not validate_pin_format(newPin):
+            raise HTTPException(status_code=400, detail="Invalid PIN format. Must be 4 digits.")
+
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            # Hash the new PIN
+            hashedPin = hash_pin(newPin)
+
+            # Update PIN
+            await conn.execute(
+                "UPDATE staff SET pin = $1, updatedAt = $2 WHERE id = $3",
+                hashedPin, datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=changedBy,
+                action="PIN_CHANGED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"PIN changed for staff {staffId}"
+            )
+
+            logger.info(f"✅ PIN changed for staff: {staffId}")
+            return {"message": "PIN changed successfully", "staffId": staffId}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Change PIN error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to change PIN")
+
+@router.put("/change-password/{staffId}")
+async def changeStaffPassword(
+    staffId: str,
+    newPassword: str = Query(..., description="New password"),
+    changedBy: str = Query(..., description="ID of user making the change")
+):
+    """
+    Allow staff to change their password (self-service or admin)
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            # Hash the new password
+            hashedPassword = hash_password(newPassword)
+
+            # Update password
+            await conn.execute(
+                "UPDATE staff SET password = $1, updatedAt = $2 WHERE id = $3",
+                hashedPassword, datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=changedBy,
+                action="PASSWORD_CHANGED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Password changed for staff {staffId}"
+            )
+
+            logger.info(f"✅ Password changed for staff: {staffId}")
+            return {"message": "Password changed successfully", "staffId": staffId}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Change password error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to change password")
+
+@router.put("/toggle-card/{staffId}")
+async def toggleStaffCard(
+    staffId: str,
+    enable: bool = Query(..., description="True to enable card, False to disable"),
+    changedBy: str = Query(..., description="ID of user making the change")
+):
+    """
+    Enable or disable staff NFC card access (security management)
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow('SELECT * FROM staff WHERE id = $1 AND \"isActive\" = true', staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Active staff member not found")
+
+            # Update card status by setting/clearing nfcCardId
+            action = "enabled" if enable else "disabled"
+            if enable:
+                # If enabling, ensure they have a card ID (could generate or restore)
+                if not staffRow['nfcCardId']:
+                    # Generate a simple card ID if none exists
+                    cardId = f"CARD{staffId}_{datetime.now().strftime('%Y%m%d')}"
+                    await conn.execute(
+                        "UPDATE staff SET nfcCardId = $1, updatedAt = $2 WHERE id = $3",
+                        cardId, datetime.now(), staffId
+                    )
+                # Card is already enabled if nfcCardId exists
+            else:
+                # Disable by clearing the card ID
+                await conn.execute(
+                    "UPDATE staff SET nfcCardId = NULL, updatedAt = $1 WHERE id = $2",
+                    datetime.now(), staffId
+                )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=changedBy,
+                action=f"CARD{action.upper()}",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"NFC card access {action} for staff {staffId}"
+            )
+
+            logger.info(f"✅ Card {action} for staff: {staffId}")
+            return {"message": f"Card access {action} successfully", "staffId": staffId, "cardenabled": enable}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Toggle card error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to toggle card access")
+
+@router.put("/reassign-department/{staffId}")
+async def reassignStaffDepartment(
+    staffId: str,
+    newDepartment: str = Query(..., description="New department/ward name"),
+    changedBy: str = Query(..., description="ID of user making the change")
+):
+    """
+    Reassign staff to different department/ward
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            oldDepartment = staffRow['department']
+
+            # Update department
+            await conn.execute(
+                "UPDATE staff SET department = $1, updatedAt = $2 WHERE id = $3",
+                newDepartment, datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=changedBy,
+                action="DEPARTMENT_REASSIGNED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Staff reassigned from {oldDepartment} to {newDepartment}"
+            )
+
+            logger.info(f"✅ Staff {staffId} reassigned from {oldDepartment} to {newDepartment}")
+            return {
+                "message": "Department reassignment successful",
+                staffId: staffId,
+                olddepartment: oldDepartment,
+                newdepartment: newDepartment
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Reassign department error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reassign department")
+
+@router.put("/soft-delete/{staffId}")
+async def softDeleteStaff(
+    staffId: str,
+    deletedBy: str = Query(..., description="ID of user performing soft delete")
+):
+    """
+    Soft delete staff (disable login, clear card, keep data)
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            # Soft delete: disable login, clear NFC card, keep all data
+            await conn.execute(
+                "UPDATE staff SET isActive = false, nfcCardId = NULL, updatedAt = $1 WHERE id = $2",
+                datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=deletedBy,
+                action="STAFF_SOFT_DELETED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Staff soft deleted - login disabled, card cleared, data preserved"
+            )
+
+            logger.info(f"✅ Staff soft deleted: {staffId}")
+            return {
+                "message": "Staff soft deleted successfully",
+                staffId: staffId,
+                "note": "Login disabled, card access removed, historical data preserved"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Soft delete error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to soft delete staff")
+
+# NFC Card Management Endpoints
+
+@router.put("/issue-new-card/{staffId}")
+async def issueNewNfcCard(
+    staffId: str,
+    cardId: str = Query(None, description="Optional custom card ID, auto-generated if not provided"),
+    issuedBy: str = Query(..., description="ID of user issuing the card")
+):
+    """
+    Issue a new NFC card to staff (replacement for lost/damaged cards)
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            oldCardId = staffRow['nfcCardId']
+
+            # Generate card ID if not provided
+            if not cardId:
+                from datetime import datetime
+                cardId = f"CARD{staffId}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            # Check if card ID is already in use by another staff member
+            existingCard = await conn.fetchrow("SELECT id FROM staff WHERE nfcCardId = $1 AND id != $2", cardId, staffId)
+            if existingCard:
+                raise HTTPException(status_code=400, detail=f"Card ID {cardId} is already assigned to staff {existingCard['id']}")
+
+            # Issue new card
+            await conn.execute(
+                "UPDATE staff SET nfcCardId = $1, updatedAt = $2 WHERE id = $3",
+                cardId, datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=issuedBy,
+                action="NEW_CARDISSUED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"New NFC card issued: {cardId} (replaced: {oldCardId or 'None'})"
+            )
+
+            logger.info(f"✅ New card issued to staff {staffId}: {cardId}")
+            return {
+                "message": "New NFC card issued successfully",
+                staffId: staffId,
+                newcardid: cardId,
+                oldcardid: oldCardId,
+                "note": "Old card is automatically deactivated"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Issue new card error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to issue new card")
+
+@router.put("/replace-lost-card/{staffId}")
+async def replaceLostNfcCard(
+    staffId: str,
+    reason: str = Query("lost", description="Reason for replacement: lost, damaged, stolen, expired"),
+    replacedBy: str = Query(..., description="ID of user processing replacement")
+):
+    """
+    Replace lost/damaged/stolen NFC card with security logging
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            oldCardId = staffRow['nfcCardId']
+
+            # Generate new secure card ID
+            from datetime import datetime
+            import secrets
+            newCardId = f"SECURE{staffId}_{datetime.now().strftime('%Y%m%d')}_{secrets.token_hex(4).upper()}"
+
+            # Replace card with new secure ID
+            await conn.execute(
+                "UPDATE staff SET nfcCardId = $1, updatedAt = $2 WHERE id = $3",
+                newCardId, datetime.now(), staffId
+            )
+
+            # Log security audit event
+            await logAuditEvent(
+                userId=replacedBy,
+                action="CARDREPLACED_SECURITY",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Card replaced due to {reason}. Old: {oldCardId or 'None'}, New: {newCardId}"
+            )
+
+            # Log old card as compromised if it existed
+            if oldCardId:
+                await logAuditEvent(
+                    userId=replacedBy,
+                    action="CARDCOMPROMISED",
+                    resourceType="SECURITY",
+                    resourceId=oldCardId,
+                    details=f"Card {oldCardId} marked as {reason} for staff {staffId}"
+                )
+
+            logger.info(f"🔒 Security card replacement for staff {staffId}: {reason}")
+            return {
+                message: f"NFC card replaced successfully due to {reason}",
+                staffId: staffId,
+                newcardid: newCardId,
+                compromisedcardid: oldCardId,
+                reason: reason,
+                "securitynote": "Old card is flagged as compromised and deactivated"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Replace lost card error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to replace card")
+
+@router.put("/update-card-id/{staffId}")
+async def updateNfcCardId(
+    staffId: str,
+    newCardId: str = Query(..., description="New card ID to assign"),
+    updatedBy: str = Query(..., description="ID of user making the update")
+):
+    """
+    Update/change NFC card ID for administrative purposes
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Check if staff member exists
+            staffRow = await conn.fetchrow("SELECT * FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            # Validate new card ID format (basic validation)
+            if len(newCardId.strip()) < 4:
+                raise HTTPException(status_code=400, detail="Card ID must be at least 4 characters")
+
+            # Check if new card ID is already in use
+            existingCard = await conn.fetchrow("SELECT id FROM staff WHERE nfcCardId = $1 AND id != $2", newCardId, staffId)
+            if existingCard:
+                raise HTTPException(status_code=400, detail=f"Card ID {newCardId} is already assigned to staff {existingCard['id']}")
+
+            oldCardId = staffRow['nfcCardId']
+
+            # Update card ID
+            await conn.execute(
+                "UPDATE staff SET nfcCardId = $1, updatedAt = $2 WHERE id = $3",
+                newCardId, datetime.now(), staffId
+            )
+
+            # Log audit event
+            await logAuditEvent(
+                userId=updatedBy,
+                action="CARDID_UPDATED",
+                resourceType="STAFF",
+                resourceId=staffId,
+                details=f"Card ID changed from {oldCardId or 'None'} to {newCardId}"
+            )
+
+            logger.info(f"✅ Card ID updated for staff {staffId}: {oldCardId} → {newCardId}")
+            return {
+                "message": "NFC card ID updated successfully",
+                staffId: staffId,
+                oldcardid: oldCardId,
+                newcardid: newCardId
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Update card ID error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update card ID")
+
+@router.get("/card-status/{staffId}")
+async def getNfcCardStatus(staffId: str):
+    """
+    Get current NFC card status for a staff member
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Get staff and card info
+            staffRow = await conn.fetchrow("SELECT id, name, nfcCardId, isActive, updatedAt FROM staff WHERE id = $1", staffId)
+            if not staffRow:
+                raise HTTPException(status_code=404, detail="Staff member not found")
+
+            staffDict = dict(staffRow)
+
+            cardId = staffRow['nfcCardId']
+            hasCard = bool(cardId)
+            cardActive = hasCard and staffRow['isActive']
+
+            return {
+                "staffId": staffId,
+                "staffname": staffDict['name'],
+                "hascard": hasCard,
+                "cardid": cardId,
+                "cardactive": cardActive,
+                "staffactive": staffRow['isActive'],
+                "lastupdated": staffRow['updatedAt'],
+                "status": "active" if cardActive else "inactive" if hasCard else "noCard"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Get card status error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get card status")
+
+@router.get("/cards/list")
+async def listAllNfcCards(
+    activeOnly: bool = Query(True, description="Show only active cards"),
+    department: str = Query(None, description="Filter by department")
+):
+    """
+    List all NFC cards in the system (for admin management)
+    """
+    try:
+        async with getDbConnection() as conn:
+            query = "SELECT id, name, department, nfcCardId, isActive, updatedAt FROM staff WHERE nfcCardId IS NOT NULL"
+            params = []
+            paramCount = 0
+
+            if activeOnly:
+                query += " AND isActive = true"
+
+            if department:
+                paramCount += 1
+                query += f" AND department = ${paramCount}"
+                params.append(department)
+
+            query += " ORDER BY department, name"
+
+            rows = await conn.fetch(query, *params) if params else await conn.fetch(query)
+
+            cards = []
+            for row in rows:
+                cards.append({
+                    "staffId": row['id'],
+                    "staffname": row['name'],
+                    "department": row['department'],
+                    "cardid": row['nfcCardId'],
+                    "isactive": row['isActive'],
+                    "lastupdated": row['updatedAt']
+                })
+
+            return {
+                "totalcards": len(cards),
+                "filters": {
+                    "activeonly": activeOnly,
+                    "department": department
+                },
+                cards: cards
+            }
+
+    except Exception as e:
+        logger.error(f"❌ List cards error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list cards")
+
+@router.get("/roles/list")
+async def getRolesList():
+    """
+    Get list of available staff roles for frontend dropdown
+    """
+    try:
+        # Standard hospital roles
+        roles = [
+            "Doctor",
+            "Nurse",
+            "Administrator",
+            "Technician",
+            "Provisioner"
+        ]
+        return {"roles": roles}
+    except Exception as e:
+        logger.error(f"❌ Get roles error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get roles list")
+
+@router.get("/departments/list")
+async def getDepartmentsList():
+    """
+    Get list of available departments for frontend dropdown
+    """
+    try:
+        async with getDbConnection() as conn:
+            # Get unique departments from existing staff
+            query = "SELECT DISTINCT department FROM staff WHERE department IS NOT NULL ORDER BY department"
+            rows = await conn.fetch(query)
+
+            departments = [row['department'] for row in rows]
+
+            # Add standard departments if not present
+            standardDepartments = [
+                "Emergency Medicine",
+                "ICU",
+                "General Ward",
+                "Cardiology",
+                "Administration",
+                "IT Support",
+                "IT"
+            ]
+
+            for dept in standardDepartments:
+                if dept not in departments:
+                    departments.append(dept)
+
+            departments.sort()
+            return {"departments": departments}
+
+    except Exception as e:
+        logger.error(f"❌ Get departments error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get departments list")
+
+@router.get("/generate-id/{role}")
+async def generateStaffId(role: str):
+    """
+    Generate next available staff ID for given role
+    """
+    try:
+        # Role prefix mapping
+        rolePrefixes = {
+            "doctor": "DOC",
+            "nurse": "NUR",
+            "administrator": "ADM",
+            "technician": "TEC",
+            "provisioner": "PRV"
+        }
+
+        if role not in rolePrefixes:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+
+        prefix = rolePrefixes[role]
+
+        async with getDbConnection() as conn:
+            # Find highest existing ID for this role
+            query = "SELECT id FROM staff WHERE id LIKE $1 ORDER BY id DESC LIMIT 1"
+            pattern = f"{prefix}%"
+
+            row = await conn.fetchrow(query, pattern)
+
+            if row:
+                # Extract number and increment
+                existingId = row['id']
+                numberPart = existingId.replace(prefix, '')
+                try:
+                    nextNumber = int(numberPart) + 1
+                except ValueError:
+                    nextNumber = 1
+            else:
+                nextNumber = 1
+
+            # Generate new ID with zero-padding
+            newId = f"{prefix}{nextNumber:04d}"
+
+            return {"staffId": newId, "role": role}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Generate ID error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate staff ID")

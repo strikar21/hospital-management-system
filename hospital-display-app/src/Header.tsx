@@ -74,10 +74,10 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">
-                  {settings.bedsidemode ? 'Bedside Monitor Mode' : 'Hospital Display System'}
+                  {settings.bedsideMode ? 'Bedside Monitor Mode' : 'Hospital Display System'}
                 </h1>
                 <p className="text-xs text-gray-600">
-                  Welcome, {currentUser.name} ({currentUser.role}) - {currentUser.department}
+                  {currentUser.name} - {currentUser.department}
                 </p>
               </div>
             </div>
@@ -128,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div className="flex items-center space-x-3">
             {/* Bedside Mode Indicator */}
-            {settings.bedsidemode && (
+            {settings.bedsideMode && (
               <div className="flex items-center space-x-1.5 text-xs px-2 py-1 rounded-lg bg-purple-100 border border-purple-300 text-purple-700">
                 <div className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-pulse"></div>
                 <span className="font-medium">Bedside Active</span>

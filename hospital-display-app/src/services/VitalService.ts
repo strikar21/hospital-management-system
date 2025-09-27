@@ -1,7 +1,7 @@
 // VitalService.ts - Vital signs monitoring and ECG data
 import { vitalhistory, timerange, ecgreading } from '../types';
 import { BaseService } from './BaseService';
-import { MedicalDataTransformer } from '../utils/dataTransformers';
+import { DataTransformer } from '../utils/dataTransformer';
 
 export class VitalService extends BaseService {
 
@@ -12,7 +12,7 @@ export class VitalService extends BaseService {
   static async getVitalTimeSeries(
     patientId: string,
     timeRange: timerange,
-    vitalType: 'heartRate' | 'bloodPressure' | 'temperature' | 'oxygenSaturation' | 'respiratoryRate' = 'heartRate',
+    vitalType: 'heartRate' | 'systolicPressure' | 'diastolicPressure' | 'skinTemperature' | 'oxygenSaturation' | 'respiratoryRate' = 'heartRate',
     limit: number = 1000
   ): Promise<vitalhistory[]> {
     try {
@@ -27,7 +27,7 @@ export class VitalService extends BaseService {
         return [];
       }
 
-      const convertedData = MedicalDataTransformer.transformVitalTimeSeriesData(response);
+      const convertedData = DataTransformer.transformVitalTimeSeriesData(response);
       console.log(`✅ Retrieved ${convertedData.length} vital data points`);
 
       return convertedData;
