@@ -25,7 +25,7 @@ interface PatientDetailProps {
   onPatientDischarge?: (patientId: string) => void;
 }
 
-export const PatientDetail: React.FC<PatientDetailProps> = ({
+const PatientDetailComponent: React.FC<PatientDetailProps> = ({
   patient,
   currentUser,
   onClose,
@@ -2890,4 +2890,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({
   );
 };
 
+// Memoized export for performance optimization
+const PatientDetail = React.memo(PatientDetailComponent);
+export { PatientDetail };
 export default PatientDetail;
