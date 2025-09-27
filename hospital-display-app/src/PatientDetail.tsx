@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap,
-  Edit, Save, X, Play, FileText, Clock, User as UserIcon,
+  Edit, FileText, Clock, User as UserIcon,
   TestTube, Shield, XCircle, MessageCircle,
-  Send
+  Send, CheckCircle, Stethoscope
 } from 'lucide-react';
 import { patient, user, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
 import {
@@ -11,12 +11,13 @@ import {
 } from './utils';
 import { MedicalUtils } from './utils/medicalUtils';
 import { PermissionUtils } from './utils/permissionUtils';
-import { PatientService, InvestigationService, TherapyService } from './services';
+import { PatientService } from './services';
 import CaseSheetBook from './CaseSheetBook';
 import PatientAlerts from './components/PatientAlerts';
 import PatientMedications from './components/PatientMedications';
-// import PatientNotes from './components/PatientNotes'; // Unused after component extraction
 import ECGViewer from './components/ECGViewer';
+import PatientInvestigations from './components/PatientInvestigations';
+import PatientTherapies from './components/PatientTherapies';
 
 
 interface PatientDetailProps {
@@ -887,6 +888,17 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
 
           {/* Investigation Tab */}
           {activeTab === 'investigations' && (
+            <PatientInvestigations
+              patient={patient}
+              currentUser={currentUser}
+              investigations={investigations}
+              setInvestigations={setInvestigations}
+              addCaseSheetEntry={addCaseSheetEntry}
+            />
+          )}
+
+          {/* Old investigations code - kept for reference, will be removed */}
+          {false && activeTab === 'investigations' && (
             <div className="p-4 h-full flex flex-col">
               {PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="flex justify-end mb-3">
@@ -1509,6 +1521,17 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
 
           {/* Therapy Tab */}
           {activeTab === 'therapy' && (
+            <PatientTherapies
+              patient={patient}
+              currentUser={currentUser}
+              therapies={therapies}
+              setTherapies={setTherapies}
+              addCaseSheetEntry={addCaseSheetEntry}
+            />
+          )}
+
+          {/* Old therapy code - kept for reference, will be removed */}
+          {false && activeTab === 'therapy' && (
             <div className="p-4 h-full flex flex-col">
               {PermissionUtils.canEditMedications(currentUser.role) && (
                 <div className="flex justify-end mb-3">
