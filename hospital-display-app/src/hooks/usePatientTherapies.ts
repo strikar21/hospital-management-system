@@ -108,7 +108,9 @@ export const usePatientTherapies = ({
           patientResponse: patientResponse
         };
 
-        // TODO: Implement therapy session recording in backend
+        // BACKEND INTEGRATION NEEDED: Implement TherapyService.addTherapySession method
+        // Expected endpoint: POST /api/v1/patients/{patientId}/therapies/{therapyId}/sessions
+        // Payload: { duration, notes, therapist, patientResponse, performedBy }
         // await TherapyService.addTherapySession(patient.id, therapy.id, sessionData, currentUser.id);
 
         const newSession = {

@@ -74,8 +74,9 @@ export const BedsideMode: React.FC<BedsideModeProps> = ({
     
     useEffect(() => {
       const generateData = () => {
-        // TODO: Replace with backend API call for waveform data
-        // Placeholder: flat line data
+        // BACKEND INTEGRATION NEEDED: Replace with VitalService.getWaveformData(patientId, isEcgMode)
+        // Expected endpoint: GET /api/v1/patients/{id}/waveform?mode=ecg|eeg
+        // Placeholder: flat line data until backend supports real-time waveform streaming
         const processedData = Array.from({length: 400}, (_, x) => ({
           x,
           y: 25 // Flat line placeholder

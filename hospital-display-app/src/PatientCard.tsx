@@ -44,8 +44,9 @@ const PatientCard: React.FC<PatientCardProps> = ({
 
   // ECG/EEG waveform generation removed - now uses backend API
   const isECGMode: boolean = patient.vitals?.isEcgMode !== undefined ? patient.vitals?.isEcgMode : true;
-  // TODO: Replace with backend API call for waveform data
-  const pathData = "M 0 25 L 250 25"; // Flat line placeholder
+  // BACKEND INTEGRATION NEEDED: Replace with VitalService.getWaveformData(patientId, isECGMode)
+  // Expected endpoint: GET /api/v1/patients/{id}/waveform?mode=ecg|eeg&lead={selectedLead}
+  const pathData = "M 0 25 L 250 25"; // Flat line placeholder until real-time waveform data available
 
   // Detect various conditions
   const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals?.heartRate || 0, patient.vitals?.ecgReading || 0);

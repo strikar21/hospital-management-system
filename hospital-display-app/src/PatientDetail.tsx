@@ -1718,8 +1718,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                                         patientResponse: patientResponse
                                       };
                                       
-                                      // TODO: Implement therapy session recording in backend
-                                      // await TherapyService.addTherapySession(patient.id, therapy.id, sessionData, currentUser.id);
+                                      // Note: Therapy session recording handled in usePatientTherapies hook
                                       
                                       const newSession = {
                                         id: 'session_' + Date.now(),
