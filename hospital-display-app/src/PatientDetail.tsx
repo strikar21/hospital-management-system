@@ -292,9 +292,6 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
     { id: 'casesheet', label: 'Case Sheet', icon: FileText }
   ]; // All tabs visible to all roles - permissions handled within each tab
   
-  console.log('📋 Available tabs:', tabs.map(t => t.label).join(', '));
-  console.log('💊 Medications count in component:', medications.length);
-  console.log('🧪 Investigations count in component:', investigations.length);
 
   // Enhanced case sheet that includes all activities, with only notes categorized by staff role
   const getEnhancedCaseSheet = () => {
@@ -456,10 +453,6 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
   
   // Pharmacy functionality removed
   
-  console.log('🏃 Therapies count in component:', therapies.length);
-  console.log('🧪 Lab results count:', labResults.length);
-  console.log('🖼️ Imaging studies count:', imagingStudies.length);
-  console.log('System ready');
 
   return (
     <div 
@@ -1503,7 +1496,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                 />
                 <div className="mt-4 text-center">
                   <button
-                    onClick={() => console.log('DICOM viewer disabled')}
+                    onClick={() => {/* DICOM viewer disabled */}}
                     className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 mr-2"
                   >
                     Open in DICOM Viewer

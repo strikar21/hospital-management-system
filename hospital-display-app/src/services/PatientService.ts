@@ -15,7 +15,6 @@ export class PatientService extends BaseService {
 
   static async getPatient(patientId: string): Promise<patient | null> {
     try {
-      console.log(`🔍 Fetching complete patient data for: ${patientId}`);
 
       const response = await this.fetchFromBackend(`/patients/${patientId}`);
 
@@ -24,12 +23,10 @@ export class PatientService extends BaseService {
         return null;
       }
 
-      console.log(`✅ Raw patient data received for ${patientId}:`, response);
 
       // Transform and return patient data
       const transformedPatient = DataTransformer.transformPatientData(response);
 
-      console.log(`🔄 Transformed patient data for ${patientId}:`, transformedPatient);
 
       return transformedPatient;
     } catch (error) {
@@ -51,7 +48,6 @@ export class PatientService extends BaseService {
         endpoint += `?${params.toString()}`;
       }
 
-      console.log(`🔍 Fetching patients from: ${endpoint}`);
       const response = await this.fetchFromBackend(endpoint);
 
       // Handle v2 response format: {patients: [...], total: number, success: boolean}
@@ -61,7 +57,6 @@ export class PatientService extends BaseService {
         return [];
       }
 
-      console.log(`✅ Retrieved ${patients.length} patients`);
 
       // Transform all patient data
       return patients.map(p => DataTransformer.transformPatientData(p));
@@ -107,7 +102,6 @@ export class PatientService extends BaseService {
           timestamp: new Date().toISOString()
         })
       });
-      console.log('✅ Note added successfully');
       return response;
     } catch (error) {
       console.error('❌ Error adding note:', error);
@@ -125,7 +119,6 @@ export class PatientService extends BaseService {
           editedAt: new Date().toISOString()
         })
       });
-      console.log('✅ Note edited successfully');
       return true;
     } catch (error) {
       console.error('❌ Error editing note:', error);
@@ -141,7 +134,6 @@ export class PatientService extends BaseService {
           'X-Deleted-By': userId
         }
       });
-      console.log('✅ Note deleted successfully');
       return true;
     } catch (error) {
       console.error('❌ Error deleting note:', error);
@@ -204,7 +196,6 @@ export class PatientService extends BaseService {
   static async dischargePatient(patientId: string, staffId: string): Promise<boolean> {
     try {
       // Use new workflow endpoints
-      console.log(`🏥 Starting discharge process for patient: ${patientId}`);
 
       // Step 1: Initiate discharge workflow
       const workflowResponse = await this.fetchFromBackend('/discharge-workflow/initiate', {
@@ -216,7 +207,6 @@ export class PatientService extends BaseService {
         })
       });
 
-      console.log('✅ Discharge workflow initiated:', workflowResponse);
 
       // Step 2: Auto-unassign devices
       try {
@@ -228,7 +218,6 @@ export class PatientService extends BaseService {
             unassignedBy: staffId
           })
         });
-        console.log('✅ Devices unassigned:', unassignResponse);
       } catch (deviceError) {
         console.warn('⚠️ Device unassignment warning:', deviceError);
         // Continue with discharge even if device unassignment fails
@@ -244,7 +233,6 @@ export class PatientService extends BaseService {
         })
       });
 
-      console.log('✅ Patient discharge completed successfully:', completeResponse);
       return true;
 
     } catch (error) {
@@ -266,7 +254,6 @@ export class PatientService extends BaseService {
           acknowledgedAt: new Date().toISOString()
         })
       });
-      console.log('✅ Alert acknowledged successfully');
       return true;
     } catch (error) {
       console.error('❌ Error acknowledging alert:', error);

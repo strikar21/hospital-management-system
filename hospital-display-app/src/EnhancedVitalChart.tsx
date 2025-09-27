@@ -83,22 +83,11 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
 
   const loadVitalData = useCallback(async () => {
     setLoading(true);
-    console.log('=== LOADING VITALS DATA ===');
     
     try {
       const backendVitalType = mapVitalType(vitalType);
       
-      console.log('Patient Info:', patient);
-      console.log('Request Parameters:', {
-        patientId: patient.id,
-        originalVitalType: vitalType,
-        backendVitalType: backendVitalType,
-        timeframe: selectedTimeframe,
-        hours: selectedHours,
-        raw: showRawData
-      });
       
-      console.log('Calling VitalService.getVitalHistory (fallback)...');
       
       // Use working getVitalHistory method with fallback support
       const timeRangeMap: { [key: string]: '1h' | '6h' | '24h' | '7d' } = {
@@ -111,19 +100,14 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       };
       
       const mappedTimeRange = timeRangeMap[selectedTimeframe] || '6h';
-      console.log('Mapped timeframe:', selectedTimeframe, '->', mappedTimeRange);
       
       const vitalHistoryData = await VitalService.getVitalHistory(patient.id, mappedTimeRange);
-      console.log('Vital history data:', vitalHistoryData.length, 'points');
-      console.log('Raw vital history data:', vitalHistoryData);
-      console.log('Sample data point:', vitalHistoryData[0]);
       
       if (vitalHistoryData && vitalHistoryData.length > 0) {
         // Convert VitalHistory format to chart data format
         const isBloodPressure = vitalType === 'systolicPressure' || vitalType === 'diastolicPressure';
         
         if (isBloodPressure) {
-          console.log('Processing blood pressure data');
           
           // Convert to systolic BP data
           const systolicData = vitalHistoryData.map((point: any) => ({
@@ -143,7 +127,6 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           
           setVitalData(systolicData);
           setSecondaryVitalData(diastolicData);
-          console.log('✅ Blood pressure data set - Systolic:', systolicData.length, 'Diastolic:', diastolicData.length);
           setChartConfig({ 
             title: 'Systolic Blood Pressure',
             color: '#dc2626',
@@ -169,7 +152,6 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
           };
           
           const vitalKey = vitalKeyMap[vitalType] || 'heartRate';
-          console.log('Mapping vitalType:', vitalType, 'to key:', vitalKey);
           
           const chartData = vitalHistoryData.map((point: any) => ({
             timestamp: point.time,
@@ -178,10 +160,8 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
             dataPoints: 1
           }));
           
-          console.log('Sample converted data point:', chartData[0]);
           
           setVitalData(chartData);
-          console.log('✅ Single vital data set:', vitalType, 'Points:', chartData.length);
           
           // Set chart config based on vital type
           const chartConfigs = {
@@ -197,17 +177,14 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
                         { title: vitalType, color: '#6b7280', unit: '', normalRange: { min: 0, max: 100 }};
           
           setChartConfig(config);
-          console.log('✅ Successfully set vital data points:', chartData.length);
         }
       } else {
-        console.log('❌ No vital history data available');
         setVitalData([]);
         setChartConfig({});
       }
 
       // Load medication timeline if showing medications
       if (showMedications) {
-        console.log('Medication timeline disabled - using fallback mode');
         // Temporarily disable medication loading since analytics endpoint not available
         setMedicationEvents([]);
       }
@@ -218,7 +195,6 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
     } finally {
       setLoading(false);
-      console.log('=== LOADING COMPLETE ===');
     }
   }, [vitalType, selectedTimeframe, selectedHours, showRawData, patient, showMedications]);
 
@@ -366,9 +342,6 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
       const isDiastolicAbnormal = isAbnormal(diastolicValue, vitalType, true);
       
       if (index < 3) {
-        console.log(`🩺 BP Analysis for point ${index}:`);
-        console.log(`  Systolic: ${point.value} (abnormal: ${isValueAbnormal}) [normal: 90-140]`);
-        console.log(`  Diastolic: ${diastolicValue} (abnormal: ${isDiastolicAbnormal}) [normal: 60-90]`);
       }
       
       formattedPoint.diastolicValue = diastolicValue;
@@ -380,14 +353,11 @@ export const EnhancedVitalChart: React.FC<EnhancedVitalChartProps> = ({
     }
     
     if (index < 3) {
-      console.log(`Chart point ${index}:`, formattedPoint);
     }
     
     return formattedPoint;
   });
 
-  console.log('Final chartData length:', chartData.length);
-  console.log('Final chartData sample:', chartData.slice(0, 2));
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
