@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap, AlertTriangle, 
-  Plus, Edit, Save, X, Pause, Play, StopCircle, FileText, Clock, User as UserIcon,
-  TestTube, Stethoscope, Shield, CheckCircle, XCircle, MessageCircle,
+import {
+  ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap,
+  Edit, Save, X, Play, FileText, Clock, User as UserIcon,
+  TestTube, Shield, XCircle, MessageCircle,
   Send
 } from 'lucide-react';
-import { patient, user, medication, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
+import { patient, user, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
 import {
-  getStatusColor, getVitalStatusColor, getMedicationStatusColor, formatTimeOnly, formatDateTime
+  getStatusColor, getVitalStatusColor, formatTimeOnly, formatDateTime
 } from './utils';
 import { MedicalUtils } from './utils/medicalUtils';
 import { PermissionUtils } from './utils/permissionUtils';
-import { PatientService, MedicationService, InvestigationService, TherapyService } from './services';
+import { PatientService, InvestigationService, TherapyService } from './services';
 import CaseSheetBook from './CaseSheetBook';
+import PatientAlerts from './components/PatientAlerts';
+import PatientMedications from './components/PatientMedications';
+// import PatientNotes from './components/PatientNotes'; // Unused after component extraction
+import ECGViewer from './components/ECGViewer';
 
 
 interface PatientDetailProps {
@@ -44,26 +48,6 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
     console.log('🏃 Patient therapies count:', patient.therapies?.length || 0);
   }
   
-  // Function to determine staff role type based on user role
-  const getRoleBasedNoteType = (userRole: string): 'doctorNotes' | 'nursingNotes' | 'therapistNotes' | 'technicianNotes' | 'pharmacyNotes' | 'otherNotes' => {
-    switch (userRole) {
-      case 'Doctor':
-      // 'Senior Consultant' role not available in current interface
-        return 'doctorNotes';
-      case 'Nurse':
-      // 'Senior Nurse' role not available in current interface
-        return 'nursingNotes';
-      case 'Technician':
-        return 'technicianNotes';
-      case 'Admin':
-      case 'Administrator':
-      case 'Master Admin':
-      case 'Provisioner':
-        return 'otherNotes';
-      default:
-        return 'otherNotes';
-    }
-  };
   
   const [activeTab, setActiveTab] = useState<'overview' | 'medications' | 'investigations' | 'therapy' | 'notes' | 'casesheet'>('overview');
   const [medications, setMedications] = useState<medication[]>(patient.medications || []);
@@ -72,19 +56,8 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
   const [notes, setNotes] = useState<noteComment[]>(patient.notes || []);
   const [alerts, setAlerts] = useState<alertType[]>(patient.alerts || []);
   const [caseSheet, setCaseSheet] = useState<caseSheetEntry[]>(patient.caseSheet || []);
-  const [isEcgMode, setIsECGMode] = useState<boolean>(patient.vitals?.isEcgMode ?? true); // Local state for simulation
   
-  // Notes state
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [newNoteContent, setNewNoteContent] = useState('');
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingNoteContent, setEditingNoteContent] = useState('');
   
-  // New medication form
-  const [isAddingMedication, setIsAddingMedication] = useState(false);
-  const [newMedication, setNewMedication] = useState({
-    name: '', dosage: '', frequency: '', route: 'PO', duration: ''
-  });
   
   // Investigation form
   const [isAddingInvestigation, setIsAddingInvestigation] = useState(false);
@@ -99,8 +72,6 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
   });
   
   // Clinical Decision Support
-  const [clinicalAlerts, setClinicalAlerts] = useState<clinicalAlert[]>([]);
-  const [showClinicalAlerts, setShowClinicalAlerts] = useState(false);
   
   // Lab Integration
   const [labResults, setLabResults] = useState<labResult[]>([]);
@@ -113,9 +84,6 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
   
 
   // Loading states
-  const [addingNote, setAddingNote] = useState(false);
-  const [editingNote, setEditingNote] = useState(false);
-  const [acknowledgingAlert, setAcknowledgingAlert] = useState<string | null>(null);
   const [addingInvestigation, setAddingInvestigation] = useState(false);
   const [addingTherapy, setAddingTherapy] = useState(false);
 
@@ -129,22 +97,10 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
     setAlerts(patient.alerts || []);
   }, [patient.caseSheet, patient.medications, patient.investigations, patient.therapies, patient.notes, patient.alerts]);
 
-  useEffect(() => {
-    setIsECGMode(patient.vitals?.isEcgMode || false);
-  }, [patient.vitals?.isEcgMode]);
 
-  // Sync alerts and auto-hide acknowledged ones after 3 seconds
+  // Sync alerts
   useEffect(() => {
     setAlerts(patient.alerts || []);
-    
-    // Auto-hide acknowledged alerts after 3 seconds
-    const acknowledgedAlerts = (patient.alerts || []).filter(alert => alert.isAcknowledged);
-    if (acknowledgedAlerts.length > 0) {
-      const timer = setTimeout(() => {
-        setAlerts(prev => prev.filter(alert => !alert.isAcknowledged));
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
   }, [patient.alerts]);
 
 
@@ -174,174 +130,9 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
     };
   };
 
-  // Handle ECG/EEG toggle
-  const handleToggleECGMode = (newMode: boolean) => {
-    setIsECGMode(newMode); // Update local state for simulation
-    if (onToggleECGMode) {
-      const updatedPatient = {
-        ...patient,
-        vitals: {
-          ...patient.vitals,
-          isEcgMode: newMode
-        }
-      };
-      onToggleECGMode(updatedPatient); // Call parent callback if provided
-    }
-  };
 
-  // Handle Alert Acknowledgment - FIXED to auto-hide after acknowledgment
-  const handleAcknowledgeAlert = async (alertId: string) => {
-    setAcknowledgingAlert(alertId);
-    try {
-      await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
-      
-      setAlerts(prev => prev.map(alert =>
-        alert.id === alertId ? {
-          ...alert,
-          isAcknowledged: true,
-          performedBy: currentUser.id,           // Keep ID for system reference
-          performedByName: currentUser.name,     // Store actual name
-          performedByRole: currentUser.role,     // Store role (RN, MD, etc.)
-          completedAt: new Date().toISOString()
-        } : alert
-      ));
 
-      // Auto-hide acknowledged alert after 2 seconds
-      setTimeout(() => {
-        setAlerts(prev => prev.filter(alert => alert.id !== alertId));
-      }, 2000);
 
-      const alertMessage = alerts.find(a => a.id === alertId)?.message || 'Unknown Alert';
-      const newCaseEntry: caseSheetEntry = {
-        id: 'cs_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        type: 'alertAcknowledged',
-        description: `Alert acknowledged: "${alertMessage}" by ${currentUser.name} (${currentUser.role})`,
-        performedBy: currentUser.name,
-        canEdit: PatientService.canEditItem(new Date().toISOString())
-      };
-      addCaseSheetEntry(newCaseEntry);
-    } catch (error) {
-      console.error('Failed to acknowledge alert:', error);
-      alert('Failed to acknowledge alert. Please try again.');
-    } finally {
-      setAcknowledgingAlert(null);
-    }
-  };
-
-  // Handle Add Note
-  const handleAddNote = async () => {
-    if (addingNote) return; // Prevent multiple simultaneous calls
-    if (!newNoteContent.trim()) return;
-
-    setAddingNote(true);
-    try {
-      await PatientService.addNoteComment(patient.id, newNoteContent.trim(), currentUser.id, currentUser.name, currentUser.role);
-      
-      const newNote: noteComment = {
-        id: 'note_' + Date.now(),
-        content: newNoteContent.trim(),
-        authorId: currentUser.id,
-        authorName: currentUser.name,
-        authorRole: currentUser.role,
-        timestamp: new Date().toISOString(),
-        canEdit: true,
-        isEdited: false
-      };
-      
-      setNotes(prev => [...prev, newNote]);
-      setNewNoteContent('');
-      setIsAddingNote(false);
-
-      // Add case sheet entry to backend
-      try {
-        const response = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            entrytype: 'note',
-            description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.name
-          })
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          console.log('Case sheet entry added:', result);
-          
-          // Add to local state
-          const newCaseEntry: caseSheetEntry = {
-            id: result.id || 'cs_' + Date.now(),
-            timestamp: new Date().toISOString(),
-            type: getRoleBasedNoteType(currentUser.role),
-            description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.name,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
-        } else {
-          console.warn('Failed to add case sheet entry, continuing without it');
-        }
-      } catch (error) {
-        console.warn('Failed to add case sheet entry:', error);
-      }
-    } catch (error) {
-      console.error('Failed to add note:', error);
-      alert('Failed to add note. Please try again.');
-    } finally {
-      setAddingNote(false);
-    }
-  };
-
-  // Handle Edit Note
-  const handleEditNote = async (noteId: string) => {
-    if (!editingNoteContent.trim()) return;
-
-    setEditingNote(true);
-    try {
-      await PatientService.editNoteComment(patient.id, noteId, editingNoteContent.trim(), currentUser.id);
-      
-      setNotes(prev => prev.map(note => 
-        note.id === noteId ? {
-          ...note,
-          content: editingNoteContent.trim(),
-          editedAt: new Date().toISOString(),
-          isEdited: true,
-          canEdit: PatientService.canEditNote(note, currentUser.id)
-        } : note
-      ));
-      
-      setEditingNoteId(null);
-      setEditingNoteContent('');
-
-      const newCaseEntry: caseSheetEntry = {
-        id: 'cs_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        type: 'doctorNotes',
-        description: `Note edited by ${currentUser.name}`,
-        performedBy: currentUser.name,
-        canEdit: PatientService.canEditItem(new Date().toISOString())
-      };
-      addCaseSheetEntry(newCaseEntry);
-    } catch (error) {
-      console.error('Failed to edit note:', error);
-      alert('Failed to edit note. Please try again.');
-    } finally {
-      setEditingNote(false);
-    }
-  };
-
-  const startEditingNote = (note: noteComment) => {
-    setEditingNoteId(note.id);
-    setEditingNoteContent(note.content);
-  };
-
-  const cancelEditingNote = () => {
-    setEditingNoteId(null);
-    setEditingNoteContent('');
-  };
 
 
   // Real Hospital Discharge Workflow Functions
@@ -489,53 +280,13 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
     }
   };
 
-  const handleMedicationStatusChange = async (medicationId: string, status: 'active' | 'stopped' | 'held') => {
-    try {
-      await MedicationService.updateMedication(patient.id, medicationId, status, currentUser.id);
-      
-      setMedications(prev => prev.map(med => 
-        med.id === medicationId ? { 
-          ...med, 
-          status, 
-          modifiedBy: currentUser.name, 
-          updatedat: new Date().toISOString(),
-          canEdit: PatientService.canEditItem(new Date().toISOString()),
-          history: [...(med.history || []), {
-            id: 'hist_' + Date.now(),
-            action: status === 'active' ? 'resumed' : status,
-            timestamp: new Date().toISOString(),
-            performedBy: currentUser.name
-          }]
-        } : med
-      ));
-      
-      const medication = medications.find(m => m.id === medicationId);
-      if (medication) {
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_' + Date.now(),
-          timestamp: new Date().toISOString(),
-          type: 'pharmacyNotes',
-          description: `${medication.name} ${status} by ${currentUser.name}`,
-          performedBy: currentUser.name,
-          canEdit: PatientService.canEditItem(new Date().toISOString())
-        };
-        addCaseSheetEntry(newCaseEntry);
-      }
-    } catch (error) {
-      console.error('Failed to update medication:', error);
-      alert('Failed to update medication. Please try again.');
-    }
-  };
 
-  // Get unacknowledged and acknowledged alerts - ONLY SHOW UNACKNOWLEDGED
-  const unacknowledgedAlerts = alerts.filter(alert => !alert.isAcknowledged);
-  const acknowledgedAlerts = alerts.filter(alert => alert.isAcknowledged);
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: UserIcon },
     { id: 'medications', label: 'Medications', icon: Plus },
     { id: 'investigations', label: 'Investigations', icon: TestTube },
-    { id: 'therapy', label: 'Therapy', icon: Stethoscope },
+    { id: 'therapy', label: 'Therapy', icon: Heart },
     { id: 'notes', label: 'Notes', icon: MessageCircle },
     { id: 'casesheet', label: 'Case Sheet', icon: FileText }
   ]; // All tabs visible to all roles - permissions handled within each tab
@@ -808,136 +559,13 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
           </div>
         </div>
 
-        {/* Compact Alert Banner - ONLY UNACKNOWLEDGED ALERTS */}
-        {unacknowledgedAlerts.length > 0 && (
-          <div className="bg-red-100 border-b border-red-200 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" />
-                <h3 className="text-sm font-bold text-red-800">⚠️ UNACKNOWLEDGED ALERTS ({unacknowledgedAlerts.length})</h3>
-              </div>
-              <button
-                onClick={() => {
-                  unacknowledgedAlerts.forEach(alert => {
-                    handleAcknowledgeAlert(alert.id);
-                  });
-                }}
-                disabled={acknowledgingAlert !== null}
-                className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-green-400"
-              >
-                {acknowledgingAlert !== null ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Acknowledging...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Acknowledge All</span>
-                  </>
-                )}
-              </button>
-            </div>
-            
-            {/* Max 4 Alerts in 2x2 Grid */}
-            <div className="grid grid-cols-2 gap-2">
-              {unacknowledgedAlerts.slice(0, 4).map((alert) => (
-                <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-red-500">
-                  <div className="flex items-center space-x-2 flex-1 min-w-0">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      alert.severity === 'critical' ? 'bg-red-600 animate-pulse' :
-                      alert.severity === 'high' ? 'bg-orange-500' :
-                      alert.severity === 'medium' ? 'bg-yellow-500' :
-                      'bg-blue-500'
-                    }`}></div>
-                    <span className="text-xs text-red-700 font-medium truncate flex-1">{alert.message}</span>
-                    <span className="text-xs text-gray-500 flex-shrink-0">
-                      {formatTimeOnly(alert.timestamp)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Show remaining alerts count if more than 4 */}
-            {unacknowledgedAlerts.length > 4 && (
-              <div className="mt-2 text-center">
-                <span className="text-xs text-red-700 bg-red-200 px-2 py-1 rounded">
-                  +{unacknowledgedAlerts.length - 4} more alerts (showing first 4)
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Show acknowledged alerts briefly with auto-fade */}
-        {acknowledgedAlerts.length > 0 && (
-          <div className="bg-green-50 border-b border-green-200 p-3 animate-pulse">
-            <h3 className="text-sm font-bold text-green-800 mb-2">
-              ✅ ACKNOWLEDGED ALERTS ({acknowledgedAlerts.length}) - Will disappear shortly...
-            </h3>
-            <div className="space-y-1">
-              {acknowledgedAlerts.slice(0, 2).map((alert) => (
-                <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-green-500 opacity-75">
-                  <div className="flex items-center space-x-2 flex-1 min-w-0">
-                    <div className="w-2 h-2 rounded-full bg-green-600"></div>
-                    <span className="text-xs text-green-700 font-medium truncate flex-1">{alert.message}</span>
-                  </div>
-                  <div className="text-xs text-gray-600 flex-shrink-0">
-                    by {alert.performedByName || `User ${alert.performedBy}`} 
-                    {alert.performedByRole && ` (${alert.performedByRole})`}
-                    {alert.completedAt && ` • ${formatTimeOnly(alert.completedAt)}`}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Clinical Decision Support Alerts */}
-        {clinicalAlerts.length > 0 && showClinicalAlerts && (
-          <div className="bg-amber-50 border-b border-amber-200 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <Stethoscope className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-amber-800">🔬 CLINICAL DECISION SUPPORT ({clinicalAlerts.length})</h3>
-              </div>
-              <button
-                onClick={() => setShowClinicalAlerts(false)}
-                className="text-amber-600 hover:text-amber-800 text-xs font-medium"
-              >
-                Dismiss All
-              </button>
-            </div>
-            
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-              {clinicalAlerts.map((alert) => (
-                <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-amber-400">
-                  <div className="flex items-center space-x-2 flex-1 min-w-0">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      alert.severity === 'critical' ? 'bg-red-600 animate-pulse' :
-                      alert.severity === 'high' ? 'bg-orange-500' :
-                      alert.severity === 'medium' ? 'bg-yellow-500' :
-                      'bg-blue-500'
-                    }`}></div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs text-amber-700 font-medium truncate block">{alert.message}</span>
-                      <p className="text-xs text-gray-600 truncate">{alert.details}</p>
-                      {alert.suggestedActions && alert.suggestedActions.length > 0 && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          💡 {alert.suggestedActions[0]}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-500 flex-shrink-0">
-                      {formatTimeOnly(alert.timestamp)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Patient Alerts Component */}
+        <PatientAlerts
+          patient={patient}
+          currentUser={currentUser}
+          alerts={alerts}
+          setAlerts={setAlerts}
+        />
 
 
         {/* Compact Tab Navigation */}
@@ -1225,740 +853,36 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                 </div>
               </div>
 
-              {/* ECG/EEG Waveform Display - Full Space Available */}
-              <div className="flex-1 bg-gray-50 rounded-lg p-2 min-h-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-base font-semibold flex items-center space-x-2">
-                    <Zap className="w-4 h-4 text-green-600" />
-                    <span>{isEcgMode ? 'ECG' : 'EEG'} Monitor</span>
-                  </h3>
-                  <div className="flex items-center space-x-3">
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-700">
-                        {isEcgMode ? 'Cardiac Rhythm' : 'Brain Activity'}
-                      </p>
-                      <p className="text-lg font-bold text-green-600">
-                        {isEcgMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}
-                        {isEcgMode ? ' mV' : ' μV'}
-                      </p>
-                    </div>
-                    
-                    {/* ECG/EEG Mode Toggle */}
-                    <div className="flex items-center space-x-1 bg-gray-800 rounded-lg p-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleECGMode(true);
-                        }}
-                        className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors ${
-                          isEcgMode ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Heart className="w-3 h-3" />
-                        <span>ECG</span>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleECGMode(false);
-                        }}
-                        className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors ${
-                          !isEcgMode ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Zap className="w-3 h-3" />
-                        <span>EEG</span>
-                      </button>
-                    </div>
-                    
-                    <select 
-                      className="text-sm border rounded px-2 py-1"
-                      defaultValue={isEcgMode ? 'II' : 'C3-C4'}
-                    >
-                      {isEcgMode ? (
-                        <>
-                          <option value="I">Lead I</option>
-                          <option value="II">Lead II</option>
-                          <option value="III">Lead III</option>
-                          <option value="aVR">aVR</option>
-                          <option value="aVL">aVL</option>
-                          <option value="aVF">aVF</option>
-                          <option value="V1">V1</option>
-                          <option value="V2">V2</option>
-                          <option value="V3">V3</option>
-                          <option value="V4">V4</option>
-                          <option value="V5">V5</option>
-                          <option value="V6">V6</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="F3-F4">F3-F4</option>
-                          <option value="C3-C4">C3-C4</option>
-                          <option value="P3-P4">P3-P4</option>
-                          <option value="O1-O2">O1-O2</option>
-                          <option value="T3-T4">T3-T4</option>
-                          <option value="T5-T6">T5-T6</option>
-                        </>
-                      )}
-                    </select>
-                    <button
-                      onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecgReading' : 'eegReading')}
-                      className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
-                    >
-                      Full View
-                    </button>
-                  </div>
-                </div>
-                
-                {/* ECG/EEG Waveform - Takes Remaining Space */}
-                <div 
-                  className="bg-gray-900 rounded-lg cursor-pointer flex flex-col hover:bg-gray-800 transition-colors p-2"
-                  style={{ height: 'calc(100% - 60px)' }}
-                  onClick={() => onECGView ? onECGView(patient) : onVitalClick(patient, isEcgMode ? 'ecgReading' : 'eegReading')}
-                >
-                  <div className="flex items-center justify-between mb-2 flex-shrink-0">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-2 h-2 rounded-full animate-pulse ${
-                        isEcgMode ? 'bg-green-400' : 'bg-blue-400'
-                      }`}></div>
-                      <span className={`text-sm font-medium ${
-                        isEcgMode ? 'text-green-400' : 'text-blue-400'
-                      }`}>
-                        {isEcgMode ? 'Cardiac Signal' : 'Brain Signal'} • 
-                        {isEcgMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}
-                        {isEcgMode ? 'mV' : 'μV'}
-                      </span>
-                      <span className="text-green-300 text-sm">25mm/s • 10mm/mV</span>
-                    </div>
-                    <span className="text-gray-400 text-sm">Click for full view</span>
-                  </div>
-                  
-                  <div className="flex-1 min-h-0 relative">
-                    <svg 
-                      width="100%" 
-                      height="100%" 
-                      viewBox="0 0 400 120"
-                      className="bg-gray-900 w-full h-full"
-                      preserveAspectRatio="none"
-                    >
-                      <defs>
-                        <pattern id={`grid-${patient.id}-detail`} width="10" height="10" patternUnits="userSpaceOnUse">
-                          <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#374151" strokeWidth="0.5" opacity="0.4"/>
-                        </pattern>
-                        <pattern id={`grid-major-${patient.id}-detail`} width="50" height="50" patternUnits="userSpaceOnUse">
-                          <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#4B5563" strokeWidth="1" opacity="0.6"/>
-                        </pattern>
-                      </defs>
-                      <rect width="100%" height="100%" fill={`url(#grid-${patient.id}-detail)`} />
-                      <rect width="100%" height="100%" fill={`url(#grid-major-${patient.id}-detail)`} />
-                      
-                      <path
-                        d="M 0 50 L 400 50"
-                        fill="none"
-                        stroke={isEcgMode ? "#10B981" : "#3B82F6"}
-                        strokeWidth="2"
-                        className="drop-shadow-lg"
-                      />
-                      
-                      {/* Sweep line */}
-                      <line
-                        x1="380"
-                        y1="0"
-                        x2="380"
-                        y2="120"
-                        stroke="#EF4444"
-                        strokeWidth="1"
-                        opacity="0.7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </div>
+              <ECGViewer
+                patient={patient}
+                onECGView={onECGView}
+                onVitalClick={onVitalClick}
+                onToggleECGMode={onToggleECGMode}
+              />
             </div>
           )}
 
-          {/* Notes Tab - Compact layout */}
+          {/* Notes Tab */}
           {activeTab === 'notes' && (
-            <div className="p-3 h-full flex flex-col">
-              {PermissionUtils.canEditNotes(currentUser.role) && (
-                <div className="flex justify-end mb-2">
-                  <button
-                    onClick={() => setIsAddingNote(true)}
-                    className="flex items-center space-x-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Add Note</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Add New Note - Compact */}
-              {isAddingNote && PermissionUtils.canEditNotes(currentUser.role) && (
-                <div className="mb-2 p-2 bg-blue-50 rounded-lg border">
-                  <div className="flex items-start space-x-2">
-                    <div className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium">
-                      {currentUser.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900 mb-1">
-                        {currentUser.name} ({currentUser.role})
-                      </div>
-                      <textarea
-                        value={newNoteContent}
-                        onChange={(e) => setNewNoteContent(e.target.value)}
-                        placeholder="Add a clinical note..."
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-                        rows={2}
-                      />
-                      <div className="flex space-x-2 mt-2">
-                        <button
-                          onClick={handleAddNote}
-                          disabled={addingNote || !newNoteContent.trim()}
-                          className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
-                        >
-                          {addingNote ? (
-                            <>
-                              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              <span>Adding...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Send className="w-3 h-3" />
-                              <span>Add</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setIsAddingNote(false);
-                            setNewNoteContent('');
-                          }}
-                          className="flex items-center space-x-1 px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
-                        >
-                          <X className="w-3 h-3" />
-                          <span>Cancel</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes List - Compact scrollable area */}
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {notes.slice().reverse().map((note) => (
-                  <div key={note.id} className="bg-white border rounded-lg p-2">
-                    <div className="flex items-start space-x-2">
-                      <div className={`text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                        note.authorRole === 'Doctor' ? 'bg-blue-600' :
-                        note.authorRole === 'Nurse' ? 'bg-green-600' :
-                        note.authorRole === 'Admin' ? 'bg-purple-600' :
-                        'bg-gray-600'
-                      }`}>
-                        {(note.authorName || 'U').split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-gray-900 text-sm">{note.authorName}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              note.authorRole === 'Doctor' ? 'bg-blue-100 text-blue-800' :
-                              note.authorRole === 'Nurse' ? 'bg-green-100 text-green-800' :
-                              note.authorRole === 'Admin' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {note.authorRole}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formatDateTime(note.timestamp)}
-                            </span>
-                            {note.isEdited && (
-                              <span className="text-xs text-gray-400">
-                                (edited {note.editedAt ? formatDateTime(note.editedAt) : ''})
-                              </span>
-                            )}
-                          </div>
-                          {note.canEdit && note.authorId === currentUser.id && PermissionUtils.canEditNotes(currentUser.role) && (
-                            <button
-                              onClick={() => startEditingNote(note)}
-                              className="text-gray-500 hover:text-gray-700 p-1"
-                              title="Edit note"
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                        
-                        {editingNoteId === note.id ? (
-                          <div>
-                            <textarea
-                              value={editingNoteContent}
-                              onChange={(e) => setEditingNoteContent(e.target.value)}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-                              rows={2}
-                            />
-                            <div className="flex space-x-2 mt-2">
-                              <button
-                                onClick={() => debounce(() => handleEditNote(note.id), 300)()}
-                                disabled={editingNote || !editingNoteContent.trim()}
-                                className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                              >
-                                {editingNote ? (
-                                  <>
-                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Saving...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Save className="w-3 h-3" />
-                                    <span>Save</span>
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                onClick={cancelEditingNote}
-                                className="flex items-center space-x-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-                              >
-                                <X className="w-3 h-3" />
-                                <span>Cancel</span>
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-gray-700 whitespace-pre-wrap text-sm">
-                            {note.content}
-                          </div>
-                        )}
-                        
-                        {!note.canEdit && note.authorId === currentUser.id && (
-                          <div className="mt-1 text-xs text-gray-500 flex items-center space-x-1">
-                            <Clock className="w-3 h-3" />
-                            <span>Edit time expired (24h limit)</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {(notes || []).length === 0 && (
-                  <div className="text-center py-6 text-gray-500">
-                    <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                    <p>No clinical notes yet</p>
-                    {PermissionUtils.canEditNotes(currentUser.role) && (
-                      <button
-                        onClick={() => setIsAddingNote(true)}
-                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Add First Note
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              {/* Shift Handoff Notes Section */}
-              <div className="mt-6 border-t pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-purple-800 flex items-center space-x-2">
-                    <div className="w-6 h-6 bg-purple-100 rounded-lg flex items-center justify-center">
-                      🔄
-                    </div>
-                    <span>Shift Handoff Notes</span>
-                  </h3>
-                  {PermissionUtils.canEditNotes(currentUser.role) && (
-                    <button
-                      onClick={() => {
-                        const shift = new Date().getHours() < 16 ? 'day' : new Date().getHours() < 23 ? 'evening' : 'night';
-                        const handoffNote = prompt(`Add handoff note for ${shift} shift:\n\nNote categories:\n• Medication changes\n• Assessment findings\n• Safety concerns\n• Family updates\n• Other\n\nEnter your handoff note:`);
-                        
-                        if (handoffNote && handoffNote.trim()) {
-                          const priority = prompt('Set priority level:\n\n1 = Low\n2 = Medium\n3 = High\n4 = Critical\n\nEnter number (1-4):') || '2';
-                          const priorityMap = { '1': 'low', '2': 'medium', '3': 'high', '4': 'critical' };
-                          const priorityLevel = priorityMap[priority as keyof typeof priorityMap] || 'medium';
-                          
-                          // Add to case sheet as handoff note
-                          const handoffEntry: caseSheetEntry = {
-                            id: 'handoff_' + Date.now(),
-                            timestamp: new Date().toISOString(),
-                            type: 'handoffNote',
-                            description: `${shift.toUpperCase()} SHIFT HANDOFF - ${priorityLevel.toUpperCase()} PRIORITY: ${handoffNote}`,
-                            performedBy: currentUser.name,
-                            canEdit: PatientService.canEditItem(new Date().toISOString()),
-                            details: {
-                              shift,
-                              priority: priorityLevel,
-                              fromNurse: currentUser.name,
-                              category: 'general',
-                              note: handoffNote
-                            }
-                          };
-                          addCaseSheetEntry(handoffEntry);
-                          
-                          alert(`✅ Handoff note added for ${shift} shift!\n\nPriority: ${priorityLevel}\nFrom: ${currentUser.name}\n\nNote logged in case sheet for continuity of care.`);
-                        }
-                      }}
-                      className="flex items-center space-x-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Handoff</span>
-                    </button>
-                  )}
-                </div>
-                
-                {/* Display recent handoff notes from case sheet */}
-                <div className="space-y-2">
-                  {caseSheet
-                    .filter(entry => entry.type === 'handoffNote')
-                    .slice(0, 3) // Show last 3 handoff notes
-                    .map((handoff) => (
-                      <div key={handoff.id} className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-medium text-purple-700">
-                              {handoff.details?.shift?.toUpperCase() || 'GENERAL'} SHIFT
-                            </span>
-                            <div className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              handoff.details?.priority === 'critical' ? 'bg-red-100 text-red-800' :
-                              handoff.details?.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                              handoff.details?.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
-                              {handoff.details?.priority?.toUpperCase() || 'MEDIUM'}
-                            </div>
-                            <span className="text-xs text-gray-500">
-                              {formatDateTime(handoff.timestamp)}
-                            </span>
-                          </div>
-                          <span className="text-xs text-purple-600 font-medium">
-                            From: {handoff.performedBy}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-700">
-                          {handoff.description.replace(/^.*PRIORITY:\s*/, '')}
-                        </p>
-                      </div>
-                    ))}
-                  
-                  {caseSheet.filter(entry => entry.type === 'handoffNote').length === 0 && (
-                    <div className="text-center py-4">
-                      <div className="text-gray-400 mb-2">
-                        <Clock className="w-8 h-8 mx-auto" />
-                      </div>
-                      <p className="text-sm text-gray-500">No handoff notes yet</p>
-                      <p className="text-xs text-gray-400 mt-1">Add shift handoff notes to ensure continuity of care</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <PatientNotes
+              patient={patient}
+              currentUser={currentUser}
+              notes={notes}
+              setNotes={setNotes}
+              caseSheet={caseSheet}
+              addCaseSheetEntry={addCaseSheetEntry}
+            />
           )}
 
-          {/* Medications Tab - Compact layout */}
+          {/* Medications Tab */}
           {activeTab === 'medications' && (
-            <div className="p-3 h-full flex flex-col">
-              <div className="flex justify-end mb-2">
-                {!PermissionUtils.canEditMedications(currentUser.role) && (
-                  <span className="text-xs bg-yellow-100 text-yellow-600 px-2 py-1 rounded-lg flex items-center space-x-1">
-                    <Shield className="w-3 h-3" />
-                    <span>View Only</span>
-                  </span>
-                )}
-                {PermissionUtils.canEditMedications(currentUser.role) && (
-                  <button
-                    onClick={() => setIsAddingMedication(true)}
-                    className="flex items-center space-x-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Prescribe</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Add Medication Form */}
-              {isAddingMedication && PermissionUtils.canEditMedications(currentUser.role) && (
-                <div className="mb-2 p-2 bg-blue-50 rounded-lg border">
-                  <h4 className="font-medium mb-2 text-sm">Prescribe New Medication</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="Medication name"
-                      value={newMedication.name}
-                      onChange={(e) => setNewMedication(prev => ({ ...prev, name: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm col-span-2"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Dosage (e.g., 10mg)"
-                      value={newMedication.dosage}
-                      onChange={(e) => setNewMedication(prev => ({ ...prev, dosage: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Frequency (e.g., Twice daily)"
-                      value={newMedication.frequency}
-                      onChange={(e) => setNewMedication(prev => ({ ...prev, frequency: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Duration (e.g., 7 days)"
-                      value={newMedication.duration}
-                      onChange={(e) => setNewMedication(prev => ({ ...prev, duration: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm"
-                    />
-                    <select
-                      value={newMedication.route}
-                      onChange={(e) => setNewMedication(prev => ({ ...prev, route: e.target.value }))}
-                      className="px-2 py-1 border rounded text-sm"
-                    >
-                      <option value="PO">PO (Oral)</option>
-                      <option value="IV">IV (Intravenous)</option>
-                      <option value="IM">IM (Intramuscular)</option>
-                      <option value="SC">SC (Subcutaneous)</option>
-                      <option value="Inhaled">Inhaled</option>
-                      <option value="Topical">Topical</option>
-                    </select>
-                  </div>
-                  <div className="flex space-x-2 mt-2">
-                    <button
-                      onClick={async () => {
-                        if (isAddingMedication) return; // Prevent multiple simultaneous calls
-                        if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
-                        setIsAddingMedication(true);
-                        try {
-                          const timestamp = new Date().toISOString();
-                          const medicationData = {
-                            ...newMedication,
-                            status: 'active' as const,
-                            startDate: timestamp.split('T')[0],
-                            prescribedBy: currentUser.name,
-                            createdAt: timestamp,
-                            canEdit: true
-                          };
-                          const newMed = await MedicationService.addMedication(patient.id, medicationData, currentUser.id);
-                          if (newMed) {
-                            // Add history if not present from backend
-                            const medicationWithHistory: medication = {
-                              ...newMed,
-                              history: newMed.history || [{
-                                id: 'hist_' + Date.now(),
-                                action: 'prescribed' as const,
-                                timestamp,
-                                performedBy: currentUser.name
-                              }]
-                            };
-                            setMedications(prev => [...prev, medicationWithHistory]);
-                          } else {
-                            console.error('Failed to add medication - no response from backend');
-                            alert('Failed to add medication. Please try again.');
-                            setIsAddingMedication(false);
-                            return;
-                          }
-                          setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
-                          setIsAddingMedication(false);
-
-                          // Add case sheet entry to backend
-                          try {
-                            const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json'
-                              },
-                              body: JSON.stringify({
-                                entrytype: 'medication',
-                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-                                performedBy: currentUser.name
-                              })
-                            });
-
-                            if (caseResponse.ok) {
-                              const caseResult = await caseResponse.json();
-                              const newCaseEntry: caseSheetEntry = {
-                                id: caseResult.id || 'cs_' + Date.now(),
-                                timestamp,
-                                type: 'pharmacyNotes',
-                                description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-                                performedBy: currentUser.name,
-                                canEdit: true
-                              };
-                              addCaseSheetEntry(newCaseEntry);
-                            }
-                          } catch (caseError) {
-                            console.warn('Failed to add medication case sheet entry:', caseError);
-                          }
-                        } catch (error) {
-                          console.error('Failed to add medication:', error);
-                        } finally {
-                          setIsAddingMedication(false);
-                        }
-                      }}
-                      disabled={isAddingMedication || !newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration}
-                      className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                    >
-                      {isAddingMedication ? (
-                        <>
-                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Adding...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-3 h-3" />
-                          <span>Prescribe</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsAddingMedication(false);
-                        setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
-                      }}
-                      className="flex items-center space-x-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
-                    >
-                      <X className="w-3 h-3" />
-                      <span>Cancel</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {medications.map((med) => (
-                  <div key={med.id} className="bg-white border rounded-lg p-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-1">
-                          <h4 className="font-medium text-sm">{med.name} {med.dosage}</h4>
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium border ${getMedicationStatusColor(med.status)}`}>
-                            {med.status.toUpperCase()}
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          <p><span className="font-medium">Frequency:</span> {med.frequency} • <span className="font-medium">Route:</span> {med.route}</p>
-                          <p><span className="font-medium">Prescribed by:</span> {med.prescribedBy} on {formatDateTime(med.createdAt)?.split(',')[0] || 'Unknown date'}</p>
-                          
-                          
-                          
-                          {/* Medication Administration Schedule */}
-                          {med.status === 'active' && (
-                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-medium text-green-700">💊 Administration Schedule</span>
-                                <div className="flex items-center space-x-1">
-                                  <span className="text-xs text-green-600">
-                                    Last: {patient.lastMedicationTime ? 
-                                      new Date(patient.lastMedicationTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
-                                      'Not recorded'
-                                    }
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-xs text-green-600">
-                                {/* Generate administration times based on frequency */}
-                                {(() => {
-                                  // Default schedule based on frequency
-                                  const freq = med.frequency.toLowerCase();
-                                  let nextTimes: string[] = [];
-                                  if (freq.includes('once daily')) nextTimes = ['08:00'];
-                                  else if (freq.includes('twice daily')) nextTimes = ['08:00', '20:00'];
-                                  else if (freq.includes('three times')) nextTimes = ['08:00', '14:00', '20:00'];
-                                  else if (freq.includes('four times')) nextTimes = ['06:00', '12:00', '18:00', '22:00'];
-                                  else if (freq.includes('every 8 hours')) nextTimes = ['06:00', '14:00', '22:00'];
-                                  else if (freq.includes('every 6 hours')) nextTimes = ['06:00', '12:00', '18:00', '00:00'];
-                                  
-                                  const now = new Date();
-                                  const currentTime = now.getHours() * 60 + now.getMinutes();
-                                  const nextTime = nextTimes.find(time => {
-                                    const [hours, minutes] = time.split(':').map(Number);
-                                    return (hours * 60 + minutes) > currentTime;
-                                  }) || nextTimes[0];
-                                  
-                                  return (
-                                    <div className="flex items-center space-x-1">
-                                      <span className="font-medium">Next due:</span>
-                                      <span className="bg-green-100 px-2 py-0.5 rounded text-green-800">{nextTime}</span>
-                                      <span className="text-green-600">({med.frequency})</span>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {PermissionUtils.canEditMedications(currentUser.role) && med.canEdit && (
-                        <div className="flex items-center space-x-1">
-                          {med.status === 'active' && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  const now = new Date().toISOString();
-                                  // Add administration record to case sheet
-                                  const adminEntry: caseSheetEntry = {
-                                    id: 'admin_' + Date.now(),
-                                    timestamp: now,
-                                    type: 'medicationAdministration',
-                                    description: `Administered ${med.name} ${med.dosage} via ${med.route} route`,
-                                    performedBy: currentUser.name,
-                                    canEdit: PatientService.canEditItem(now),
-                                    details: {
-                                      medicationId: med.id,
-                                      medicationName: med.name,
-                                      dosage: med.dosage,
-                                      route: med.route,
-                                      administeredby: currentUser.name,
-                                      administeredat: now
-                                    }
-                                  };
-                                  addCaseSheetEntry(adminEntry);
-                                  
-                                  // Update patient's last medication time
-                                  alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.name}\n\nAdministration logged in case sheet.`);
-                                }}
-                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Administer medication"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => debounce(() => handleMedicationStatusChange(med.id, 'held'), 300)()}
-                                className="p-1 text-yellow-600 hover:bg-yellow-50 rounded transition-colors"
-                                title="Hold medication"
-                              >
-                                <Pause className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => debounce(() => handleMedicationStatusChange(med.id, 'stopped'), 300)()}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Stop medication"
-                              >
-                                <StopCircle className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                          {med.status === 'held' && (
-                            <button
-                              onClick={() => debounce(() => handleMedicationStatusChange(med.id, 'active'), 300)()}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Resume medication"
-                            >
-                              <Play className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {medications.length === 0 && (
-                  <div className="text-center py-6 text-gray-500">
-                    <Plus className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                    <p>No medications prescribed yet</p>
-                  </div>
-                )}
-              </div>
-            </div>
+            <PatientMedications
+              patient={patient}
+              currentUser={currentUser}
+              medications={medications}
+              setMedications={setMedications}
+              addCaseSheetEntry={addCaseSheetEntry}
+            />
           )}
 
           {/* Investigation Tab */}
@@ -2332,7 +1256,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                               className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors text-xs"
                               title="Complete investigation"
                             >
-                              <CheckCircle className="w-4 h-4" />
+                              <XCircle className="w-4 h-4" />
                             </button>
                           )}
                           {inv.status !== 'completed' && inv.status !== 'cancelled' && (
@@ -2592,7 +1516,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                     onClick={() => setIsAddingTherapy(true)}
                     className="flex items-center space-x-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
                   >
-                    <Stethoscope className="w-4 h-4" />
+                    <Heart className="w-4 h-4" />
                     <span>Prescribe</span>
                   </button>
                 </div>
@@ -2835,7 +1759,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                                 className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors text-xs"
                                 title="Complete therapy"
                               >
-                                <CheckCircle className="w-4 h-4" />
+                                <XCircle className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={async () => {
@@ -2873,7 +1797,7 @@ const PatientDetailComponent: React.FC<PatientDetailProps> = ({
                 ))}
                 {therapies.length === 0 && (
                   <div className="text-center py-6 text-gray-500">
-                    <Stethoscope className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                    <Heart className="w-10 h-10 mx-auto mb-3 opacity-50" />
                     <p>No therapy prescribed yet</p>
                   </div>
                 )}
