@@ -3,7 +3,7 @@ import {
   ChevronLeft, Heart, Activity, Thermometer, Droplets, Zap,
   Edit, FileText, Clock, User as UserIcon,
   TestTube, Shield, XCircle, MessageCircle,
-  Send, CheckCircle, Stethoscope
+  Send
 } from 'lucide-react';
 import { patient, user, investigation, therapy, caseSheetEntry, alert as alertType, noteComment, clinicalAlert, labResult, imagingStudy } from './types';
 import {
