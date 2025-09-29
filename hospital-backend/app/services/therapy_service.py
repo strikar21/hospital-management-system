@@ -21,8 +21,14 @@ class TherapyService(BaseService):
 
     async def add_therapy(self, patient_id: str, therapy_data: Dict[str, Any], created_by: str) -> Dict[str, Any]:
         """Add therapy with validation"""
-        if not therapy_data.get('therapyType'):
+        # Accept both 'therapyType' (from frontend) and 'type' (database field)
+        therapy_type = therapy_data.get('therapyType') or therapy_data.get('type')
+        if not therapy_type:
             raise ValueError("Therapy type is required")
+
+        # Ensure 'type' field is set for database (database uses 'type' not 'therapyType')
+        if 'therapyType' in therapy_data and 'type' not in therapy_data:
+            therapy_data['type'] = therapy_data['therapyType']
 
         snake_data = self.repository.transform_from_camel_case(therapy_data)
         result = await self.therapy_repository.add_therapy(patient_id, snake_data, created_by)

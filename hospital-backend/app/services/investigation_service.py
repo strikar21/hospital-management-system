@@ -21,8 +21,14 @@ class InvestigationService(BaseService):
 
     async def add_investigation(self, patient_id: str, investigation_data: Dict[str, Any], created_by: str) -> Dict[str, Any]:
         """Add investigation with validation"""
-        if not investigation_data.get('investigationType'):
+        # Accept both 'investigationType' (from frontend) and 'type' (database field)
+        investigation_type = investigation_data.get('investigationType') or investigation_data.get('type')
+        if not investigation_type:
             raise ValueError("Investigation type is required")
+
+        # Ensure 'type' field is set for database (database uses 'type' not 'investigationType')
+        if 'investigationType' in investigation_data and 'type' not in investigation_data:
+            investigation_data['type'] = investigation_data['investigationType']
 
         snake_data = self.repository.transform_from_camel_case(investigation_data)
         result = await self.investigation_repository.add_investigation(patient_id, snake_data, created_by)

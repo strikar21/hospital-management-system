@@ -43,25 +43,25 @@ async def get_patient_therapy_sessions(patient_id: str):
 
 
 @router.post("/patient/{patient_id}")
-async def add_therapy_session(
+async def add_therapy(
     patient_id: str,
-    session_data: dict
+    therapy_data: dict
 ):
-    """Add therapy session to patient"""
+    """Add therapy to patient"""
     try:
         therapy_service = get_therapy_service()
 
-        session = await therapy_service.add_therapy_session(
+        therapy = await therapy_service.add_therapy(
             patient_id=patient_id,
-            session_data=session_data,
+            therapy_data=therapy_data,
             created_by='system'
         )
 
-        if not session:
-            raise HTTPException(status_code=400, detail="Failed to add therapy session")
+        if not therapy:
+            raise HTTPException(status_code=400, detail="Failed to add therapy")
 
-        logger.info(f"✅ Added therapy session to patient {patient_id}")
-        return session
+        logger.info(f"✅ Added therapy to patient {patient_id}")
+        return therapy
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

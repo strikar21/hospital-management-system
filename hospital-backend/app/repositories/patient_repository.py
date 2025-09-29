@@ -251,7 +251,7 @@ class PatientRepository(BaseRepository[Patient]):
 
             import uuid
             entry_id = str(uuid.uuid4())
-            now = datetime.utcnow().isoformat()
+            now = datetime.utcnow()  # Use datetime object, not string
 
             result = await self.execute_custom_query(query, [
                 entry_id,
