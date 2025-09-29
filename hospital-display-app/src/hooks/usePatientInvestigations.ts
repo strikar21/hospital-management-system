@@ -49,6 +49,7 @@ export const usePatientInvestigations = ({
       const timestamp = new Date().toISOString();
       const investigationData = {
         ...newInvestigation,
+        investigationType: newInvestigation.type, // Map type to investigationType for backend
         createdAt: timestamp.split('T')[0],
         status: 'ordered' as const,
         performedBy: currentUser.staffId,

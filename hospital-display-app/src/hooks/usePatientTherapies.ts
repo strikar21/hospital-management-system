@@ -33,6 +33,7 @@ export const usePatientTherapies = ({
       const timestamp = new Date().toISOString();
       const therapyData = {
         ...newTherapy,
+        therapyType: newTherapy.type, // Map type to therapyType for backend
         startDate: timestamp.split('T')[0],
         status: 'active' as const,
         performedBy: currentUser.staffId,

@@ -105,7 +105,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: getRoleBasedNoteType(currentUser.role),
+            entryType: getRoleBasedNoteType(currentUser.role),
             description: `Note: "${newNoteContent.trim()}"`,
             performedBy: currentUser.staffId
           })
@@ -157,7 +157,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: getRoleBasedNoteType(currentUser.role),
+            entryType: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,
             performedBy: currentUser.staffId
           })
