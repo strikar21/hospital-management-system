@@ -107,7 +107,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
           body: JSON.stringify({
             entrytype: getRoleBasedNoteType(currentUser.role),
             description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           })
         });
 
@@ -118,7 +118,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             timestamp: new Date().toISOString(),
             type: getRoleBasedNoteType(currentUser.role),
             description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.name,
+            performedBy: currentUser.staffId,
             canEdit: PatientService.canEditItem(new Date().toISOString())
           };
           addCaseSheetEntry(newCaseEntry);
@@ -159,7 +159,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
           body: JSON.stringify({
             entrytype: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           })
         });
 
@@ -170,7 +170,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             timestamp: new Date().toISOString(),
             type: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,
-            performedBy: currentUser.name,
+            performedBy: currentUser.staffId,
             canEdit: PatientService.canEditItem(new Date().toISOString())
           };
           addCaseSheetEntry(editCaseEntry);

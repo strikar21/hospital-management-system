@@ -43,14 +43,14 @@ export const usePatientMedications = ({
         med.id === medicationId ? {
           ...med,
           status,
-          modifiedBy: currentUser.name,
+          modifiedBy: currentUser.staffId,
           updatedat: new Date().toISOString(),
           canEdit: PatientService.canEditItem(new Date().toISOString()),
           history: [...(med.history || []), {
             id: 'hist_' + Date.now(),
             action: status === 'active' ? 'resumed' : status,
             timestamp: new Date().toISOString(),
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           }]
         } : med
       ));
@@ -61,8 +61,8 @@ export const usePatientMedications = ({
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
           type: 'pharmacistNote',
-          description: `${medication.name} ${status} by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          description: `${medication.name} ${status} by ${currentUser.staffId}`,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);
@@ -85,7 +85,7 @@ export const usePatientMedications = ({
         ...newMedication,
         status: 'active' as const,
         startDate: timestamp.split('T')[0],
-        prescribedBy: currentUser.name,
+        prescribedBy: currentUser.staffId,
         createdAt: timestamp,
         canEdit: true
       };
@@ -98,7 +98,7 @@ export const usePatientMedications = ({
             id: 'hist_' + Date.now(),
             action: 'prescribed' as const,
             timestamp,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           }]
         };
         setMedications(prev => [...prev, medicationWithHistory]);
@@ -121,8 +121,8 @@ export const usePatientMedications = ({
           },
           body: JSON.stringify({
             entryType: 'medication',
-            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-            performedBy: currentUser.name
+            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.staffId}`,
+            performedBy: currentUser.staffId
           })
         });
 
@@ -132,8 +132,8 @@ export const usePatientMedications = ({
             id: caseResult.id || 'cs_' + Date.now(),
             timestamp,
             type: 'pharmacistNote',
-            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-            performedBy: currentUser.name,
+            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.staffId}`,
+            performedBy: currentUser.staffId,
             canEdit: true
           };
           addCaseSheetEntry(newCaseEntry);
@@ -156,20 +156,20 @@ export const usePatientMedications = ({
       timestamp: now,
       type: 'medicationAdministration',
       description: `Administered ${med.name} ${med.dosage} via ${med.route} route`,
-      performedBy: currentUser.name,
+      performedBy: currentUser.staffId,
       canEdit: PatientService.canEditItem(now),
       details: {
         medicationId: med.id,
         medicationName: med.name,
         dosage: med.dosage,
         route: med.route,
-        administeredby: currentUser.name,
+        administeredby: currentUser.staffId,
         administeredat: now
       }
     };
     addCaseSheetEntry(adminEntry);
 
-    alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.name}\n\nAdministration logged in case sheet.`);
+    alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.staffId}\n\nAdministration logged in case sheet.`);
   }, [currentUser, addCaseSheetEntry]);
 
   // Generate medication schedule times

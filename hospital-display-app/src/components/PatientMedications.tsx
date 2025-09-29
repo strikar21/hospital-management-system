@@ -55,7 +55,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
             id: 'hist_' + Date.now(),
             action: status === 'active' ? 'resumed' : status,
             timestamp: new Date().toISOString(),
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           }]
         } : med
       ));
@@ -67,7 +67,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
           timestamp: new Date().toISOString(),
           type: 'pharmacistNote',
           description: `${medication.name} ${status} by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);
@@ -156,7 +156,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                     ...newMedication,
                     status: 'active' as const,
                     startDate: timestamp.split('T')[0],
-                    prescribedBy: currentUser.name,
+                    prescribedBy: currentUser.staffId,
                     createdAt: timestamp,
                     canEdit: true
                   };
@@ -169,7 +169,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                         id: 'hist_' + Date.now(),
                         action: 'prescribed' as const,
                         timestamp,
-                        performedBy: currentUser.name
+                        performedBy: currentUser.staffId
                       }]
                     };
                     setMedications(prev => [...prev, medicationWithHistory]);
@@ -195,7 +195,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                         timestamp,
                         type: 'pharmacistNote',
                         description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-                        performedBy: currentUser.name,
+                        performedBy: currentUser.staffId,
                         canEdit: true
                       };
                       addCaseSheetEntry(newCaseEntry);
@@ -314,7 +314,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                             timestamp: now,
                             type: 'medicationAdministration',
                             description: `Administered ${med.name} ${med.dosage} via ${med.route} route`,
-                            performedBy: currentUser.name,
+                            performedBy: currentUser.staffId,
                             canEdit: PatientService.canEditItem(now),
                             details: {
                               medicationId: med.id,

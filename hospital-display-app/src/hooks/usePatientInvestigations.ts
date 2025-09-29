@@ -51,7 +51,7 @@ export const usePatientInvestigations = ({
         ...newInvestigation,
         createdAt: timestamp.split('T')[0],
         status: 'ordered' as const,
-        performedBy: currentUser.name,
+        performedBy: currentUser.staffId,
         canEdit: true,
         urgency: 'Routine' as const
       };
@@ -73,7 +73,7 @@ export const usePatientInvestigations = ({
           body: JSON.stringify({
             entryType: 'investigation',
             description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           })
         });
 
@@ -84,7 +84,7 @@ export const usePatientInvestigations = ({
             timestamp,
             type: 'technicianNote',
             description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
-            performedBy: currentUser.name,
+            performedBy: currentUser.staffId,
             canEdit: true
           };
           addCaseSheetEntry(newCaseEntry);
@@ -120,7 +120,7 @@ export const usePatientInvestigations = ({
           body: JSON.stringify({
             entryType: 'investigation',
             description: `${inv.name} started by ${currentUser.name}`,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           })
         });
 
@@ -131,7 +131,7 @@ export const usePatientInvestigations = ({
             timestamp: new Date().toISOString(),
             type: 'technicianNote',
             description: `${inv.name} started by ${currentUser.name}`,
-            performedBy: currentUser.name,
+            performedBy: currentUser.staffId,
             canEdit: true
           };
           addCaseSheetEntry(newCaseEntry);
@@ -216,7 +216,7 @@ export const usePatientInvestigations = ({
         body: JSON.stringify({
           entryType: 'investigation',
           description: `${inv.name} completed by ${currentUser.name}${results ? ` - Results: ${results}` : ''}`,
-          performedBy: currentUser.name
+          performedBy: currentUser.staffId
         })
       });
 
@@ -227,7 +227,7 @@ export const usePatientInvestigations = ({
           timestamp: new Date().toISOString(),
           type: getRoleBasedNoteType(currentUser.role),
           description: `${inv.name} completed by ${currentUser.name}${results ? ` - Results: ${results}` : ''}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: true
         };
         addCaseSheetEntry(newCaseEntry);
@@ -256,7 +256,7 @@ export const usePatientInvestigations = ({
             body: JSON.stringify({
               entryType: 'investigation',
               description: `${inv.name} (${inv.type}) cancelled by ${currentUser.name}`,
-              performedBy: currentUser.name
+              performedBy: currentUser.staffId
             })
           });
 
@@ -268,7 +268,7 @@ export const usePatientInvestigations = ({
               timestamp,
               type: 'technicianNote',
               description: `${inv.name} (${inv.type}) cancelled by ${currentUser.name}`,
-              performedBy: currentUser.name,
+              performedBy: currentUser.staffId,
               canEdit: true
             };
             addCaseSheetEntry(newCaseEntry);

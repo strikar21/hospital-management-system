@@ -43,7 +43,7 @@ export const usePatientAlerts = ({
         timestamp: new Date().toISOString(),
         type: 'alertAcknowledged',
         description: `Alert acknowledged: ${alertToAck.message}`,
-        performedBy: currentUser.name,
+        performedBy: currentUser.staffId,
         canEdit: PatientService.canEditItem(new Date().toISOString())
       };
       addCaseSheetEntry(newCaseEntry);

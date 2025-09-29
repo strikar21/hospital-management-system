@@ -69,7 +69,7 @@ export const usePatientNotes = ({
           timestamp,
           type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
           description: `Clinical note added by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(timestamp)
         };
         addCaseSheetEntry(newCaseEntry);
@@ -129,7 +129,7 @@ export const usePatientNotes = ({
           timestamp,
           type: 'handoffNote',
           description: `Shift handoff note by ${currentUser.name}: ${newHandoff.trim()}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(timestamp)
         };
         addCaseSheetEntry(newCaseEntry);
@@ -184,7 +184,7 @@ export const usePatientNotes = ({
           timestamp: new Date().toISOString(),
           type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
           description: `Note edited by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);

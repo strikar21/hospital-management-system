@@ -35,7 +35,7 @@ export const usePatientTherapies = ({
         ...newTherapy,
         startDate: timestamp.split('T')[0],
         status: 'active' as const,
-        performedBy: currentUser.name,
+        performedBy: currentUser.staffId,
         canEdit: true,
         sessions: [],
         name: newTherapy.type + ' therapy'
@@ -58,7 +58,7 @@ export const usePatientTherapies = ({
           body: JSON.stringify({
             entryType: 'therapy',
             description: `${newTherapy.type}: ${newTherapy.description} (${newTherapy.frequency}, ${newTherapy.duration}) prescribed by ${currentUser.name}`,
-            performedBy: currentUser.name
+            performedBy: currentUser.staffId
           })
         });
 
@@ -69,7 +69,7 @@ export const usePatientTherapies = ({
             timestamp,
             type: 'therapistNote',
             description: `${newTherapy.type}: ${newTherapy.description} (${newTherapy.frequency}, ${newTherapy.duration}) prescribed by ${currentUser.name}`,
-            performedBy: currentUser.name,
+            performedBy: currentUser.staffId,
             canEdit: true
           };
           addCaseSheetEntry(newCaseEntry);
@@ -135,7 +135,7 @@ export const usePatientTherapies = ({
           timestamp: new Date().toISOString(),
           type: 'therapistNote',
           description: `${therapy.description} session completed by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);
@@ -158,7 +158,7 @@ export const usePatientTherapies = ({
           timestamp: new Date().toISOString(),
           type: 'therapistNote',
           description: `${therapy.description} completed by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);
@@ -181,7 +181,7 @@ export const usePatientTherapies = ({
           timestamp: new Date().toISOString(),
           type: 'therapistNote',
           description: `${therapy.description} cancelled by ${currentUser.name}`,
-          performedBy: currentUser.name,
+          performedBy: currentUser.staffId,
           canEdit: PatientService.canEditItem(new Date().toISOString())
         };
         addCaseSheetEntry(newCaseEntry);

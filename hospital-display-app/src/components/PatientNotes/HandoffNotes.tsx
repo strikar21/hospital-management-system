@@ -44,7 +44,7 @@ export const HandoffNotes: React.FC<HandoffNotesProps> = ({
         timestamp: new Date().toISOString(),
         type: 'handoffNote',
         description: `${shift.toUpperCase()} SHIFT HANDOFF - ${priorityLevel.toUpperCase()} PRIORITY: ${handoffNote}`,
-        performedBy: currentUser.name,
+        performedBy: currentUser.staffId,
         canEdit: PatientService.canEditItem(new Date().toISOString()),
         details: {
           shift,
