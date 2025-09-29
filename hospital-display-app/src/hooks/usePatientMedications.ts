@@ -60,7 +60,7 @@ export const usePatientMedications = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'pharmacyNotes',
+          type: 'pharmacistNote',
           description: `${medication.name} ${status} by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())
@@ -120,7 +120,7 @@ export const usePatientMedications = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: 'medication',
+            entryType: 'medication',
             description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
             performedBy: currentUser.name
           })
@@ -131,7 +131,7 @@ export const usePatientMedications = ({
           const newCaseEntry: caseSheetEntry = {
             id: caseResult.id || 'cs_' + Date.now(),
             timestamp,
-            type: 'pharmacyNotes',
+            type: 'pharmacistNote',
             description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
             performedBy: currentUser.name,
             canEdit: true

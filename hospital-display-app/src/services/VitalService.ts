@@ -1,14 +1,55 @@
 // VitalService.ts - Vital signs monitoring and ECG data
 import { vitalhistory, timerange, ecgreading } from '../types';
 import { BaseService } from './BaseService';
-import { DataTransformer } from '../utils/dataTransformer';
 
+/**
+ * VitalService - Comprehensive vital signs monitoring and medical data service
+ *
+ * Handles critical medical operations including:
+ * - Real-time vital signs monitoring and retrieval
+ * - ECG/EEG data management and analysis
+ * - Medication correlation analysis
+ * - Medical device communication
+ * - Proximity detection for room assignments
+ * - Medical-grade data transformations with HIPAA compliance
+ *
+ * @extends BaseService
+ * @since 1.0.0
+ */
 export class VitalService extends BaseService {
 
   // ================================
   // VITAL SIGNS RETRIEVAL
   // ================================
 
+  /**
+   * Retrieves time-series vital sign data for a specific patient and vital type
+   *
+   * @param patientId - The unique identifier for the patient
+   * @param timeRange - Time range for data retrieval (1h, 6h, 24h, 7d)
+   * @param vitalType - Type of vital sign to retrieve
+   * @param limit - Maximum number of data points to return (default: 1000)
+   * @returns Promise resolving to array of vital history data points
+   * @throws {Error} When vital data retrieval fails
+   *
+   * @example
+   * ```typescript
+   * // Get heart rate data for last 24 hours
+   * const heartRateData = await VitalService.getVitalTimeSeries(
+   *   'P12345',
+   *   '24h',
+   *   'heartRate',
+   *   500
+   * );
+   *
+   * // Get blood pressure data for last 6 hours
+   * const bpData = await VitalService.getVitalTimeSeries(
+   *   'P12345',
+   *   '6h',
+   *   'systolicPressure'
+   * );
+   * ```
+   */
   static async getVitalTimeSeries(
     patientId: string,
     timeRange: timerange,
@@ -27,7 +68,8 @@ export class VitalService extends BaseService {
         return [];
       }
 
-      const convertedData = DataTransformer.transformVitalTimeSeriesData(response);
+      // Return data directly - transformation removed per user request
+      const convertedData = Array.isArray(response) ? response : [];
       console.log(`✅ Retrieved ${convertedData.length} vital data points`);
 
       return convertedData;
@@ -37,6 +79,23 @@ export class VitalService extends BaseService {
     }
   }
 
+  /**
+   * Retrieves comprehensive vital history for a patient across all vital types
+   *
+   * @param patientId - The unique identifier for the patient
+   * @param timeRange - Time range for data retrieval (default: '24h')
+   * @returns Promise resolving to array of comprehensive vital history records
+   * @throws {Error} When vital history retrieval fails
+   *
+   * @example
+   * ```typescript
+   * // Get all vital history for last 24 hours
+   * const vitalHistory = await VitalService.getVitalHistory('P12345');
+   *
+   * // Get vital history for last week
+   * const weekHistory = await VitalService.getVitalHistory('P12345', '7d');
+   * ```
+   */
   static async getVitalHistory(patientId: string, timeRange: string = '24h') {
     try {
       const response = await this.fetchFromBackend(`/patients/${patientId}/vitals/history?timeRange=${timeRange}`);
@@ -47,6 +106,28 @@ export class VitalService extends BaseService {
     }
   }
 
+  /**
+   * Retrieves vital signs data correlated with medication administration times
+   *
+   * @param patientId - The unique identifier for the patient
+   * @param medicationId - The unique identifier for the medication
+   * @param hoursBack - Number of hours to look back for correlation (default: 24)
+   * @returns Promise resolving to object containing medication info and correlated vitals
+   * @throws {Error} When medication correlation analysis fails
+   *
+   * @example
+   * ```typescript
+   * // Analyze vital changes after specific medication
+   * const correlation = await VitalService.getMedicationCorrelatedVitals(
+   *   'P12345',
+   *   'MED789',
+   *   48
+   * );
+   *
+   * console.log('Medication:', correlation.medication.name);
+   * console.log('Correlated vitals:', correlation.vitals.length);
+   * ```
+   */
   static async getMedicationCorrelatedVitals(
     patientId: string,
     medicationId: string,

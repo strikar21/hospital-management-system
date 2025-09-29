@@ -1,12 +1,44 @@
 // DeviceService.ts - Device management and NFC operations
 import { BaseService } from './BaseService';
 
+/**
+ * DeviceService - Medical device management and assignment service
+ *
+ * Handles critical medical device operations including:
+ * - Medical device pool management and availability tracking
+ * - Device assignment and unassignment to patients
+ * - Assignment history and audit trails
+ * - Device status monitoring and reporting
+ * - NFC/RFID operations for device management
+ * - Medical equipment safety and compliance tracking
+ *
+ * @extends BaseService
+ * @since 1.0.0
+ */
 export class DeviceService extends BaseService {
 
   // ================================
   // DEVICE POOL MANAGEMENT
   // ================================
 
+  /**
+   * Retrieves all available (unassigned) medical devices from the device pool
+   *
+   * @param staffId - The unique identifier for the requesting staff member
+   * @param deviceType - Optional filter by device type (e.g., 'watch', 'monitor')
+   * @param location - Optional filter by device location/ward
+   * @returns Promise resolving to array of available device objects
+   * @throws {Error} When device pool retrieval fails
+   *
+   * @example
+   * ```typescript
+   * // Get all available devices
+   * const devices = await DeviceService.getFreeDevices('STAFF123');
+   *
+   * // Get available watches in ICU
+   * const icuWatches = await DeviceService.getFreeDevices('STAFF123', 'watch', 'ICU');
+   * ```
+   */
   static async getFreeDevices(staffId: string, deviceType?: string, location?: string): Promise<any[]> {
     try {
       const response = await this.fetchFromBackend(`/watch-management/available`);
@@ -17,6 +49,19 @@ export class DeviceService extends BaseService {
     }
   }
 
+  /**
+   * Retrieves comprehensive status information about the medical device pool
+   *
+   * @param staffId - The unique identifier for the requesting staff member
+   * @returns Promise resolving to device pool status summary
+   * @throws {Error} When device pool status retrieval fails
+   *
+   * @example
+   * ```typescript
+   * const status = await DeviceService.getDevicePoolStatus('STAFF123');
+   * console.log(`Available: ${status.availableDevices}/${status.totalDevices}`);
+   * ```
+   */
   static async getDevicePoolStatus(staffId: string): Promise<any> {
     try {
       const response = await this.fetchFromBackend(`/watch-management/available`);
@@ -31,6 +76,27 @@ export class DeviceService extends BaseService {
   // DEVICE ASSIGNMENT
   // ================================
 
+  /**
+   * Assigns a medical device to a specific patient
+   *
+   * @param staffId - The unique identifier for the staff member performing assignment
+   * @param deviceId - The unique identifier for the device to assign
+   * @param patientId - The unique identifier for the patient receiving the device
+   * @param assignmentReason - Medical justification for device assignment
+   * @returns Promise resolving to assignment confirmation object
+   * @throws {Error} When device assignment fails
+   *
+   * @example
+   * ```typescript
+   * const result = await DeviceService.assignDevice(
+   *   'STAFF123',
+   *   'DEVICE456',
+   *   'PATIENT789',
+   *   'patientAdmission'
+   * );
+   * console.log('Assignment successful:', result.assignmentId);
+   * ```
+   */
   static async assignDevice(staffId: string, deviceId: string, patientId: string, assignmentReason: string): Promise<any> {
     try {
       const response = await this.fetchFromBackend(`/watch-management/assign`, {
@@ -52,6 +118,32 @@ export class DeviceService extends BaseService {
     }
   }
 
+  /**
+   * Unassigns a medical device from a patient (returns device to pool)
+   *
+   * @param staffId - The unique identifier for the staff member performing unassignment
+   * @param deviceId - The unique identifier for the device to unassign
+   * @param unassignmentReason - Medical justification for device unassignment (default: 'patientDischarge')
+   * @returns Promise resolving to true if unassignment was successful
+   * @throws {Error} When device unassignment fails
+   *
+   * @example
+   * ```typescript
+   * // Unassign device on patient discharge
+   * const success = await DeviceService.unassignDevice(
+   *   'STAFF123',
+   *   'DEVICE456',
+   *   'patientDischarge'
+   * );
+   *
+   * // Unassign for device maintenance
+   * const success = await DeviceService.unassignDevice(
+   *   'STAFF123',
+   *   'DEVICE456',
+   *   'deviceMaintenance'
+   * );
+   * ```
+   */
   static async unassignDevice(staffId: string, deviceId: string, unassignmentReason: string = 'patientDischarge'): Promise<boolean> {
     const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
     console.log('🌐 API.unassignDevice called:', { staffId, deviceId, unassignmentReason, caller });
@@ -295,6 +387,43 @@ export class DeviceService extends BaseService {
       return true;
     } catch (error) {
       console.error('❌ Error decommissioning device:', error);
+      return false;
+    }
+  }
+
+  // ================================
+  // DEVICE CALIBRATION
+  // ================================
+
+  /**
+   * Initiates calibration process for a medical device
+   *
+   * @param deviceId - The unique identifier for the device to calibrate
+   * @param staffId - The unique identifier for the staff member performing calibration
+   * @param calibrationType - Optional type of calibration (default: 'standard')
+   * @returns Promise resolving to true if calibration was initiated successfully
+   * @throws {Error} When device calibration fails
+   *
+   * @example
+   * ```typescript
+   * const success = await DeviceService.calibrateDevice('DEVICE456', 'STAFF123');
+   * ```
+   */
+  static async calibrateDevice(deviceId: string, staffId: string, calibrationType: string = 'standard'): Promise<boolean> {
+    try {
+      await this.fetchFromBackend(`/devices/${deviceId}/calibrate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          calibrationType,
+          performedBy: staffId,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      console.log('✅ Device calibration initiated successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Error calibrating device:', error);
       return false;
     }
   }

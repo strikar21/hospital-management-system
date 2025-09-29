@@ -1,5 +1,5 @@
 // PatientGrid.tsx - Patient grid display component
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Users } from 'lucide-react';
 import { patient, user } from '../../types';
 import PatientCard from '../../PatientCard';
@@ -17,7 +17,7 @@ interface PatientGridProps {
   onRefreshData: () => void;
 }
 
-export const PatientGrid: React.FC<PatientGridProps> = ({
+const PatientGridComponent: React.FC<PatientGridProps> = ({
   patients,
   currentUser,
   loading,
@@ -29,8 +29,8 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
   onToggleECGMode,
   onRefreshData
 }) => {
-  // Get CSS animation speed based on settings
-  const getScrollSpeed = () => {
+  // Memoize CSS animation speed calculation
+  const scrollSpeed = useMemo(() => {
     const speed = settings.autoScrollSpeed || 30;
     const baseSpeed = Math.max(20, 100 - speed); // 20-70 seconds range
 
@@ -45,18 +45,22 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
     }
 
     return finalSpeed;
-  };
+  }, [settings.autoScrollSpeed, patients.length]);
 
-  // Split patients into rows - 2 cards per row
-  const topRowPatients = patients.filter((_, index) => {
-    const positionInGroup = index % 4;
-    return positionInGroup < 2; // First 2 of each group of 4
-  });
+  // Memoize patient row splitting to prevent recalculation on every render
+  const { topRowPatients, bottomRowPatients } = useMemo(() => {
+    const topRow = patients.filter((_, index) => {
+      const positionInGroup = index % 4;
+      return positionInGroup < 2; // First 2 of each group of 4
+    });
 
-  const bottomRowPatients = patients.filter((_, index) => {
-    const positionInGroup = index % 4;
-    return positionInGroup >= 2; // Last 2 of each group of 4
-  });
+    const bottomRow = patients.filter((_, index) => {
+      const positionInGroup = index % 4;
+      return positionInGroup >= 2; // Last 2 of each group of 4
+    });
+
+    return { topRowPatients: topRow, bottomRowPatients: bottomRow };
+  }, [patients]);
 
   if (patients.length === 0 && !loading) {
     return (
@@ -93,7 +97,7 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
           className={`h-full flex gap-1.5 ${settings.enableAutoScroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
           style={{
             minWidth: 'max-content',
-            animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
+            animationDuration: settings.enableAutoScroll ? `${scrollSpeed}s` : 'none',
             animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
           }}
         >
@@ -134,7 +138,7 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
           className={`h-full flex gap-1.5 ${settings.enableAutoScroll && patients.length > 4 ? 'patient-infinite-scroll' : ''}`}
           style={{
             minWidth: 'max-content',
-            animationDuration: settings.enableAutoScroll ? `${getScrollSpeed()}s` : 'none',
+            animationDuration: settings.enableAutoScroll ? `${scrollSpeed}s` : 'none',
             animationPlayState: settings.enableAutoScroll ? 'running' : 'paused'
           }}
         >
@@ -171,3 +175,6 @@ export const PatientGrid: React.FC<PatientGridProps> = ({
     </div>
   );
 };
+
+// Memoize PatientGrid for performance optimization
+export const PatientGrid = React.memo(PatientGridComponent);

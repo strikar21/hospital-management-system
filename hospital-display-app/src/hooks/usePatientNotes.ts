@@ -50,10 +50,13 @@ export const usePatientNotes = ({
         const result = await response.json();
         const newNoteEntry: noteComment = {
           id: result.id || 'note_' + Date.now(),
-          comment: newNote.trim(),
-          commentedBy: currentUser.name,
+          content: newNote.trim(),
+          authorId: currentUser.id,
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
           timestamp,
           canEdit: PatientService.canEditItem(timestamp),
+          isEdited: false,
           isHandoffNote: false
         };
 
@@ -64,7 +67,7 @@ export const usePatientNotes = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_note_' + Date.now(),
           timestamp,
-          type: 'note',
+          type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
           description: `Clinical note added by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(timestamp)
@@ -107,10 +110,13 @@ export const usePatientNotes = ({
         const result = await response.json();
         const newHandoffEntry: noteComment = {
           id: result.id || 'handoff_' + Date.now(),
-          comment: newHandoff.trim(),
-          commentedBy: currentUser.name,
+          content: newHandoff.trim(),
+          authorId: currentUser.id,
+          authorName: currentUser.name,
+          authorRole: currentUser.role,
           timestamp,
           canEdit: PatientService.canEditItem(timestamp),
+          isEdited: false,
           isHandoffNote: true
         };
 
@@ -121,7 +127,7 @@ export const usePatientNotes = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_handoff_' + Date.now(),
           timestamp,
-          type: 'shiftHandoff',
+          type: 'handoffNote',
           description: `Shift handoff note by ${currentUser.name}: ${newHandoff.trim()}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(timestamp)
@@ -176,7 +182,7 @@ export const usePatientNotes = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_edit_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'noteEdit',
+          type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
           description: `Note edited by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())

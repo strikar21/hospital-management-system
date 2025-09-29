@@ -27,6 +27,7 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
+
   // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.targetTouches[0].clientX;
@@ -124,37 +125,43 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
                     {/* Type badge and edit status in one line */}
                     <div className="flex items-center justify-between">
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                        entry.type === 'admission' ? 'bg-blue-100 text-blue-800' :
+                        entry.type === 'handoffNote' ? 'bg-indigo-100 text-indigo-800' :
+                        entry.type === 'medicationAdministration' ? 'bg-green-100 text-green-800' :
+                        entry.type === 'doctorNote' ? 'bg-blue-100 text-blue-800' :
+                        entry.type === 'nurseNote' ? 'bg-purple-100 text-purple-800' :
+                        entry.type === 'therapistNote' ? 'bg-teal-100 text-teal-800' :
+                        entry.type === 'pharmacistNote' ? 'bg-emerald-100 text-emerald-800' :
+                        entry.type === 'technicianNote' ? 'bg-yellow-100 text-yellow-800' :
+                        entry.type === 'clinicalNote' ? 'bg-blue-100 text-blue-800' :
                         entry.type === 'medication' ? 'bg-green-100 text-green-800' :
-                        entry.type === 'investigation' ? 'bg-yellow-100 text-yellow-800' :
-                        entry.type === 'therapy' ? 'bg-purple-100 text-purple-800' :
+                        entry.type === 'therapy' ? 'bg-orange-100 text-orange-800' :
+                        entry.type === 'investigation' ? 'bg-cyan-100 text-cyan-800' :
                         entry.type === 'vitalAlert' ? 'bg-red-100 text-red-800' :
-                        entry.type === 'statusChange' ? 'bg-orange-100 text-orange-800' :
-                        entry.type === 'alertAcknowledged' ? 'bg-orange-100 text-orange-800' :
-                        entry.type === 'discharge' ? 'bg-slate-100 text-slate-800' :
-                        entry.type === 'doctorNotes' ? 'bg-blue-100 text-blue-800' :
-                        entry.type === 'nursingNotes' ? 'bg-green-100 text-green-800' :
-                        entry.type === 'therapistNotes' ? 'bg-purple-100 text-purple-800' :
-                        entry.type === 'technicianNotes' ? 'bg-yellow-100 text-yellow-800' :
-                        entry.type === 'pharmacyNotes' ? 'bg-orange-100 text-orange-800' :
-                        entry.type === 'otherNotes' ? 'bg-gray-100 text-gray-800' :
-                        'bg-red-100 text-red-800'
+                        entry.type === 'alertTriggered' ? 'bg-red-100 text-red-800' :
+                        entry.type === 'alertAcknowledged' ? 'bg-yellow-100 text-yellow-800' :
+                        entry.type === 'alertResolved' ? 'bg-green-100 text-green-800' :
+                        entry.type === 'alertEscalated' ? 'bg-red-200 text-red-900' :
+                        entry.type === 'caseEntry' ? 'bg-slate-100 text-slate-800' :
+                        'bg-gray-100 text-gray-800'
                       }`}>
-                        {entry.type === 'admission' ? 'ADMISSION' :
+                        {entry.type === 'handoffNote' ? 'HANDOFF NOTE' :
+                         entry.type === 'medicationAdministration' ? 'MEDICATION ADMIN' :
+                         entry.type === 'doctorNote' ? 'DOCTOR NOTE' :
+                         entry.type === 'nurseNote' ? 'NURSE NOTE' :
+                         entry.type === 'therapistNote' ? 'THERAPIST NOTE' :
+                         entry.type === 'pharmacistNote' ? 'PHARMACIST NOTE' :
+                         entry.type === 'technicianNote' ? 'TECHNICIAN NOTE' :
+                         entry.type === 'clinicalNote' ? 'CLINICAL NOTE' :
                          entry.type === 'medication' ? 'MEDICATION' :
-                         entry.type === 'investigation' ? 'INVESTIGATION' :
                          entry.type === 'therapy' ? 'THERAPY' :
+                         entry.type === 'investigation' ? 'INVESTIGATION' :
                          entry.type === 'vitalAlert' ? 'VITAL ALERT' :
-                         entry.type === 'statusChange' ? 'STATUS CHANGE' :
+                         entry.type === 'alertTriggered' ? 'ALERT TRIGGERED' :
                          entry.type === 'alertAcknowledged' ? 'ALERT ACKNOWLEDGED' :
-                         entry.type === 'discharge' ? 'DISCHARGE' :
-                         entry.type === 'doctorNotes' ? 'DOCTOR NOTES' :
-                         entry.type === 'nursingNotes' ? 'NURSING NOTES' :
-                         entry.type === 'therapistNotes' ? 'THERAPIST NOTES' :
-                         entry.type === 'technicianNotes' ? 'TECHNICIAN NOTES' :
-                         entry.type === 'pharmacyNotes' ? 'PHARMACY NOTES' :
-                         entry.type === 'otherNotes' ? 'OTHER NOTES' :
-                         'UNKNOWN'}
+                         entry.type === 'alertResolved' ? 'ALERT RESOLVED' :
+                         entry.type === 'alertEscalated' ? 'ALERT ESCALATED' :
+                         entry.type === 'caseEntry' ? 'CASE ENTRY' :
+                         entry.type.toUpperCase()}
                       </span>
                       {entry.canEdit ? (
                         <CheckCircle className="w-3 h-3 text-green-600" />

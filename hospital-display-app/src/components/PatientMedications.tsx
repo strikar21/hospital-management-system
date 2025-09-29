@@ -6,6 +6,7 @@ import { patient, user, medication, caseSheetEntry } from '../types';
 import { getMedicationStatusColor, formatDateTime } from '../utils';
 import { PermissionUtils } from '../utils/permissionUtils';
 import { PatientService, MedicationService } from '../services';
+import { PatientCaseService } from '../services/patient';
 
 interface PatientMedicationsProps {
   patient: patient;
@@ -23,7 +24,8 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
   addCaseSheetEntry
 }) => {
   // Medication form state
-  const [isAddingMedication, setIsAddingMedication] = useState(false);
+  const [showMedicationForm, setShowMedicationForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newMedication, setNewMedication] = useState({
     name: '', dosage: '', frequency: '', route: 'PO', duration: ''
   });
@@ -63,7 +65,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'pharmacyNotes',
+          type: 'pharmacistNote',
           description: `${medication.name} ${status} by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())
@@ -87,7 +89,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
         )}
         {PermissionUtils.canEditMedications(currentUser.role) && (
           <button
-            onClick={() => setIsAddingMedication(true)}
+            onClick={() => setShowMedicationForm(true)}
             className="flex items-center space-x-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
@@ -97,7 +99,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
       </div>
 
       {/* Add Medication Form */}
-      {isAddingMedication && PermissionUtils.canEditMedications(currentUser.role) && (
+      {showMedicationForm && PermissionUtils.canEditMedications(currentUser.role) && (
         <div className="mb-2 p-2 bg-blue-50 rounded-lg border">
           <h4 className="font-medium mb-2 text-sm">Prescribe New Medication</h4>
           <div className="grid grid-cols-2 gap-2">
@@ -145,9 +147,9 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
           <div className="flex space-x-2 mt-2">
             <button
               onClick={async () => {
-                if (isAddingMedication) return; // Prevent multiple simultaneous calls
+                if (isSubmitting) return; // Prevent multiple simultaneous calls
                 if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
-                setIsAddingMedication(true);
+                setIsSubmitting(true);
                 try {
                   const timestamp = new Date().toISOString();
                   const medicationData = {
@@ -174,32 +176,24 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                   } else {
                     console.error('Failed to add medication - no response from backend');
                     alert('Failed to add medication. Please try again.');
-                    setIsAddingMedication(false);
+                    setIsSubmitting(false);
                     return;
                   }
                   setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
-                  setIsAddingMedication(false);
+                  setShowMedicationForm(false);
 
                   // Add case sheet entry to backend
                   try {
-                    const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({
-                        entrytype: 'medication',
-                        description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-                        performedBy: currentUser.name
-                      })
-                    });
+                    const success = await PatientCaseService.addCaseEntry(patient.id, {
+                      entryType: 'medication',
+                      description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`
+                    }, currentUser.id);
 
-                    if (caseResponse.ok) {
-                      const caseResult = await caseResponse.json();
+                    if (success) {
                       const newCaseEntry: caseSheetEntry = {
-                        id: caseResult.id || 'cs_' + Date.now(),
+                        id: 'cs_' + Date.now(),
                         timestamp,
-                        type: 'pharmacyNotes',
+                        type: 'pharmacistNote',
                         description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
                         performedBy: currentUser.name,
                         canEdit: true
@@ -212,13 +206,13 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                 } catch (error) {
                   console.error('Failed to add medication:', error);
                 } finally {
-                  setIsAddingMedication(false);
+                  setIsSubmitting(false);
                 }
               }}
-              disabled={isAddingMedication || !newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration}
+              disabled={isSubmitting || !newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration}
               className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
             >
-              {isAddingMedication ? (
+              {isSubmitting ? (
                 <>
                   <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   <span>Adding...</span>
@@ -232,7 +226,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
             </button>
             <button
               onClick={() => {
-                setIsAddingMedication(false);
+                setShowMedicationForm(false);
                 setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
               }}
               className="flex items-center space-x-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
@@ -257,7 +251,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                 </div>
                 <div className="text-sm text-gray-600">
                   <p><span className="font-medium">Frequency:</span> {med.frequency} • <span className="font-medium">Route:</span> {med.route}</p>
-                  <p><span className="font-medium">Prescribed by:</span> {med.prescribedBy} on {formatDateTime(med.createdAt)?.split(',')[0] || 'Unknown date'}</p>
+                  <p><span className="font-medium">Prescribed by:</span> {(med as any).prescribedByName || med.prescribedBy} on {formatDateTime(med.createdAt)?.split(',')[0] || 'Unknown date'}</p>
 
                   {/* Medication Administration Schedule */}
                   {med.status === 'active' && (

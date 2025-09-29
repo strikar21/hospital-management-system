@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { alertType, patient, user, caseSheetEntry } from '../types';
+import { alert, patient, user, caseSheetEntry } from '../types';
 import { PatientService } from '../services';
 
 interface UsePatientAlertsProps {
   patient: patient;
   currentUser: user;
-  alerts: alertType[];
-  setAlerts: React.Dispatch<React.SetStateAction<alertType[]>>;
+  alerts: alert[];
+  setAlerts: React.Dispatch<React.SetStateAction<alert[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
 }
 
@@ -30,10 +30,9 @@ export const usePatientAlerts = ({
         alert.id === alertId
           ? {
               ...alert,
-              acknowledged: true,
+              isAcknowledged: true,
               acknowledgedBy: currentUser.name,
-              acknowledgedAt: new Date().toISOString(),
-              canEdit: PatientService.canEditItem(new Date().toISOString())
+              acknowledgedAt: new Date().toISOString()
             }
           : alert
       ));
@@ -42,7 +41,7 @@ export const usePatientAlerts = ({
       const newCaseEntry: caseSheetEntry = {
         id: 'ack_' + Date.now(),
         timestamp: new Date().toISOString(),
-        type: 'alertAcknowledgment',
+        type: 'alertAcknowledged',
         description: `Alert acknowledged: ${alertToAck.message}`,
         performedBy: currentUser.name,
         canEdit: PatientService.canEditItem(new Date().toISOString())
@@ -68,7 +67,7 @@ export const usePatientAlerts = ({
 
   // Generate clinical decision support alerts
   const generateClinicalAlerts = useCallback(() => {
-    const newAlerts: alertType[] = [];
+    const newAlerts: alert[] = [];
     const now = new Date().toISOString();
 
     // High blood pressure alert
@@ -76,18 +75,17 @@ export const usePatientAlerts = ({
       const existingAlert = alerts.find(a =>
         a.type === 'clinical' &&
         a.message.includes('High blood pressure') &&
-        !a.acknowledged
+        !a.isAcknowledged
       );
 
       if (!existingAlert) {
         newAlerts.push({
           id: 'bp_' + Date.now(),
           type: 'clinical',
-          priority: 'high',
+          severity: 'high',
           message: `High blood pressure detected: ${patient.vitals.systolicPressure}/${patient.vitals.diastolicPressure} mmHg`,
           timestamp: now,
-          acknowledged: false,
-          canEdit: PatientService.canEditItem(now)
+          isAcknowledged: false
         });
       }
     }
@@ -97,18 +95,17 @@ export const usePatientAlerts = ({
       const existingAlert = alerts.find(a =>
         a.type === 'clinical' &&
         a.message.includes('High heart rate') &&
-        !a.acknowledged
+        !a.isAcknowledged
       );
 
       if (!existingAlert) {
         newAlerts.push({
           id: 'hr_' + Date.now(),
           type: 'clinical',
-          priority: 'medium',
+          severity: 'medium',
           message: `High heart rate detected: ${patient.vitals.heartRate} bpm`,
           timestamp: now,
-          acknowledged: false,
-          canEdit: PatientService.canEditItem(now)
+          isAcknowledged: false
         });
       }
     }
@@ -118,18 +115,17 @@ export const usePatientAlerts = ({
       const existingAlert = alerts.find(a =>
         a.type === 'clinical' &&
         a.message.includes('Low oxygen saturation') &&
-        !a.acknowledged
+        !a.isAcknowledged
       );
 
       if (!existingAlert) {
         newAlerts.push({
           id: 'spo2_' + Date.now(),
           type: 'clinical',
-          priority: 'high',
+          severity: 'high',
           message: `Low oxygen saturation: ${patient.vitals.oxygenSaturation}%`,
           timestamp: now,
-          acknowledged: false,
-          canEdit: PatientService.canEditItem(now)
+          isAcknowledged: false
         });
       }
     }

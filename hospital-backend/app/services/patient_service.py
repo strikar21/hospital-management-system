@@ -453,16 +453,69 @@ class PatientService(BaseService):
             raise
 
     async def get_case_entries(self, patient_id: str) -> List[Dict[str, Any]]:
-        """Get case entries with transformation"""
+        """Get case entries with transformation and staff name resolution"""
         try:
             if not await self.patient_repository.exists(patient_id):
                 raise ValueError(f"Patient {patient_id} not found")
 
             results = await self.patient_repository.get_case_entries(patient_id)
-            return [self.repository.transform_to_camel_case(item) for item in results]
+            camel_results = [self.repository.transform_to_camel_case(item) for item in results]
+
+            # Resolve staff names for case entries
+            if camel_results:
+                staff_ids = set()
+                for entry in camel_results:
+                    if entry.get('createdBy'):
+                        staff_ids.add(entry['createdBy'])
+
+                # Get staff names from database
+                staff_ids_list = list(staff_ids)
+                if staff_ids_list:
+                    staff_names = await self.patient_repository.get_staff_names(staff_ids_list)
+
+                    # Update case entries with resolved names
+                    for entry in camel_results:
+                        created_by = entry.get('createdBy')
+                        if created_by and created_by in staff_names:
+                            entry['createdByName'] = staff_names[created_by]
+
+            return camel_results
 
         except Exception as e:
             self.logger.error(f"Service error getting case entries: {e}")
+            raise
+
+    async def get_aggregated_timeline(self, patient_id: str) -> List[Dict[str, Any]]:
+        """Get aggregated timeline of all medical activities with staff name resolution"""
+        try:
+            if not await self.patient_repository.exists(patient_id):
+                raise ValueError(f"Patient {patient_id} not found")
+
+            timeline_entries = await self.patient_repository.get_aggregated_timeline(patient_id)
+            camel_results = [self.repository.transform_to_camel_case(item) for item in timeline_entries]
+
+            # Resolve staff names for all entries
+            if camel_results:
+                staff_ids = set()
+                for entry in camel_results:
+                    if entry.get('performedBy'):
+                        staff_ids.add(entry['performedBy'])
+
+                # Get staff names from database
+                staff_ids_list = list(staff_ids)
+                if staff_ids_list:
+                    staff_names = await self.patient_repository.get_staff_names(staff_ids_list)
+
+                    # Update timeline entries with resolved names
+                    for entry in camel_results:
+                        performed_by = entry.get('performedBy')
+                        if performed_by and performed_by in staff_names:
+                            entry['performedByName'] = staff_names[performed_by]
+
+            return camel_results
+
+        except Exception as e:
+            self.logger.error(f"Service error getting aggregated timeline: {e}")
             raise
 
     # ================================

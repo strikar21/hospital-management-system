@@ -264,18 +264,18 @@ async def acknowledge_alert(
 
 @router.get("/{patient_id}/case-entries")
 async def get_case_entries(patient_id: str):
-    """Get all case entries for patient"""
+    """Get aggregated timeline of all medical activities for patient"""
     try:
         patient_service = get_patient_service()
-        case_entries = await patient_service.get_case_entries(patient_id)
+        case_entries = await patient_service.get_aggregated_timeline(patient_id)
 
-        logger.info(f"✅ Retrieved {len(case_entries)} case entries for patient {patient_id}")
+        logger.info(f"✅ Retrieved {len(case_entries)} timeline entries for patient {patient_id}")
         return {"caseEntries": case_entries, "count": len(case_entries)}
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Error getting case entries for patient {patient_id}: {e}")
+        logger.error(f"❌ Error getting case timeline for patient {patient_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

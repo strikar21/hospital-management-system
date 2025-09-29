@@ -240,9 +240,9 @@ class PatientRepository(BaseRepository[Patient]):
         """Add case entry to patient record"""
         try:
             query = """
-                INSERT INTO case_entries (
-                    id, patientId, entryType, description, findings,
-                    recommendations, followUpDate, severity, category,
+                INSERT INTO "caseEntries" (
+                    id, "patientId", "entryType", description, findings,
+                    recommendations, "followUpDate", severity, category,
                     "createdBy", timestamp, "createdAt", "updatedAt"
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $11)
@@ -277,7 +277,7 @@ class PatientRepository(BaseRepository[Patient]):
         """Get all case entries for patient"""
         try:
             query = """
-                SELECT * FROM case_entries
+                SELECT * FROM "caseEntries"
                 WHERE "patientId" = $1 AND "deletedAt" IS NULL
                 ORDER BY timestamp DESC
             """
@@ -286,6 +286,170 @@ class PatientRepository(BaseRepository[Patient]):
 
         except Exception as e:
             self.logger.error(f"Error fetching case entries for patient {patient_id}: {e}")
+            raise
+
+    async def get_aggregated_timeline(self, patient_id: str) -> List[Dict[str, Any]]:
+        """Get aggregated timeline of all medical activities for patient"""
+        try:
+            timeline_entries = []
+
+            # Get medications
+            medications_query = """
+                SELECT id, name, dosage, frequency, route, status, "prescribedBy",
+                       "createdAt" as timestamp, 'medication' as entry_type
+                FROM medications
+                WHERE "patientId" = $1
+                ORDER BY "createdAt" DESC
+            """
+            medications = await self.execute_custom_query(medications_query, [patient_id])
+            for med in medications:
+                timeline_entries.append({
+                    'id': f"med_{med['id']}",
+                    'timestamp': med['timestamp'],
+                    'type': 'medication',
+                    'description': f"Medication prescribed: {med['name']} - {med['dosage']} {med['frequency']} via {med['route']}",
+                    'performedBy': med['prescribedBy'],
+                    'canEdit': True,
+                    'details': med
+                })
+
+            # Get investigations
+            investigations_query = """
+                SELECT id, name, type, status, results, "performedBy",
+                       "createdAt" as timestamp, 'investigation' as entry_type
+                FROM investigations
+                WHERE "patientId" = $1
+                ORDER BY "createdAt" DESC
+            """
+            investigations = await self.execute_custom_query(investigations_query, [patient_id])
+            for inv in investigations:
+                timeline_entries.append({
+                    'id': f"inv_{inv['id']}",
+                    'timestamp': inv['timestamp'],
+                    'type': 'investigation',
+                    'description': f"Investigation ordered: {inv['name']} ({inv['type']}, {inv['status']})",
+                    'performedBy': inv['performedBy'],
+                    'canEdit': True,
+                    'details': inv
+                })
+
+            # Get therapy sessions
+            therapy_query = """
+                SELECT id, type, description, frequency, status, "performedBy",
+                       "createdAt" as timestamp, 'therapy' as entry_type
+                FROM therapy
+                WHERE "patientId" = $1
+                ORDER BY "createdAt" DESC
+            """
+            therapies = await self.execute_custom_query(therapy_query, [patient_id])
+            for therapy in therapies:
+                timeline_entries.append({
+                    'id': f"therapy_{therapy['id']}",
+                    'timestamp': therapy['timestamp'],
+                    'type': 'therapy',
+                    'description': f"Therapy prescribed: {therapy['type']} - {therapy['description']} ({therapy['frequency']})",
+                    'performedBy': therapy['performedBy'],
+                    'canEdit': True,
+                    'details': therapy
+                })
+
+            # Get patient notes
+            notes_query = """
+                SELECT id, content, "authorId" as "performedBy", "authorName", "authorRole",
+                       timestamp, 'note' as entry_type
+                FROM patientnotes
+                WHERE "patientId" = $1
+                ORDER BY timestamp DESC
+            """
+            notes = await self.execute_custom_query(notes_query, [patient_id])
+            for note in notes:
+                note_type = 'doctorNotes' if 'doctor' in note['authorRole'].lower() else 'nursingNotes'
+                timeline_entries.append({
+                    'id': f"note_{note['id']}",
+                    'timestamp': note['timestamp'],
+                    'type': note_type,
+                    'description': f"Note by {note['authorName']}: {note['content']}",
+                    'performedBy': note['performedBy'],
+                    'performedByName': note['authorName'],
+                    'canEdit': True,
+                    'details': note
+                })
+
+            # Get dedicated case entries
+            case_entries_query = """
+                SELECT id, "entryType" as type, description, "createdBy" as "performedBy",
+                       timestamp, 'caseEntry' as entry_type
+                FROM "caseEntries"
+                WHERE "patientId" = $1 AND "deletedAt" IS NULL
+                ORDER BY timestamp DESC
+            """
+            case_entries = await self.execute_custom_query(case_entries_query, [patient_id])
+            for entry in case_entries:
+                timeline_entries.append({
+                    'id': f"case_{entry['id']}",
+                    'timestamp': entry['timestamp'],
+                    'type': entry['type'],
+                    'description': entry['description'],
+                    'performedBy': entry['performedBy'],
+                    'canEdit': True,
+                    'details': entry
+                })
+
+            # Get patient alerts and acknowledgments
+            alerts_query = """
+                SELECT id, message, severity, "createdAt" as timestamp,
+                       'vitalAlert' as entry_type, status, "acknowledgedBy", "acknowledgedAt"
+                FROM patient_alerts
+                WHERE "patientId" = $1
+                ORDER BY "createdAt" DESC
+            """
+            alerts = await self.execute_custom_query(alerts_query, [patient_id])
+            for alert in alerts:
+                # Add alert creation entry
+                timeline_entries.append({
+                    'id': f"alert_{alert['id']}",
+                    'timestamp': alert['timestamp'],
+                    'type': 'vitalAlert',
+                    'description': f"Alert: {alert['message']} (Severity: {alert['severity']})",
+                    'performedBy': 'SYSTEM',
+                    'canEdit': False,
+                    'details': alert
+                })
+
+                # Add alert acknowledgment entry if acknowledged
+                if alert['status'] == 'acknowledged' and alert['acknowledgedAt']:
+                    timeline_entries.append({
+                        'id': f"alert_ack_{alert['id']}",
+                        'timestamp': alert['acknowledgedAt'],
+                        'type': 'alertAcknowledged',
+                        'description': f"Alert acknowledged: {alert['message']}",
+                        'performedBy': alert['acknowledgedBy'],
+                        'canEdit': False,
+                        'details': alert
+                    })
+
+            # Resolve staff names for all entries
+            staff_ids = set()
+            for entry in timeline_entries:
+                if entry.get('performedBy') and entry['performedBy'] not in ['SYSTEM', 'System']:
+                    staff_ids.add(entry['performedBy'])
+
+            if staff_ids:
+                staff_names = await self.get_staff_names(list(staff_ids))
+
+                # Add performedByName to entries that don't have it
+                for entry in timeline_entries:
+                    performed_by = entry.get('performedBy')
+                    if performed_by and performed_by in staff_names and not entry.get('performedByName'):
+                        entry['performedByName'] = staff_names[performed_by]
+
+            # Sort all entries by timestamp (newest first)
+            timeline_entries.sort(key=lambda x: x['timestamp'], reverse=True)
+
+            return timeline_entries
+
+        except Exception as e:
+            self.logger.error(f"Error fetching aggregated timeline for patient {patient_id}: {e}")
             raise
 
     # ================================

@@ -1,7 +1,6 @@
 // BaseService.ts - Shared functionality for all services
 import SecureStorage from '../utils/secureStorage';
 import { API_CONFIG, getApiUrl, getWsUrl } from '../config/apiConfig';
-import { DataTransformer } from '../utils/dataTransformer';
 
 export abstract class BaseService {
   protected static readonly BACKEND_BASE_URL = API_CONFIG.BACKEND_BASE_URL;
@@ -114,10 +113,8 @@ export abstract class BaseService {
 
       const data = await response.json();
 
-      // Transform all API responses to consistent camelCase format
-      const transformedData = DataTransformer.transformApiResponse(data);
-
-      return transformedData;
+      // Return data directly - transformation removed per user request
+      return data;
     } catch (error) {
       console.error(`❌ Network error for ${endpoint}:`, error);
       throw error;
@@ -170,6 +167,54 @@ export abstract class BaseService {
     } catch (error) {
       console.error('❌ Error parsing current user from localStorage:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get staff ID to name mapping for transformation
+   */
+  protected static async getStaffMapping(): Promise<{ [key: string]: string }> {
+    try {
+      const response = await this.fetchFromBackend('/staff/mapping');
+      return response || {};
+    } catch (error) {
+      console.warn('⚠️ Staff mapping unavailable:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Get comprehensive staff information including roles
+   * For role-based note categorization
+   */
+  protected static async getStaffWithRoles(): Promise<{ [key: string]: { name: string; role: string } }> {
+    try {
+      const response = await this.fetchFromBackend('/staff/');
+      console.log('🔍 Staff endpoint response:', response);
+      if (!Array.isArray(response)) return {};
+
+      // Convert staff array to ID -> {name, role} mapping
+      const staffMapping: { [key: string]: { name: string; role: string } } = {};
+      response.forEach((staff: any) => {
+        console.log('🔍 Individual staff object:', staff);
+        // Try multiple possible ID field names
+        const staffId = staff.staffId || staff.id || staff.userId || staff.staff_id;
+        if (staffId) {
+          const fullName = staff.name || staff.staffName || staff.fullName ||
+                          (staff.firstName && staff.lastName ? `${staff.firstName} ${staff.lastName}` : null) ||
+                          staff.firstName || staff.lastName || 'Unknown';
+          staffMapping[staffId] = {
+            name: fullName,
+            role: staff.role || staff.staffRole || 'Staff'
+          };
+          console.log('🔍 Staff mapping added:', { staffId, name: fullName, role: staff.role });
+        }
+      });
+      console.log('🔍 Final staff mapping:', staffMapping);
+      return staffMapping;
+    } catch (error) {
+      console.warn('⚠️ Staff with roles unavailable:', error);
+      return {};
     }
   }
 }

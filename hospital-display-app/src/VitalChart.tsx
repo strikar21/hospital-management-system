@@ -1,6 +1,6 @@
 // VitalChart.tsx - Fixed Sizing and Close Button
 
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { patient, vitalhistory, timerange } from './types';
@@ -15,7 +15,7 @@ interface VitalChartProps {
   onTimeRangeChange: (range: timerange) => void;
 }
 
-export const VitalChart: React.FC<VitalChartProps> = ({
+export const VitalChart: React.FC<VitalChartProps> = React.memo(({
   patient,
   vitalType,
   vitalHistory,
@@ -23,8 +23,8 @@ export const VitalChart: React.FC<VitalChartProps> = ({
   onClose,
   onTimeRangeChange
 }) => {
-  // Prepare chart data based on vital type
-  const chartData = vitalHistory.map(h => {
+  // Memoize expensive chart data calculation
+  const chartData = useMemo(() => vitalHistory.map(h => {
     const baseData = { time: h.time };
     
     if (vitalType === 'systolicPressure' || vitalType === 'diastolicPressure') {
@@ -49,7 +49,7 @@ export const VitalChart: React.FC<VitalChartProps> = ({
                     h[vitalType as keyof vitalhistory]
       };
     }
-  });
+  }), [vitalHistory, vitalType]);
 
   const timeRanges: timerange[] = ['1h', '6h', '24h', '7d'];
 
@@ -321,4 +321,6 @@ export const VitalChart: React.FC<VitalChartProps> = ({
       </div>
     </div>
   );
-};
+});
+
+VitalChart.displayName = 'VitalChart';

@@ -34,10 +34,10 @@ export const usePatientInvestigations = ({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // Helper function for role-based case sheet entry types
-  const getRoleBasedNoteType = useCallback((role: string): 'doctorNotes' | 'nurseNotes' | 'technicianNotes' => {
-    if (role === 'Doctor') return 'doctorNotes';
-    if (role === 'Nurse') return 'nurseNotes';
-    return 'technicianNotes';
+  const getRoleBasedNoteType = useCallback((role: string): 'doctorNote' | 'nurseNote' | 'technicianNote' => {
+    if (role === 'Doctor') return 'doctorNote';
+    if (role === 'Nurse') return 'nurseNote';
+    return 'technicianNote';
   }, []);
 
   // Add new investigation
@@ -71,7 +71,7 @@ export const usePatientInvestigations = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: 'investigation',
+            entryType: 'investigation',
             description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
             performedBy: currentUser.name
           })
@@ -82,7 +82,7 @@ export const usePatientInvestigations = ({
           const newCaseEntry: caseSheetEntry = {
             id: caseResult.id || 'cs_' + Date.now(),
             timestamp,
-            type: 'technicianNotes',
+            type: 'technicianNote',
             description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
             performedBy: currentUser.name,
             canEdit: true
@@ -118,7 +118,7 @@ export const usePatientInvestigations = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: 'investigation',
+            entryType: 'investigation',
             description: `${inv.name} started by ${currentUser.name}`,
             performedBy: currentUser.name
           })
@@ -129,7 +129,7 @@ export const usePatientInvestigations = ({
           const newCaseEntry: caseSheetEntry = {
             id: caseResult.id || 'cs_' + Date.now(),
             timestamp: new Date().toISOString(),
-            type: 'technicianNotes',
+            type: 'technicianNote',
             description: `${inv.name} started by ${currentUser.name}`,
             performedBy: currentUser.name,
             canEdit: true
@@ -214,7 +214,7 @@ export const usePatientInvestigations = ({
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          entrytype: 'investigation',
+          entryType: 'investigation',
           description: `${inv.name} completed by ${currentUser.name}${results ? ` - Results: ${results}` : ''}`,
           performedBy: currentUser.name
         })
@@ -254,7 +254,7 @@ export const usePatientInvestigations = ({
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              entrytype: 'investigation',
+              entryType: 'investigation',
               description: `${inv.name} (${inv.type}) cancelled by ${currentUser.name}`,
               performedBy: currentUser.name
             })
@@ -266,7 +266,7 @@ export const usePatientInvestigations = ({
             const newCaseEntry: caseSheetEntry = {
               id: caseResult.id || 'cs_' + Date.now(),
               timestamp,
-              type: 'technicianNotes',
+              type: 'technicianNote',
               description: `${inv.name} (${inv.type}) cancelled by ${currentUser.name}`,
               performedBy: currentUser.name,
               canEdit: true

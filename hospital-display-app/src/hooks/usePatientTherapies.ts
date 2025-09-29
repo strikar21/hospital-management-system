@@ -56,7 +56,7 @@ export const usePatientTherapies = ({
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            entrytype: 'therapy',
+            entryType: 'therapy',
             description: `${newTherapy.type}: ${newTherapy.description} (${newTherapy.frequency}, ${newTherapy.duration}) prescribed by ${currentUser.name}`,
             performedBy: currentUser.name
           })
@@ -67,7 +67,7 @@ export const usePatientTherapies = ({
           const newCaseEntry: caseSheetEntry = {
             id: caseResult.id || 'cs_' + Date.now(),
             timestamp,
-            type: 'therapistNotes',
+            type: 'therapistNote',
             description: `${newTherapy.type}: ${newTherapy.description} (${newTherapy.frequency}, ${newTherapy.duration}) prescribed by ${currentUser.name}`,
             performedBy: currentUser.name,
             canEdit: true
@@ -133,7 +133,7 @@ export const usePatientTherapies = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'therapistNotes',
+          type: 'therapistNote',
           description: `${therapy.description} session completed by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())
@@ -156,7 +156,7 @@ export const usePatientTherapies = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'therapistNotes',
+          type: 'therapistNote',
           description: `${therapy.description} completed by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())
@@ -179,7 +179,7 @@ export const usePatientTherapies = ({
         const newCaseEntry: caseSheetEntry = {
           id: 'cs_' + Date.now(),
           timestamp: new Date().toISOString(),
-          type: 'therapistNotes',
+          type: 'therapistNote',
           description: `${therapy.description} cancelled by ${currentUser.name}`,
           performedBy: currentUser.name,
           canEdit: PatientService.canEditItem(new Date().toISOString())

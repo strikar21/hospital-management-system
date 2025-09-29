@@ -102,18 +102,13 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
                 });
               }}
               disabled={acknowledgingAlert !== null}
-              className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-green-400"
+              className="w-8 h-8 bg-green-600 hover:bg-green-700 text-white rounded flex items-center justify-center"
+              title="Acknowledge all alerts"
             >
               {acknowledgingAlert !== null ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Acknowledging...</span>
-                </>
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Acknowledge All</span>
-                </>
+                <CheckCircle className="w-4 h-4" />
               )}
             </button>
           </div>

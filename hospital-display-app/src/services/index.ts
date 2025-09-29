@@ -1,6 +1,6 @@
 // services/index.ts - Centralized service exports
 import { AuthService } from './AuthService';
-import { PatientService } from './PatientService';
+import { PatientService } from './patient';
 import { VitalService } from './VitalService';
 import { MedicationService } from './MedicationService';
 import { DeviceService } from './DeviceService';
@@ -11,7 +11,7 @@ import { BaseService } from './BaseService';
 
 export { BaseService } from './BaseService';
 export { AuthService } from './AuthService';
-export { PatientService } from './PatientService';
+export { PatientService } from './patient';
 export { VitalService } from './VitalService';
 export { MedicationService } from './MedicationService';
 export { DeviceService } from './DeviceService';

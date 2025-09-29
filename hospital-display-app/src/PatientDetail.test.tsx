@@ -33,12 +33,20 @@ jest.mock('./CaseSheetBook', () => {
 
 const mockPatient: patient = {
   id: 'test-patient-1',
+  name: 'John Doe',
   firstName: 'John',
   lastName: 'Doe',
   age: 45,
   gender: 'Male',
+  roomNumber: '101',
+  bedNumber: 'A',
+  ward: 'ICU',
   room: '101',
-  bed: 'A',
+  department: 'Cardiology',
+  assignedDoctor: 'Dr. Smith',
+  attendingPhysician: 'Dr. Johnson',
+  nurseInCharge: 'Nurse Wilson',
+  weight: 70,
   admissionDate: '2023-10-01',
   diagnosis: 'Test diagnosis',
   vitals: {
@@ -50,8 +58,10 @@ const mockPatient: patient = {
     skinTemperature: 98.6,
     ecgReading: 72,
     eegReading: 15,
-    timestamp: new Date().toISOString(),
-    lastUpdated: new Date().toISOString(),
+    bioelectricalImpedance: 500,
+    tremorIntensity: 2,
+    fallRisk: 'low',
+    lastDataReceived: new Date().toISOString(),
     isEcgMode: true,
     dataQualityScore: 95
   },
@@ -62,13 +72,14 @@ const mockPatient: patient = {
   alerts: [],
   caseSheet: [],
   status: 'active',
-  mrn: 'MRN123456',
 };
 
 const mockUser: user = {
   id: 'test-user-1',
+  staffId: 'STAFF001',
   name: 'Dr. Test',
-  role: 'Doctor'
+  role: 'Doctor',
+  department: 'Cardiology'
 };
 
 const defaultProps = {
@@ -139,8 +150,10 @@ describe('PatientDetail', () => {
         skinTemperature: 0,
         ecgReading: 0,
         eegReading: 0,
-        timestamp: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
+        bioelectricalImpedance: 0,
+        tremorIntensity: 0,
+        fallRisk: 'low' as const,
+        lastDataReceived: new Date().toISOString(),
         isEcgMode: true,
         dataQualityScore: 0
       }
