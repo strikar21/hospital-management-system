@@ -218,7 +218,7 @@ export class ComplianceAuditLogger {
     const riskLevel = this.determineRiskLevel(eventType, severity);
 
     const log: ComplianceAuditLog = {
-      logId: `DPDP_${Date.now()}`,
+      logId: "", // Backend will generate log ID
       timestamp: new Date(),
       complianceFramework: ComplianceFramework.DPDP_2023,
       eventType,
@@ -259,7 +259,7 @@ export class ComplianceAuditLogger {
     const riskLevel = this.determineRiskLevel(eventType, severity);
 
     const log: ComplianceAuditLog = {
-      logId: `CEA_${Date.now()}`,
+      logId: "", // Backend will generate log ID
       timestamp: new Date(),
       complianceFramework: ComplianceFramework.CLINICAL_ESTABLISHMENTS_ACT,
       eventType,
@@ -298,7 +298,7 @@ export class ComplianceAuditLogger {
     const riskLevel = this.determineRiskLevel(eventType, severity);
 
     const log: ComplianceAuditLog = {
-      logId: `MCI_${Date.now()}`,
+      logId: "", // Backend will generate log ID
       timestamp: new Date(),
       complianceFramework: ComplianceFramework.MCI_GUIDELINES,
       eventType,
@@ -337,7 +337,7 @@ export class ComplianceAuditLogger {
     const riskLevel = this.determineRiskLevel(eventType, severity);
 
     const log: ComplianceAuditLog = {
-      logId: `MDR_${Date.now()}`,
+      logId: "", // Backend will generate log ID
       timestamp: new Date(),
       complianceFramework: ComplianceFramework.MEDICAL_DEVICE_REGULATIONS,
       eventType,
@@ -417,7 +417,7 @@ export class ComplianceAuditLogger {
       complianceRate >= 80 ? 'under_review' : 'non_compliant';
 
     return {
-      reportId: `REP_${Date.now()}`,
+      reportId: "", // Backend will generate report ID
       reportType: `${framework.replace(/_/g, ' ').toUpperCase()} Compliance Report`,
       framework,
       authority,
@@ -440,7 +440,7 @@ export class ComplianceAuditLogger {
       this.escalateLog(log);
     }
 
-    console.log(`Compliance audit log created: ${log.logId}`);
+    // Removed console.log for production
   }
 
   private getLogsByDateRange(startDate: Date, endDate: Date): ComplianceAuditLog[] {
@@ -452,7 +452,7 @@ export class ComplianceAuditLogger {
   private escalateLog(log: ComplianceAuditLog): void {
     log.reviewStatus = ReviewStatus.ESCALATED;
     // Implementation would notify compliance officers
-    console.log(`Critical compliance event escalated: ${log.logId}`);
+    // Removed console.log for production
   }
 
   private static determineDPDPSeverity(eventType: ComplianceEventType): AuditSeverity {
@@ -512,10 +512,10 @@ export class ComplianceAuditLogger {
 
   private static calculateFollowUpDate(riskLevel: RiskLevel): Date | undefined {
     if (riskLevel === RiskLevel.CRITICAL) {
-      return new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      return new Date(new Date().setDate(new Date().getDate() + 1)); // 24 hours
     }
     if (riskLevel === RiskLevel.HIGH) {
-      return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      return new Date(new Date().setDate(new Date().getDate() + 7)); // 7 days
     }
     return undefined;
   }

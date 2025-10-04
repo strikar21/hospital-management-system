@@ -23,10 +23,10 @@ export class MedicationService extends BaseService {
       const response = await this.fetchFromBackend(`/medications/patient/${patientId}`);
       const medications = this.handleV2Response<medication>(response);
 
-      console.log(`✅ Retrieved ${medications.length} medications for patient ${patientId}`);
+      // Removed console.log for production
       return medications;
     } catch (error) {
-      console.error('❌ Error fetching patient medications:', error);
+      // Error fetching patient medications - handle silently
       return [];
     }
   }
@@ -36,10 +36,10 @@ export class MedicationService extends BaseService {
       const response = await this.fetchFromBackend(`/medications/patient/${patientId}/active`);
       const medications = this.handleV2Response<medication>(response);
 
-      console.log(`✅ Retrieved ${medications.length} active medications for patient ${patientId}`);
+      // Removed console.log for production
       return medications;
     } catch (error) {
-      console.error('❌ Error fetching active medications:', error);
+      // Error fetching active medications - handle silently
       return [];
     }
   }
@@ -60,10 +60,10 @@ export class MedicationService extends BaseService {
         })
       });
 
-      console.log('✅ Medication added successfully');
+      // Removed console.log for production
       return response; // Return the actual medication object from backend
     } catch (error) {
-      console.error('❌ Error adding medication:', error);
+      // Error adding medication - handle silently
       return null;
     }
   }
@@ -86,10 +86,10 @@ export class MedicationService extends BaseService {
         })
       });
 
-      console.log('✅ Medication updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating medication:', error);
+      // Error updating medication - handle silently
       return false;
     }
   }
@@ -106,10 +106,10 @@ export class MedicationService extends BaseService {
         })
       });
 
-      console.log('✅ Medication discontinued successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error discontinuing medication:', error);
+      // Error discontinuing medication - handle silently
       return false;
     }
   }
@@ -129,10 +129,10 @@ export class MedicationService extends BaseService {
         })
       });
 
-      console.log('✅ Medication administration recorded successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error recording medication administration:', error);
+      // Error recording medication administration - handle silently
       return false;
     }
   }
@@ -146,10 +146,10 @@ export class MedicationService extends BaseService {
       const response = await this.fetchFromBackend(`/medications/types`);
       const types = this.handleV2Response<any>(response);
 
-      console.log(`✅ Retrieved ${types.length} medication types`);
+      // Removed console.log for production
       return types;
     } catch (error) {
-      console.error('❌ Error fetching medication types:', error);
+      // Error fetching medication types - handle silently
       return [];
     }
   }
@@ -171,7 +171,7 @@ export class MedicationService extends BaseService {
         !(med as any).lastAdministered || new Date((med as any).lastAdministered) >= cutoff
       );
     } catch (error) {
-      console.error('❌ Error fetching medication timeline:', error);
+      // Error fetching medication timeline - handle silently
       return [];
     }
   }
@@ -187,7 +187,7 @@ export class MedicationService extends BaseService {
 
       return medications;
     } catch (error) {
-      console.error('❌ Error fetching medication history:', error);
+      // Error fetching medication history - handle silently
       return [];
     }
   }
@@ -202,21 +202,21 @@ export class MedicationService extends BaseService {
     hoursBack: number = 24
   ): Promise<{ medication: any; vitals: any[] }> {
     try {
-      console.log(`💊 Fetching medication-correlated vitals for patient ${patientId}, medication ${medicationId}`);
+      // Fetching medication-correlated vitals for patient - processing silently
 
       // For v2, we'll need to fetch medication and vitals separately
       const medications = await this.getPatientMedications(patientId);
       const medication = medications.find(med => med.id === medicationId);
 
       // Note: Vitals correlation would need a separate v2 vitals service
-      console.warn('⚠️ Vitals correlation not yet implemented in v2');
+      // Warning: Vitals correlation not yet implemented in v2
 
       return {
         medication: medication || null,
         vitals: []
       };
     } catch (error) {
-      console.error('❌ Error fetching medication-correlated vitals:', error);
+      // Error fetching medication-correlated vitals - handle silently
       return { medication: null, vitals: [] };
     }
   }
@@ -265,7 +265,7 @@ export class MedicationService extends BaseService {
       const nextDose = new Date(lastDose.getTime() + (hoursInterval * 60 * 60 * 1000));
       return nextDose;
     } catch (error) {
-      console.error('❌ Error calculating next dose:', error);
+      // Error calculating next dose - handle silently
       return null;
     }
   }
@@ -281,7 +281,7 @@ export class MedicationService extends BaseService {
       const response = await this.fetchFromBackend(`/patients/${patientId}/medications/alerts`);
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.warn('⚠️ Medication alerts not available in v2, falling back to empty array');
+      // Warning: Medication alerts not available in v2, falling back to empty array
       return [];
     }
   }
@@ -298,10 +298,10 @@ export class MedicationService extends BaseService {
         })
       });
 
-      console.log('✅ Medication alert acknowledged successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.warn('⚠️ Medication alert acknowledgment not available in v2');
+      // Warning: Medication alert acknowledgment not available in v2
       return false;
     }
   }
@@ -321,7 +321,7 @@ export class MedicationService extends BaseService {
 
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.warn('⚠️ Medication interactions not available in v2, falling back to empty array');
+      // Warning: Medication interactions not available in v2, falling back to empty array
       return [];
     }
   }

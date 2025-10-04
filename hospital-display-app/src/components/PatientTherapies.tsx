@@ -12,6 +12,7 @@ interface PatientTherapiesProps {
   therapies: therapy[];
   setTherapies: React.Dispatch<React.SetStateAction<therapy[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 const PatientTherapies: React.FC<PatientTherapiesProps> = ({
@@ -19,7 +20,8 @@ const PatientTherapies: React.FC<PatientTherapiesProps> = ({
   currentUser,
   therapies,
   setTherapies,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }) => {
   const {
     isAddingTherapy,
@@ -37,7 +39,8 @@ const PatientTherapies: React.FC<PatientTherapiesProps> = ({
     currentUser,
     therapies,
     setTherapies,
-    addCaseSheetEntry
+    addCaseSheetEntry,
+    setCaseEntries
   });
 
   return (
@@ -138,7 +141,7 @@ const PatientTherapies: React.FC<PatientTherapiesProps> = ({
                 </div>
                 <div className="text-sm text-gray-600 mb-2">
                   <p><span className="font-medium">Type:</span> {therapy.type} • <span className="font-medium">Frequency:</span> {therapy.frequency}</p>
-                  <p><span className="font-medium">Duration:</span> {therapy.duration} • <span className="font-medium">Prescribed by:</span> {therapy.performedBy}</p>
+                  <p><span className="font-medium">Duration:</span> {therapy.duration} • <span className="font-medium">Prescribed by:</span> {therapy.prescribedByName || therapy.prescribedBy || 'Unknown'}</p>
                   {therapy.therapist && <p><span className="font-medium">Therapist:</span> {therapy.therapist}</p>}
                   {therapy.sessions && therapy.sessions.length > 0 && (
                     <p><span className="font-medium">Sessions:</span> {therapy.sessions.length} completed</p>

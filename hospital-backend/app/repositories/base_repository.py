@@ -34,14 +34,35 @@ class BaseRepository(ABC, Generic[T]):
         """Create a new record with audit logging"""
         try:
             # Add standard fields
-            record_id = str(uuid.uuid4())
             now = datetime.utcnow()
 
-            data.update({
-                'id': record_id,
-                'createdAt': now,
-                'updatedAt': now
-            })
+            # Tables with SERIAL PRIMARY KEY (auto-incrementing integer) - don't add UUID
+            serial_id_tables = ['investigations', 'medications', 'patientnotes', 'admissionrecommendations', 'auditlog', 'deviceassignments']
+            # Tables with TEXT/UUID PRIMARY KEY (therapysessions, medicationadministrations, beds, staff, patients, devices, therapies, caseEntries) - need UUID
+
+            if self.table_name not in serial_id_tables:
+                record_id = str(uuid.uuid4())
+                data.update({
+                    'id': record_id,
+                    'createdAt': now,
+                    'updatedAt': now
+                })
+            else:
+                data.update({
+                    'createdAt': now,
+                    'updatedAt': now
+                })
+
+            # Convert ISO timestamp strings to datetime objects for PostgreSQL
+            timestamp_fields = ['orderedAt', 'scheduledAt', 'completedAt', 'sessionDate', 'scheduledDate']
+            for field in timestamp_fields:
+                if field in data and isinstance(data[field], str):
+                    try:
+                        from datetime import datetime as dt
+                        data[field] = dt.fromisoformat(data[field].replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        # If parsing fails, keep as string or set to None
+                        data[field] = None
 
             # Build insert query with quoted column names for camelCase
             columns = list(data.keys())
@@ -59,16 +80,19 @@ class BaseRepository(ABC, Generic[T]):
                 result = await conn.fetchrow(query, *values)
 
                 # Audit logging
-                if created_by:
+                if created_by and result:
+                    result_id = result.get('id', 'unknown')
                     await logAuditEvent(
                         userId=created_by,
                         action=f"create_{self.table_name.rstrip('s')}",
                         resourceType=self.table_name.rstrip('s'),
-                        resourceId=record_id,
-                        details=f"Created {self.table_name.rstrip('s')} with ID: {record_id}"
+                        resourceId=str(result_id),
+                        details=f"Created {self.table_name.rstrip('s')} with ID: {result_id}"
                     )
 
-                self.logger.info(f"Created {self.table_name.rstrip('s')}: {record_id}")
+                if result:
+                    result_id = result.get('id', 'unknown')
+                    self.logger.info(f"Created {self.table_name.rstrip('s')}: {result_id}")
                 return dict(result) if result else None
 
         except Exception as e:

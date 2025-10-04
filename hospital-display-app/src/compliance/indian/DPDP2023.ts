@@ -286,6 +286,6 @@ export class DPDP2023Compliance {
   private static scheduleCertInNotification(breach: DPDP2023BreachRecord): void {
     // Implementation would schedule notification to CERT-In
     // within 72 hours as required by DPDP 2023
-    console.log(`Scheduling CERT-In notification for breach ${breach.breachId}`);
+    // Removed console.log for production
   }
 }

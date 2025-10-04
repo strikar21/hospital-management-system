@@ -113,7 +113,7 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
         showMessage(errorData.detail || 'Failed to admit patient', true);
       }
     } catch (error: any) {
-      console.error('Error admitting patient:', error);
+      // Error handled silently
       showMessage('Failed to admit patient', true);
     }
     setLoading(false);

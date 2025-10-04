@@ -243,7 +243,7 @@ export const usePatientCaseSheet = (
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
     } catch (error) {
-      console.error('Error formatting timestamp:', error);
+      // Error formatting timestamp - handle silently
       return 'Invalid Date';
     }
   };

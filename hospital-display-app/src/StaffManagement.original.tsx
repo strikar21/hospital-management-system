@@ -80,7 +80,7 @@ const StaffManagement: React.FC = () => {
       const data = await response.json();
       setStaff(data.staff || []);
     } catch (error) {
-      console.error('Error fetching staff:', error);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -92,7 +92,7 @@ const StaffManagement: React.FC = () => {
       const data = await response.json();
       setRoles(data.roles || []);
     } catch (error) {
-      console.error('Error fetching roles:', error);
+      // Error handled silently
     }
   };
 
@@ -102,7 +102,7 @@ const StaffManagement: React.FC = () => {
       const data = await response.json();
       setDepartments(data.departments || []);
     } catch (error) {
-      console.error('Error fetching departments:', error);
+      // Error handled silently
     }
   };
 
@@ -116,7 +116,7 @@ const StaffManagement: React.FC = () => {
       const data = await response.json();
       setPreviewStaffId(data.nextStaffId || '');
     } catch (error) {
-      console.error('Error fetching preview staff ID:', error);
+      // Error handled silently
       setPreviewStaffId('');
     }
   };
@@ -169,7 +169,7 @@ const StaffManagement: React.FC = () => {
         alert(`Error: ${error.detail}`);
       }
     } catch (error) {
-      console.error('Error adding staff:', error);
+      // Error handled silently
       alert('Error adding staff member');
     } finally {
       setLoading(false);
@@ -191,7 +191,7 @@ const StaffManagement: React.FC = () => {
         alert('Error deactivating staff member');
       }
     } catch (error) {
-      console.error('Error deactivating staff:', error);
+      // Error handled silently
       alert('Error deactivating staff member');
     } finally {
       setLoading(false);
@@ -227,7 +227,7 @@ const StaffManagement: React.FC = () => {
         alert(`Error: ${error.detail}`);
       }
     } catch (error) {
-      console.error('Error updating staff:', error);
+      // Error handled silently
       alert('Error updating staff member');
     } finally {
       setLoading(false);

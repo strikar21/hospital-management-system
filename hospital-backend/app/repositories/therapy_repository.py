@@ -13,7 +13,7 @@ class TherapyRepository(BaseRepository):
     """Therapy repository for all therapy-related database operations"""
 
     def __init__(self):
-        super().__init__("therapy", None)
+        super().__init__("therapies", None)
 
     async def get_by_patient_id(self, patient_id: str) -> List[Dict[str, Any]]:
         """Get therapies by patient ID"""
@@ -42,7 +42,7 @@ class TherapyRepository(BaseRepository):
                 'description': therapy_data.get('description'),
                 'frequency': therapy_data.get('frequency'),
                 'duration': therapy_data.get('duration'),
-                'performedBy': therapy_data.get('therapist') or therapy_data.get('performed_by'),
+                'prescribedBy': therapy_data.get('prescribed_by') or therapy_data.get('prescribedBy'),
                 'notes': therapy_data.get('notes'),
                 'status': 'active'
             }

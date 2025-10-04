@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { alert, patient, user, caseSheetEntry } from '../types';
 import { PatientService } from '../services';
+import { useDataRefresh } from './useDataRefresh';
+import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientAlertsProps {
   patient: patient;
@@ -8,6 +10,7 @@ interface UsePatientAlertsProps {
   alerts: alert[];
   setAlerts: React.Dispatch<React.SetStateAction<alert[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 export const usePatientAlerts = ({
@@ -15,42 +18,63 @@ export const usePatientAlerts = ({
   currentUser,
   alerts,
   setAlerts,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }: UsePatientAlertsProps) => {
+  // Initialize data refresh hook for single source of truth
+  const { refreshAlerts, refreshCaseEntries } = useDataRefresh(patient.id);
   const [autoHideTimers, setAutoHideTimers] = useState<{[key: string]: NodeJS.Timeout}>({});
 
-  // Acknowledge alert handler
+  // Acknowledge alert handler using atomic operation
   const handleAcknowledgeAlert = useCallback(async (alertId: string) => {
     try {
       const alertToAck = alerts.find(a => a.id === alertId);
       if (!alertToAck) return;
 
-      // Update alert status locally
-      setAlerts(prev => prev.map(alert =>
-        alert.id === alertId
-          ? {
-              ...alert,
-              isAcknowledged: true,
-              acknowledgedBy: currentUser.name,
-              acknowledgedAt: new Date().toISOString()
-            }
-          : alert
-      ));
 
-      // Add case sheet entry
-      const newCaseEntry: caseSheetEntry = {
-        id: 'ack_' + Date.now(),
-        timestamp: new Date().toISOString(),
-        type: 'alertAcknowledged',
-        description: `Alert acknowledged: ${alertToAck.message}`,
-        performedBy: currentUser.staffId,
-        canEdit: PatientService.canEditItem(new Date().toISOString())
-      };
-      addCaseSheetEntry(newCaseEntry);
+      // Use atomic endpoint - updates alert and creates case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/alerts/${alertId}/acknowledge`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          alert_id: alertId,
+          acknowledged_by: currentUser.staffId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to acknowledge alert: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshAlerts = await refreshAlerts();
+          setAlerts(freshAlerts);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+        } catch (refreshError) {
+          // Failed to refresh data after alert acknowledgment - handle silently
+        }
+      } else {
+        throw new Error('Atomic operation failed');
+      }
 
       // Set auto-hide timer for acknowledged alerts
-      const timer = setTimeout(() => {
-        setAlerts(prev => prev.filter(a => a.id !== alertId));
+      const timer = setTimeout(async () => {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshAlerts = await refreshAlerts();
+          setAlerts(freshAlerts);
+        } catch (refreshError) {
+          // Failed to refresh alerts after auto-hide - handle silently
+        }
         setAutoHideTimers(prev => {
           const newTimers = { ...prev };
           delete newTimers[alertId];
@@ -61,79 +85,14 @@ export const usePatientAlerts = ({
       setAutoHideTimers(prev => ({ ...prev, [alertId]: timer }));
 
     } catch (error) {
-      console.error('Failed to acknowledge alert:', error);
+      // Error acknowledging alert - handle silently
+      alert(`❌ Failed to acknowledge alert: ${(error as Error).message}`);
     }
-  }, [alerts, setAlerts, currentUser, addCaseSheetEntry]);
+  }, [alerts, setAlerts, currentUser, setCaseEntries, patient.id, refreshAlerts, refreshCaseEntries]);
 
-  // Generate clinical decision support alerts
-  const generateClinicalAlerts = useCallback(() => {
-    const newAlerts: alert[] = [];
-    const now = new Date().toISOString();
-
-    // High blood pressure alert
-    if (patient.vitals?.systolicPressure && patient.vitals.systolicPressure > 140) {
-      const existingAlert = alerts.find(a =>
-        a.type === 'clinical' &&
-        a.message.includes('High blood pressure') &&
-        !a.isAcknowledged
-      );
-
-      if (!existingAlert) {
-        newAlerts.push({
-          id: 'bp_' + Date.now(),
-          type: 'clinical',
-          severity: 'high',
-          message: `High blood pressure detected: ${patient.vitals.systolicPressure}/${patient.vitals.diastolicPressure} mmHg`,
-          timestamp: now,
-          isAcknowledged: false
-        });
-      }
-    }
-
-    // High heart rate alert
-    if (patient.vitals?.heartRate && patient.vitals.heartRate > 100) {
-      const existingAlert = alerts.find(a =>
-        a.type === 'clinical' &&
-        a.message.includes('High heart rate') &&
-        !a.isAcknowledged
-      );
-
-      if (!existingAlert) {
-        newAlerts.push({
-          id: 'hr_' + Date.now(),
-          type: 'clinical',
-          severity: 'medium',
-          message: `High heart rate detected: ${patient.vitals.heartRate} bpm`,
-          timestamp: now,
-          isAcknowledged: false
-        });
-      }
-    }
-
-    // Low oxygen saturation alert
-    if (patient.vitals?.oxygenSaturation && patient.vitals.oxygenSaturation < 95) {
-      const existingAlert = alerts.find(a =>
-        a.type === 'clinical' &&
-        a.message.includes('Low oxygen saturation') &&
-        !a.isAcknowledged
-      );
-
-      if (!existingAlert) {
-        newAlerts.push({
-          id: 'spo2_' + Date.now(),
-          type: 'clinical',
-          severity: 'high',
-          message: `Low oxygen saturation: ${patient.vitals.oxygenSaturation}%`,
-          timestamp: now,
-          isAcknowledged: false
-        });
-      }
-    }
-
-    if (newAlerts.length > 0) {
-      setAlerts(prev => [...prev, ...newAlerts]);
-    }
-  }, [patient.vitals, alerts, setAlerts]);
+  // REMOVED: Frontend clinical alert generation
+  // All clinical alerts now come from backend only
+  // Backend handles all medical logic and clinical decision making
 
   // Clean up timers on unmount
   useEffect(() => {
@@ -142,14 +101,10 @@ export const usePatientAlerts = ({
     };
   }, [autoHideTimers]);
 
-  // Generate clinical alerts periodically
-  useEffect(() => {
-    const interval = setInterval(generateClinicalAlerts, 10000); // Check every 10 seconds
-    return () => clearInterval(interval);
-  }, [generateClinicalAlerts]);
+  // REMOVED: Frontend alert generation interval
+  // All clinical alerts now generated by backend only
 
   return {
-    handleAcknowledgeAlert,
-    generateClinicalAlerts
+    handleAcknowledgeAlert
   };
 };

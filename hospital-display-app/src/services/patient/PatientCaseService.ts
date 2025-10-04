@@ -20,26 +20,50 @@ export class PatientCaseService extends BaseService {
 
 
   /**
-   * Retrieves all case entries (medical records) for a specific patient
+   * Retrieves all case entries (medical records) for a specific patient with embedded staff data
+   * CONSOLIDATED: Gets case entries + staff data in single call for efficiency
    *
    * @param patientId - The unique identifier for the patient
-   * @returns Promise resolving to array of case entry records
+   * @returns Promise resolving to array of case entry records with resolved staff names
    * @throws {Error} When case entry retrieval fails
    */
   static async getCaseEntries(patientId: string): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(`/patients/${patientId}/case-entries`);
-      const staffWithRoles = await this.getStaffWithRoles();
+      // Single consolidated call with staff data included
+      const response = await this.fetchFromBackend(`/patients/${patientId}/case-entries?includeStaff=true`);
+      // Consolidated case entries response received
 
       // Extract the caseEntries array from the response
       const caseEntries = response?.caseEntries || [];
 
+      // Extract staff mapping from response (eliminating separate API call)
+      const staffData = response?.staff || [];
+      // Staff data from consolidated response received
+
+      // Build staff mapping from embedded staff data
+      const staffMapping: { [key: string]: { name: string; role: string } } = {};
+      staffData.forEach((staff: any) => {
+        const staffId = staff.staffId || staff.id || staff.userId || staff.staff_id;
+        if (staffId) {
+          const fullName = staff.name || staff.staffName || staff.fullName ||
+                          (staff.firstName && staff.lastName ? `${staff.firstName} ${staff.lastName}` : null) ||
+                          staff.firstName || staff.lastName || 'Unknown';
+          staffMapping[staffId] = {
+            name: fullName,
+            role: staff.role || staff.staffRole || 'Staff'
+          };
+          // Staff mapping created for staffId
+        }
+      });
+
+      // Final staff mapping completed
+
       // Transform using unified PatientTransformer with staff mapping for role detection
-      const transformedEntries = PatientTransformer.transformCaseTimeline(caseEntries, staffWithRoles);
+      const transformedEntries = PatientTransformer.transformCaseTimeline(caseEntries, staffMapping);
 
       return Array.isArray(transformedEntries) ? transformedEntries : [];
     } catch (error) {
-      console.error('❌ Error fetching case entries:', error);
+      // Error fetching consolidated case entries - handle silently
       return [];
     }
   }
@@ -73,7 +97,7 @@ export class PatientCaseService extends BaseService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Failed to add case entry:', error);
+      // Failed to add case entry - handle silently
       return false;
     }
   }
@@ -98,7 +122,7 @@ export class PatientCaseService extends BaseService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Error acknowledging alert:', error);
+      // Error acknowledging alert - handle silently
       return false;
     }
   }

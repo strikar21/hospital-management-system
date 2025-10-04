@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { patient, user, investigation, caseSheetEntry, labResult, imagingStudy } from '../types';
 import { InvestigationService } from '../services';
+import { useDataRefresh } from './useDataRefresh';
+import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientInvestigationsProps {
   patient: patient;
@@ -8,6 +10,7 @@ interface UsePatientInvestigationsProps {
   investigations: investigation[];
   setInvestigations: React.Dispatch<React.SetStateAction<investigation[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 export const usePatientInvestigations = ({
@@ -15,8 +18,11 @@ export const usePatientInvestigations = ({
   currentUser,
   investigations,
   setInvestigations,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }: UsePatientInvestigationsProps) => {
+  // Initialize data refresh hook for single source of truth
+  const { refreshInvestigations, refreshCaseEntries } = useDataRefresh(patient.id);
   // Investigation form state
   const [isAddingInvestigation, setIsAddingInvestigation] = useState(false);
   const [newInvestigation, setNewInvestigation] = useState({
@@ -30,90 +36,94 @@ export const usePatientInvestigations = ({
 
   // Imaging/PACS Integration
   const [imagingStudies, setImagingStudies] = useState<imagingStudy[]>([]);
-  const [loadingImaging, setLoadingImaging] = useState(false);
+  const [loadingImaging] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   // Helper function for role-based case sheet entry types
-  const getRoleBasedNoteType = useCallback((role: string): 'doctorNote' | 'nurseNote' | 'technicianNote' => {
-    if (role === 'Doctor') return 'doctorNote';
-    if (role === 'Nurse') return 'nurseNote';
-    return 'technicianNote';
+  // If staff role exists, use role-based type; otherwise use neutral 'note' for system entries
+  const getRoleBasedNoteType = useCallback((role?: string): 'doctorNote' | 'nurseNote' | 'technicianNote' | 'adminNote' | 'note' => {
+    if (!role) return 'note'; // System-generated entries
+    switch (role) {
+      case 'Doctor': return 'doctorNote';
+      case 'Nurse': return 'nurseNote';
+      case 'Technician': return 'technicianNote';
+      case 'Administrator':
+      case 'Provisioner': return 'adminNote';
+      default: return 'note'; // Unknown role fallback
+    }
   }, []);
 
-  // Add new investigation
+  // Add new investigation using atomic operation
   const handleAddInvestigation = useCallback(async () => {
     if (addingInvestigation || !newInvestigation.name) return;
 
     setAddingInvestigation(true);
     try {
-      const timestamp = new Date().toISOString();
       const investigationData = {
-        ...newInvestigation,
-        investigationType: newInvestigation.type, // Map type to investigationType for backend
-        createdAt: timestamp.split('T')[0],
-        status: 'ordered' as const,
-        performedBy: currentUser.staffId,
-        canEdit: true,
-        urgency: 'Routine' as const
+        name: newInvestigation.name,
+        type: newInvestigation.type,
+        priority: newInvestigation.priority,
+        urgency: 'Routine',
+        notes: newInvestigation.notes,
+        prescribedBy: currentUser.staffId
       };
 
-      await InvestigationService.addInvestigation(patient.id, investigationData, currentUser.id);
-      const newInv: investigation = {
-        id: 'inv_' + Date.now(),
-        ...investigationData
-      };
-      setInvestigations(prev => [...prev, newInv]);
+      // Use atomic endpoint - creates investigation and case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/investigations`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(investigationData)
+      });
 
-      // Add case sheet entry to backend
-      try {
-        const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            entryType: 'investigation',
-            description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
-            performedBy: currentUser.staffId
-          })
-        });
-
-        if (caseResponse.ok) {
-          const caseResult = await caseResponse.json();
-          const newCaseEntry: caseSheetEntry = {
-            id: caseResult.id || 'cs_' + Date.now(),
-            timestamp,
-            type: 'technicianNote',
-            description: `${newInvestigation.name} (${newInvestigation.type}, ${newInvestigation.priority}) ordered by ${currentUser.name}`,
-            performedBy: currentUser.staffId,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
-        }
-      } catch (caseError) {
-        console.warn('Failed to add investigation case sheet entry:', caseError);
+      if (!response.ok) {
+        throw new Error(`Failed to add investigation: ${response.statusText}`);
       }
 
-      setNewInvestigation({ type: 'lab', name: '', priority: 'routine', notes: '' });
-      setIsAddingInvestigation(false);
+      const result = await response.json();
+
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshInvestigations = await refreshInvestigations();
+          setInvestigations(freshInvestigations);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+          setNewInvestigation({ type: 'lab', name: '', priority: 'routine', notes: '' });
+          setIsAddingInvestigation(false);
+        } catch (refreshError) {
+          // Failed to refresh data after adding investigation - handle silently
+        }
+      } else {
+        throw new Error('Atomic operation failed');
+      }
     } catch (error) {
-      console.error('Failed to add investigation:', error);
+      // Failed to add investigation - handle silently
+      alert('Failed to add investigation. Please try again.');
     } finally {
       setAddingInvestigation(false);
     }
-  }, [addingInvestigation, newInvestigation, currentUser, patient.id, setInvestigations, addCaseSheetEntry]);
+  }, [addingInvestigation, newInvestigation, currentUser, patient.id, setInvestigations, setCaseEntries, refreshInvestigations, refreshCaseEntries]);
 
   // Start investigation
   const handleStartInvestigation = useCallback(async (inv: investigation) => {
     try {
       await InvestigationService.updateInvestigationStatus(inv.id, 'inProgress', currentUser.id);
-      setInvestigations(prev => prev.map(i =>
-        i.id === inv.id ? { ...i, status: 'inProgress' } : i
-      ));
+
+      // Refetch fresh data from backend (single source of truth)
+      try {
+        const freshInvestigations = await refreshInvestigations();
+        setInvestigations(freshInvestigations);
+      } catch (refreshError) {
+        // Failed to refresh data after starting investigation - handle silently
+      }
 
       // Add case sheet entry to backend
       try {
-        const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
+        const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -128,8 +138,8 @@ export const usePatientInvestigations = ({
         if (caseResponse.ok) {
           const caseResult = await caseResponse.json();
           const newCaseEntry: caseSheetEntry = {
-            id: caseResult.id || 'cs_' + Date.now(),
-            timestamp: new Date().toISOString(),
+            id: caseResult.id, // Backend must provide ID
+            timestamp: caseResult.timestamp, // Backend-generated timestamp
             type: 'technicianNote',
             description: `${inv.name} started by ${currentUser.name}`,
             performedBy: currentUser.staffId,
@@ -138,14 +148,14 @@ export const usePatientInvestigations = ({
           addCaseSheetEntry(newCaseEntry);
         }
       } catch (caseError) {
-        console.warn('Failed to add investigation started case sheet entry:', caseError);
+        // Failed to add investigation started case sheet entry - handle silently
       }
     } catch (error) {
-      console.error('Failed to start investigation:', error);
+      // Failed to start investigation - handle silently
     }
   }, [currentUser, patient.id, setInvestigations, addCaseSheetEntry]);
 
-  // Complete investigation
+  // Complete investigation using atomic operation
   const handleCompleteInvestigation = useCallback(async (inv: investigation) => {
     let results = '';
 
@@ -156,10 +166,6 @@ export const usePatientInvestigations = ({
         const updatedInvestigation = await Promise.resolve(inv);
 
         if (updatedInvestigation.status === 'completed') {
-          await InvestigationService.completeInvestigation(inv.id, updatedInvestigation.results || 'Lab results imported', currentUser.id);
-          setInvestigations(prev => prev.map(i =>
-            i.id === inv.id ? updatedInvestigation : i
-          ));
           results = updatedInvestigation.results || 'Lab results imported';
         } else {
           alert('Lab results not yet available. Please try again later.');
@@ -168,22 +174,13 @@ export const usePatientInvestigations = ({
         setLoadingLabResults(false);
       } catch (error) {
         setLoadingLabResults(false);
-        console.error('Failed to fetch lab results:', error);
+        // Failed to fetch lab results - handle silently
         alert('Failed to fetch lab results. Please enter results manually.');
 
         // Fallback to manual entry
         const manualResults = window.prompt('Lab results not available. Enter results manually:');
         if (manualResults) {
-          try {
-            await InvestigationService.completeInvestigation(inv.id, manualResults, currentUser.id);
-            setInvestigations(prev => prev.map(i =>
-              i.id === inv.id ? { ...i, status: 'completed', results: manualResults, completedAt: new Date().toISOString() } : i
-            ));
-            results = manualResults;
-          } catch (completeError) {
-            console.error('Failed to complete investigation:', completeError);
-            return;
-          }
+          results = manualResults;
         } else {
           return;
         }
@@ -192,64 +189,72 @@ export const usePatientInvestigations = ({
       // For non-lab investigations, use manual entry
       const manualResults = window.prompt('Enter investigation results:');
       if (manualResults) {
-        try {
-          await InvestigationService.completeInvestigation(inv.id, manualResults, currentUser.id);
-          setInvestigations(prev => prev.map(i =>
-            i.id === inv.id ? { ...i, status: 'completed', results: manualResults, completedAt: new Date().toISOString() } : i
-          ));
-          results = manualResults;
-        } catch (error) {
-          console.error('Failed to complete investigation:', error);
-          return;
-        }
+        results = manualResults;
       } else {
         return;
       }
     }
 
-    // Add case sheet entry after completing investigation
+    // Complete investigation using atomic operation
     try {
-      const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
+
+      // Use atomic endpoint - updates investigation and creates case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/investigations/${inv.id}/complete`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          entryType: 'investigation',
-          description: `${inv.name} completed by ${currentUser.name}${results ? ` - Results: ${results}` : ''}`,
-          performedBy: currentUser.staffId
+          investigation_id: inv.id,
+          results: results,
+          completed_by: currentUser.staffId
         })
       });
 
-      if (caseResponse.ok) {
-        const caseResult = await caseResponse.json();
-        const newCaseEntry: caseSheetEntry = {
-          id: caseResult.id || 'cs_' + Date.now(),
-          timestamp: new Date().toISOString(),
-          type: getRoleBasedNoteType(currentUser.role),
-          description: `${inv.name} completed by ${currentUser.name}${results ? ` - Results: ${results}` : ''}`,
-          performedBy: currentUser.staffId,
-          canEdit: true
-        };
-        addCaseSheetEntry(newCaseEntry);
+      if (!response.ok) {
+        throw new Error(`Failed to complete investigation: ${response.statusText}`);
       }
-    } catch (caseError) {
-      console.warn('Failed to add investigation completed case sheet entry:', caseError);
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshInvestigations = await refreshInvestigations();
+          setInvestigations(freshInvestigations);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+        } catch (refreshError) {
+          // Failed to refresh data after completing investigation - handle silently
+        }
+      } else {
+        throw new Error('Atomic operation failed');
+      }
+    } catch (error) {
+      // Error completing investigation - handle silently
+      alert(`❌ Failed to complete investigation: ${(error as Error).message}`);
     }
-  }, [currentUser, patient.id, setInvestigations, addCaseSheetEntry, setLoadingLabResults, getRoleBasedNoteType]);
+  }, [currentUser, patient.id, setInvestigations, setCaseEntries, setLoadingLabResults, getRoleBasedNoteType, refreshInvestigations, refreshCaseEntries]);
 
   // Cancel investigation
   const handleCancelInvestigation = useCallback(async (inv: investigation) => {
     if (window.confirm('Are you sure you want to cancel this investigation?')) {
       try {
         await InvestigationService.updateInvestigationStatus(inv.id, 'cancelled', currentUser.id);
-        setInvestigations(prev => prev.map(i =>
-          i.id === inv.id ? { ...i, status: 'cancelled' } : i
-        ));
+
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshInvestigations = await refreshInvestigations();
+          setInvestigations(freshInvestigations);
+        } catch (refreshError) {
+          // Failed to refresh data after cancelling investigation - handle silently
+        }
 
         // Add case sheet entry to backend
         try {
-          const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
+          const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -263,10 +268,9 @@ export const usePatientInvestigations = ({
 
           if (caseResponse.ok) {
             const caseResult = await caseResponse.json();
-            const timestamp = new Date().toISOString();
             const newCaseEntry: caseSheetEntry = {
-              id: caseResult.id || 'cs_' + Date.now(),
-              timestamp,
+              id: caseResult.id, // Backend must provide ID
+              timestamp: caseResult.timestamp, // Backend-generated timestamp
               type: 'technicianNote',
               description: `${inv.name} (${inv.type}) cancelled by ${currentUser.name}`,
               performedBy: currentUser.staffId,
@@ -275,10 +279,10 @@ export const usePatientInvestigations = ({
             addCaseSheetEntry(newCaseEntry);
           }
         } catch (caseError) {
-          console.warn('Failed to add investigation cancellation case sheet entry:', caseError);
+          // Failed to add investigation cancellation case sheet entry - handle silently
         }
       } catch (error) {
-        console.error('Failed to cancel investigation:', error);
+        // Failed to cancel investigation - handle silently
       }
     }
   }, [currentUser, patient.id, setInvestigations, addCaseSheetEntry]);

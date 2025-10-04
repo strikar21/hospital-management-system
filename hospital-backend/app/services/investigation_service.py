@@ -21,17 +21,11 @@ class InvestigationService(BaseService):
 
     async def add_investigation(self, patient_id: str, investigation_data: Dict[str, Any], created_by: str) -> Dict[str, Any]:
         """Add investigation with validation"""
-        # Accept both 'investigationType' (from frontend) and 'type' (database field)
-        investigation_type = investigation_data.get('investigationType') or investigation_data.get('type')
-        if not investigation_type:
+        if not investigation_data.get('type'):
             raise ValueError("Investigation type is required")
 
-        # Ensure 'type' field is set for database (database uses 'type' not 'investigationType')
-        if 'investigationType' in investigation_data and 'type' not in investigation_data:
-            investigation_data['type'] = investigation_data['investigationType']
-
-        snake_data = self.repository.transform_from_camel_case(investigation_data)
-        result = await self.investigation_repository.add_investigation(patient_id, snake_data, created_by)
+        # Use direct field names - no transformation needed
+        result = await self.investigation_repository.add_investigation(patient_id, investigation_data, created_by)
 
         if result:
             return self.repository.transform_to_camel_case(result)
@@ -46,6 +40,15 @@ class InvestigationService(BaseService):
         return await self.investigation_repository.update_investigation_status(
             patient_id, investigation_id, status, updated_by
         )
+
+    async def update_investigation_results(self, investigation_id: str, results: str, updated_by: str) -> bool:
+        """Update investigation results"""
+        update_data = {
+            'results': results,
+            'status': 'completed'
+        }
+        result = await self.investigation_repository.update(investigation_id, update_data, updated_by)
+        return result is not None
 
     async def complete_investigation(self, patient_id: str, investigation_id: str, results: str, completed_by: str) -> bool:
         """Complete investigation with results"""

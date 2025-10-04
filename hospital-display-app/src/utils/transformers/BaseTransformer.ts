@@ -130,7 +130,7 @@ export abstract class BaseTransformer {
 
       return Math.max(0, age); // Ensure non-negative age
     } catch (error) {
-      console.error('Error calculating patient age:', error);
+      // Error handled silently
       return 0;
     }
   }
@@ -149,7 +149,7 @@ export abstract class BaseTransformer {
 
       return timeDiff <= maxEditWindow;
     } catch (error) {
-      console.error('Error checking edit permission:', error);
+      // Error handled silently
       return false;
     }
   }
@@ -198,10 +198,6 @@ export abstract class BaseTransformer {
       resolved.performedByName = BaseTransformer.resolveStaffName(resolved.performedBy, staffMapping);
     }
 
-    // Resolve orderedBy to orderedByName
-    if (resolved.orderedBy && !resolved.orderedByName) {
-      resolved.orderedByName = BaseTransformer.resolveStaffName(resolved.orderedBy, staffMapping);
-    }
 
     // Resolve assignedBy to assignedByName
     if (resolved.assignedBy && !resolved.assignedByName) {

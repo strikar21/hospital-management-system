@@ -89,9 +89,9 @@ export class IndianComplianceService {
         userId
       );
 
-      console.log(`✅ Indian compliance initialized for patient ${patient.id}`);
+      // Removed console.log for production
     } catch (error) {
-      console.error('❌ Failed to initialize patient compliance:', error);
+      // Failed to initialize patient compliance
       throw error;
     }
   }
@@ -134,9 +134,9 @@ export class IndianComplianceService {
         await this.handleCriticalAdverseEvent(adverseEventReport, patientId, userId);
       }
 
-      console.log(`✅ Medical device adverse event reported: ${adverseEventReport.reportId}`);
+      // Removed console.log for production
     } catch (error) {
-      console.error('❌ Failed to report medical device adverse event:', error);
+      // Failed to report medical device adverse event
       throw error;
     }
   }
@@ -195,7 +195,7 @@ export class IndianComplianceService {
         nextReviewDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90 days
       };
     } catch (error) {
-      console.error('❌ Failed to assess MCI compliance:', error);
+      // Failed to assess MCI compliance
       throw error;
     }
   }
@@ -242,10 +242,10 @@ export class IndianComplianceService {
         );
       }
 
-      console.log(`✅ Data access request processed for patient ${patientId}: ${accessResult.allowed}`);
+      // Removed console.log for production
       return accessResult;
     } catch (error) {
-      console.error('❌ Failed to handle data access request:', error);
+      // Failed to handle data access request
       throw error;
     }
   }
@@ -295,7 +295,7 @@ export class IndianComplianceService {
         certificationsExpiring: 5 // Mock count of expiring certifications
       };
     } catch (error) {
-      console.error('❌ Failed to generate compliance dashboard:', error);
+      // Failed to generate compliance dashboard
       throw error;
     }
   }
@@ -349,7 +349,7 @@ export class IndianComplianceService {
         recommendations.push('Renew staff certifications and CME credits');
       }
 
-      console.log(`✅ Automated compliance checks completed: ${checksPerformed} checks, ${issuesFound.length} issues`);
+      // Removed console.log for production
 
       return {
         checksPerformed,
@@ -358,7 +358,7 @@ export class IndianComplianceService {
         recommendations
       };
     } catch (error) {
-      console.error('❌ Failed to perform automated compliance checks:', error);
+      // Failed to perform automated compliance checks
       throw error;
     }
   }
@@ -369,13 +369,13 @@ export class IndianComplianceService {
     userId: string
   ): Promise<void> {
     // 1. Immediate notification to authorities
-    console.log('🚨 Critical adverse event - notifying CDSCO immediately');
+    // Critical adverse event - notifying CDSCO immediately
 
     // 2. Patient safety measures
-    console.log('🛡️ Implementing immediate patient safety measures');
+    // Implementing immediate patient safety measures
 
     // 3. Device quarantine if needed
-    console.log('🔒 Quarantining device for investigation');
+    // Quarantining device for investigation
 
     // Additional compliance actions for critical events would be implemented here
   }

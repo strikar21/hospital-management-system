@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { medication, patient, user, caseSheetEntry } from '../types';
 import { MedicationService, PatientService } from '../services';
+import { useDataRefresh } from './useDataRefresh';
+import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientMedicationsProps {
   patient: patient;
@@ -8,6 +10,7 @@ interface UsePatientMedicationsProps {
   medications: medication[];
   setMedications: React.Dispatch<React.SetStateAction<medication[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 export const usePatientMedications = ({
@@ -15,8 +18,11 @@ export const usePatientMedications = ({
   currentUser,
   medications,
   setMedications,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }: UsePatientMedicationsProps) => {
+  // Initialize data refresh hook for single source of truth
+  const { refreshMedications, refreshCaseEntries } = useDataRefresh(patient.id);
   const [isAddingMedication, setIsAddingMedication] = useState(false);
   const [newMedication, setNewMedication] = useState({
     name: '', dosage: '', frequency: '', route: 'PO', duration: ''
@@ -31,146 +37,145 @@ export const usePatientMedications = ({
     };
   }, []);
 
-  // Handle medication status changes
+  // Handle medication status changes using atomic operation
   const handleMedicationStatusChange = useCallback(async (
     medicationId: string,
     status: 'active' | 'stopped' | 'held'
   ) => {
     try {
-      await MedicationService.updateMedication(patient.id, medicationId, status, currentUser.id);
 
-      setMedications(prev => prev.map(med =>
-        med.id === medicationId ? {
-          ...med,
-          status,
-          modifiedBy: currentUser.staffId,
-          updatedat: new Date().toISOString(),
-          canEdit: PatientService.canEditItem(new Date().toISOString()),
-          history: [...(med.history || []), {
-            id: 'hist_' + Date.now(),
-            action: status === 'active' ? 'resumed' : status,
-            timestamp: new Date().toISOString(),
-            performedBy: currentUser.staffId
-          }]
-        } : med
-      ));
+      // Use atomic endpoint - updates medication and creates case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${medicationId}/status`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          medication_id: medicationId,
+          status: status,
+          changed_by: currentUser.staffId
+        })
+      });
 
-      const medication = medications.find(m => m.id === medicationId);
-      if (medication) {
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_' + Date.now(),
-          timestamp: new Date().toISOString(),
-          type: 'pharmacistNote',
-          description: `${medication.name} ${status} by ${currentUser.staffId}`,
-          performedBy: currentUser.staffId,
-          canEdit: PatientService.canEditItem(new Date().toISOString())
-        };
-        addCaseSheetEntry(newCaseEntry);
+      if (!response.ok) {
+        throw new Error(`Failed to change medication status: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshMedications = await refreshMedications();
+          setMedications(freshMedications);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+        } catch (refreshError) {
+          // Failed to refresh data after medication status change - handle silently
+        }
+      } else {
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to update medication:', error);
-      alert('Failed to update medication. Please try again.');
+      // Error changing medication status - handle silently
+      alert(`❌ Failed to change medication status: ${(error as Error).message}`);
     }
-  }, [patient.id, currentUser, medications, setMedications, addCaseSheetEntry]);
+  }, [patient.id, currentUser, setMedications, setCaseEntries, refreshMedications, refreshCaseEntries]);
 
-  // Add new medication
+  // Add new medication using atomic operation
   const handleAddMedication = useCallback(async () => {
     if (isAddingMedication) return;
     if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
 
     setIsAddingMedication(true);
     try {
-      const timestamp = new Date().toISOString();
       const medicationData = {
-        ...newMedication,
-        status: 'active' as const,
-        startDate: timestamp.split('T')[0],
-        prescribedBy: currentUser.staffId,
-        createdAt: timestamp,
-        canEdit: true
+        name: newMedication.name,
+        dosage: newMedication.dosage,
+        frequency: newMedication.frequency,
+        route: newMedication.route,
+        duration: newMedication.duration
+        // startDate: backend will generate
       };
 
-      const newMed = await MedicationService.addMedication(patient.id, medicationData, currentUser.id);
-      if (newMed) {
-        const medicationWithHistory: medication = {
-          ...newMed,
-          history: newMed.history || [{
-            id: 'hist_' + Date.now(),
-            action: 'prescribed' as const,
-            timestamp,
-            performedBy: currentUser.staffId
-          }]
-        };
-        setMedications(prev => [...prev, medicationWithHistory]);
-      } else {
-        console.error('Failed to add medication - no response from backend');
-        alert('Failed to add medication. Please try again.');
-        setIsAddingMedication(false);
-        return;
+      // Use atomic endpoint - creates medication and case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(medicationData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to add medication: ${response.statusText}`);
       }
 
-      setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
-      setIsAddingMedication(false);
+      const result = await response.json();
 
-      // Add case sheet entry to backend
-      try {
-        const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            entryType: 'medication',
-            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.staffId}`,
-            performedBy: currentUser.staffId
-          })
-        });
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshMedications = await refreshMedications();
+          setMedications(freshMedications);
 
-        if (caseResponse.ok) {
-          const caseResult = await caseResponse.json();
-          const newCaseEntry: caseSheetEntry = {
-            id: caseResult.id || 'cs_' + Date.now(),
-            timestamp,
-            type: 'pharmacistNote',
-            description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.staffId}`,
-            performedBy: currentUser.staffId,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+          setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
+        } catch (refreshError) {
+          // Failed to refresh data after adding medication - handle silently
         }
-      } catch (caseError) {
-        console.warn('Failed to add medication case sheet entry:', caseError);
+      } else {
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to add medication:', error);
+      // Failed to add medication - handle silently
+      alert('Failed to add medication. Please try again.');
     } finally {
       setIsAddingMedication(false);
     }
-  }, [isAddingMedication, newMedication, patient.id, currentUser, setMedications, addCaseSheetEntry]);
+  }, [isAddingMedication, newMedication, patient.id, currentUser, setMedications, setCaseEntries, refreshMedications, refreshCaseEntries]);
 
-  // Handle medication administration
-  const handleMedicationAdministration = useCallback((med: medication) => {
-    const now = new Date().toISOString();
-    const adminEntry: caseSheetEntry = {
-      id: 'admin_' + Date.now(),
-      timestamp: now,
-      type: 'medicationAdministration',
-      description: `Administered ${med.name} ${med.dosage} via ${med.route} route`,
-      performedBy: currentUser.staffId,
-      canEdit: PatientService.canEditItem(now),
-      details: {
-        medicationId: med.id,
-        medicationName: med.name,
-        dosage: med.dosage,
-        route: med.route,
-        administeredby: currentUser.staffId,
-        administeredat: now
+  // Handle medication administration atomically with backend persistence
+  const handleMedicationAdministration = useCallback(async (med: medication) => {
+    try {
+
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${med.id}/administer`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          administered_by: currentUser.staffId,
+          notes: `Administered ${med.name} ${med.dosage} via ${med.route} route`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to administer medication: ${response.statusText}`);
       }
-    };
-    addCaseSheetEntry(adminEntry);
 
-    alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.staffId}\n\nAdministration logged in case sheet.`);
-  }, [currentUser, addCaseSheetEntry]);
+      const result = await response.json();
+
+      // Refetch fresh data from backend (single source of truth)
+      try {
+        const freshCaseEntries = await refreshCaseEntries();
+        setCaseEntries(freshCaseEntries);
+
+      } catch (refreshError) {
+        // Failed to refresh case entries after medication administration - handle silently
+      }
+
+      alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.staffId}\n\nAdministration recorded in database and case sheet.`);
+
+    } catch (error) {
+      // Error administering medication - handle silently
+      alert(`❌ Failed to administer medication: ${(error as Error).message}`);
+    }
+  }, [patient.id, currentUser, setCaseEntries, refreshCaseEntries]);
 
   // Generate medication schedule times
   const generateScheduleTimes = useCallback((frequency: string) => {

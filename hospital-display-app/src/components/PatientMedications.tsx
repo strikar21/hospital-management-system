@@ -5,8 +5,9 @@ import {
 import { patient, user, medication, caseSheetEntry } from '../types';
 import { getMedicationStatusColor, formatDateTime } from '../utils';
 import { PermissionUtils } from '../utils/permissionUtils';
-import { PatientService, MedicationService } from '../services';
+import { PatientService } from '../services';
 import { PatientCaseService } from '../services/patient';
+import { getApiUrl } from '../config/apiConfig';
 
 interface PatientMedicationsProps {
   patient: patient;
@@ -39,42 +40,60 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
     };
   };
 
-  // Handle medication status changes
+  // Handle medication status changes using atomic operation
   const handleMedicationStatusChange = async (medicationId: string, status: 'active' | 'stopped' | 'held') => {
     try {
-      await MedicationService.updateMedication(patient.id, medicationId, status, currentUser.id);
 
-      setMedications(prev => prev.map(med =>
-        med.id === medicationId ? {
-          ...med,
-          status,
-          modifiedBy: currentUser.name,
-          updatedat: new Date().toISOString(),
-          canEdit: PatientService.canEditItem(new Date().toISOString()),
-          history: [...(med.history || []), {
-            id: 'hist_' + Date.now(),
-            action: status === 'active' ? 'resumed' : status,
-            timestamp: new Date().toISOString(),
-            performedBy: currentUser.staffId
-          }]
-        } : med
-      ));
+      // Use atomic endpoint - updates medication and creates case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${medicationId}/status`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          medication_id: medicationId,
+          status: status,
+          changed_by: currentUser.staffId
+        })
+      });
 
-      const medication = medications.find(m => m.id === medicationId);
-      if (medication) {
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_' + Date.now(),
-          timestamp: new Date().toISOString(),
-          type: 'pharmacistNote',
-          description: `${medication.name} ${status} by ${currentUser.name}`,
-          performedBy: currentUser.staffId,
-          canEdit: PatientService.canEditItem(new Date().toISOString())
-        };
-        addCaseSheetEntry(newCaseEntry);
+      if (!response.ok) {
+        throw new Error(`Failed to change medication status: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          // Note: This should use data refresh hook when available
+          const medicationsResponse = await fetch(getApiUrl(`/patients/${patient.id}/medications`));
+          if (medicationsResponse.ok) {
+            const data = await medicationsResponse.json();
+            setMedications(data.medications || data);
+          }
+        } catch (refreshError) {
+          // Failed to refresh medications after status change - handle silently
+        }
+
+        // Add case sheet entry from atomic result to frontend state (already created atomically)
+        if (result.case_entry) {
+          const caseEntry: caseSheetEntry = {
+            id: result.case_entry.id,
+            timestamp: result.case_entry.timestamp,
+            type: 'pharmacistNote',
+            description: result.case_entry.description,
+            performedBy: currentUser.staffId,
+            canEdit: false
+          };
+          addCaseSheetEntry(caseEntry);
+        }
+      } else {
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to update medication:', error);
-      alert('Failed to update medication. Please try again.');
+      // Error changing medication status
+      alert(`❌ Failed to change medication status: ${(error as Error).message}`);
     }
   };
 
@@ -151,30 +170,39 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                 if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
                 setIsSubmitting(true);
                 try {
-                  const timestamp = new Date().toISOString();
                   const medicationData = {
                     ...newMedication,
                     status: 'active' as const,
-                    startDate: timestamp.split('T')[0],
-                    prescribedBy: currentUser.staffId,
-                    createdAt: timestamp,
-                    canEdit: true
+                    prescribedBy: currentUser.staffId
+                    // startDate, createdAt, canEdit: backend will generate
                   };
-                  const newMed = await MedicationService.addMedication(patient.id, medicationData, currentUser.id);
-                  if (newMed) {
-                    // Add history if not present from backend
-                    const medicationWithHistory: medication = {
-                      ...newMed,
-                      history: newMed.history || [{
-                        id: 'hist_' + Date.now(),
-                        action: 'prescribed' as const,
-                        timestamp,
-                        performedBy: currentUser.staffId
-                      }]
-                    };
-                    setMedications(prev => [...prev, medicationWithHistory]);
+                  // Use atomic endpoint for adding medication
+                  const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications`), {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(medicationData)
+                  });
+
+                  if (!response.ok) {
+                    throw new Error(`Failed to add medication: ${response.statusText}`);
+                  }
+
+                  const result = await response.json();
+                  if (result.success) {
+                    // Refetch fresh data from backend (single source of truth)
+                    try {
+                      const medicationsResponse = await fetch(getApiUrl(`/patients/${patient.id}/medications`));
+                      if (medicationsResponse.ok) {
+                        const data = await medicationsResponse.json();
+                        setMedications(data.medications || data);
+                      }
+                    } catch (refreshError) {
+                      // Failed to refresh medications after adding - handle silently
+                    }
                   } else {
-                    console.error('Failed to add medication - no response from backend');
+                    // Failed to add medication - no backend response
                     alert('Failed to add medication. Please try again.');
                     setIsSubmitting(false);
                     return;
@@ -182,29 +210,20 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                   setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
                   setShowMedicationForm(false);
 
-                  // Add case sheet entry to backend
-                  try {
-                    const success = await PatientCaseService.addCaseEntry(patient.id, {
-                      entryType: 'medication',
-                      description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`
-                    }, currentUser.id);
-
-                    if (success) {
-                      const newCaseEntry: caseSheetEntry = {
-                        id: 'cs_' + Date.now(),
-                        timestamp,
-                        type: 'pharmacistNote',
-                        description: `${newMedication.name} (${newMedication.dosage}, ${newMedication.frequency}, ${newMedication.duration}) prescribed by ${currentUser.name}`,
-                        performedBy: currentUser.staffId,
-                        canEdit: true
-                      };
-                      addCaseSheetEntry(newCaseEntry);
-                    }
-                  } catch (caseError) {
-                    console.warn('Failed to add medication case sheet entry:', caseError);
+                  // Add case sheet entry from atomic result (already created atomically)
+                  if (result.case_entry) {
+                    const newCaseEntry: caseSheetEntry = {
+                      id: result.case_entry.id,
+                      timestamp: result.case_entry.timestamp,
+                      type: 'pharmacistNote',
+                      description: result.case_entry.description,
+                      performedBy: result.case_entry.performedBy,
+                      canEdit: true
+                    };
+                    addCaseSheetEntry(newCaseEntry);
                   }
                 } catch (error) {
-                  console.error('Failed to add medication:', error);
+                  // Failed to add medication
                 } finally {
                   setIsSubmitting(false);
                 }
@@ -306,29 +325,47 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                   {med.status === 'active' && (
                     <>
                       <button
-                        onClick={() => {
-                          const now = new Date().toISOString();
-                          // Add administration record to case sheet
-                          const adminEntry: caseSheetEntry = {
-                            id: 'admin_' + Date.now(),
-                            timestamp: now,
-                            type: 'medicationAdministration',
-                            description: `Administered ${med.name} ${med.dosage} via ${med.route} route`,
-                            performedBy: currentUser.staffId,
-                            canEdit: PatientService.canEditItem(now),
-                            details: {
-                              medicationId: med.id,
-                              medicationName: med.name,
-                              dosage: med.dosage,
-                              route: med.route,
-                              administeredby: currentUser.name,
-                              administeredat: now
-                            }
-                          };
-                          addCaseSheetEntry(adminEntry);
+                        onClick={async () => {
+                          try {
+                            // Use atomic endpoint for medication administration
+                            const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${med.id}/administer`), {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify({
+                                administered_by: currentUser.staffId,
+                                notes: `Administered ${med.name} ${med.dosage} via ${med.route} route`
+                              })
+                            });
 
-                          // Update patient's last medication time
-                          alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.name}\n\nAdministration logged in case sheet.`);
+                            if (!response.ok) {
+                              throw new Error(`Failed to administer medication: ${response.statusText}`);
+                            }
+
+                            const result = await response.json();
+
+                            if (result.success && result.case_entry) {
+                              // Case entry already created atomically by backend with proper timestamp
+                              const adminEntry: caseSheetEntry = {
+                                id: result.case_entry.id,
+                                timestamp: result.case_entry.timestamp,
+                                type: 'medicationAdministration',
+                                description: result.case_entry.description,
+                                performedBy: result.case_entry.performedBy,
+                                canEdit: result.case_entry.canEdit,
+                                details: result.case_entry.details
+                              };
+                              addCaseSheetEntry(adminEntry);
+
+                              alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date(result.case_entry.timestamp).toLocaleTimeString()}\nAdministered by: ${currentUser.name}\n\nAdministration recorded in database and case sheet.`);
+                            } else {
+                              throw new Error('Administration failed');
+                            }
+                          } catch (error) {
+                            // Failed to administer medication
+                            alert(`Failed to administer medication: ${(error as Error).message}`);
+                          }
                         }}
                         className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                         title="Administer medication"

@@ -9,7 +9,7 @@ module.exports = function(app) {
       secure: false,
       logLevel: 'silent',
       onError: (err, req, res) => {
-        console.error('Proxy error:', err);
+        // Production: Log proxy errors to monitoring service
         if (!res.headersSent) {
           res.writeHead(500, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'Backend connection failed' }));

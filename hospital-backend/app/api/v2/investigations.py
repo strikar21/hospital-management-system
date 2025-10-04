@@ -49,6 +49,7 @@ async def add_investigation(
 ):
     """Add investigation to patient"""
     try:
+        logger.info(f"🔍 DEBUG: Received investigation data: {investigation_data}")
         investigation_service = get_investigation_service()
 
         investigation = await investigation_service.add_investigation(

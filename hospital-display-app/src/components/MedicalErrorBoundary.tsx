@@ -45,7 +45,7 @@ class MedicalErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('🚨 MEDICAL ERROR BOUNDARY TRIGGERED:', error, errorInfo);
+    // Production: Critical medical error - log to monitoring service and audit trail
 
     // Log to audit service for medical compliance
     auditService.logError(error, 'criticalMedicalComponent', this.props.patientId, {

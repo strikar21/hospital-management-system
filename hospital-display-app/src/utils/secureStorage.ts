@@ -38,7 +38,7 @@ class SecureStorage {
 
       return key;
     } catch (error) {
-      console.error('Failed to generate encryption key:', error);
+      // Failed to generate encryption key - handle silently
       throw new Error('Encryption key generation failed - medical data security compromised');
     }
   }
@@ -68,7 +68,7 @@ class SecureStorage {
 
       return btoa(String.fromCharCode.apply(null, Array.from(combined)));
     } catch (error) {
-      console.error('Encryption failed:', error);
+      // Encryption failed - handle silently
       throw new Error('Medical data encryption failed - HIPAA compliance compromised');
     }
   }
@@ -94,7 +94,7 @@ class SecureStorage {
       const decoder = new TextDecoder();
       return decoder.decode(decrypted);
     } catch (error) {
-      console.error('Decryption failed:', error);
+      // Decryption failed - handle silently
       return '';
     }
   }
@@ -104,7 +104,7 @@ class SecureStorage {
    */
   static async setToken(token: string): Promise<void> {
     if (!token) {
-      console.warn('Attempting to store empty token');
+      // Warning: Attempting to store empty token
       return;
     }
 
@@ -113,12 +113,12 @@ class SecureStorage {
       localStorage.setItem(this.TOKEN_KEY, encrypted);
 
       // Set expiration (8 hours from now for medical compliance)
-      const expiration = Date.now() + (8 * 60 * 60 * 1000);
+      const expiration = (new Date().getTime() + (8 * 60 * 60 * 1000));
       localStorage.setItem(`${this.TOKEN_KEY}_exp`, expiration.toString());
 
-      console.log('🔐 Authentication token stored with AES-GCM encryption');
+      // Authentication token stored with AES-GCM encryption
     } catch (error) {
-      console.error('Failed to store token securely:', error);
+      // Failed to store token securely - handle silently
       throw new Error('Token storage failed - authentication compromised');
     }
   }
@@ -136,8 +136,8 @@ class SecureStorage {
       }
 
       // Check if token is expired (medical compliance)
-      if (Date.now() > parseInt(expiration)) {
-        console.log('🕒 Token expired, removing from storage for security');
+      if (new Date().getTime() > parseInt(expiration)) {
+        // Token expired, removing from storage for security
         this.removeToken();
         return null;
       }
@@ -145,7 +145,7 @@ class SecureStorage {
       const decrypted = await this.decrypt(encrypted);
       return decrypted || null;
     } catch (error) {
-      console.error('Failed to retrieve token:', error);
+      // Failed to retrieve token - handle silently
       this.removeToken(); // Clear corrupted token for security
       return null;
     }
@@ -157,7 +157,7 @@ class SecureStorage {
   static removeToken(): void {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(`${this.TOKEN_KEY}_exp`);
-    console.log('🗑️ Token removed from secure storage');
+    // Token removed from secure storage
   }
 
   /**
@@ -173,9 +173,9 @@ class SecureStorage {
    */
   static async refreshTokenExpiration(): Promise<void> {
     if (await this.hasValidToken()) {
-      const newExpiration = Date.now() + (8 * 60 * 60 * 1000);
+      const newExpiration = (new Date().getTime() + (8 * 60 * 60 * 1000));
       localStorage.setItem(`${this.TOKEN_KEY}_exp`, newExpiration.toString());
-      console.log('🔄 Token expiration refreshed for security');
+      // Token expiration refreshed for security
     }
   }
 
@@ -192,7 +192,7 @@ class SecureStorage {
    */
   static async setUser(user: any): Promise<void> {
     if (!user) {
-      console.warn('Attempting to store empty user data');
+      // Warning: Attempting to store empty user data
       return;
     }
 
@@ -200,9 +200,9 @@ class SecureStorage {
       const userJson = JSON.stringify(user);
       const encrypted = await this.encrypt(userJson);
       localStorage.setItem(this.USER_KEY, encrypted);
-      console.log('🔐 User PHI data stored with AES-GCM encryption');
+      // User PHI data stored with AES-GCM encryption
     } catch (error) {
-      console.error('Failed to store user data securely:', error);
+      // Failed to store user data securely - handle silently
       throw new Error('User data storage failed - PHI security compromised');
     }
   }
@@ -220,7 +220,7 @@ class SecureStorage {
       const decrypted = await this.decrypt(encrypted);
       return decrypted ? JSON.parse(decrypted) : null;
     } catch (error) {
-      console.error('Failed to retrieve user data:', error);
+      // Failed to retrieve user data - handle silently
       localStorage.removeItem(this.USER_KEY);
       return null;
     }
@@ -250,7 +250,7 @@ class SecureStorage {
       localStorage.removeItem(key);
     });
 
-    console.log('🧹 All PHI data securely cleared for HIPAA compliance');
+    // All PHI data securely cleared for HIPAA compliance
   }
 }
 

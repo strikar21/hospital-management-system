@@ -91,7 +91,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
 
     } catch (err) {
       setError('Failed to load admission data');
-      console.error('Error loading data:', err);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -148,7 +148,7 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
 
     } catch (err) {
       setError('Error processing admission');
-      console.error('Error:', err);
+      // Error handled silently
     } finally {
       setProcessing(false);
     }

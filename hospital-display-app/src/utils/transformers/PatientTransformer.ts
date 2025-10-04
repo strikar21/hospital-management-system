@@ -118,7 +118,7 @@ export class PatientTransformer extends BaseTransformer {
     try {
       // Validate critical patient data
       if (!PatientTransformer.validateMedicalData(data, ['id'])) {
-        console.warn('Patient data missing required fields:', data);
+        // Warning noted
       }
 
       // Transform each section
@@ -166,7 +166,7 @@ export class PatientTransformer extends BaseTransformer {
 
       return transformedPatient;
     } catch (error) {
-      console.error('Error transforming patient data:', error);
+      // Error handled silently
       return data; // Return original data if transformation fails
     }
   }
@@ -301,7 +301,7 @@ export class PatientTransformer extends BaseTransformer {
           const staffInfo = staffMapping[performedBy];
           if (typeof staffInfo === 'object' && staffInfo.role) {
             performedByRole = staffInfo.role;
-            console.log('🔍 Staff role mapping:', { performedBy, role: staffInfo.role, name: staffInfo.name });
+            // Production: Log to monitoring service - staff role mapping
             // Update performedByName if not already set
             if (!performedByName || performedByName === 'Unknown') {
               performedByName = staffInfo.name;
@@ -325,7 +325,7 @@ export class PatientTransformer extends BaseTransformer {
 
         return transformed;
       } catch (error) {
-        console.warn('Error transforming case timeline entry:', error);
+        // Warning noted
         return entry; // Return original if transformation fails
       }
     });

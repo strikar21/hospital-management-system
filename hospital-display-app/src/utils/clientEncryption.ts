@@ -65,7 +65,7 @@ class ClientEncryption {
       
       return JSON.stringify(encryptedPayload);
     } catch (error) {
-      console.error('🔒 Failed to encrypt patient data:', error);
+      // Failed to encrypt patient data
       throw new Error('Patient data encryption failed');
     }
   }
@@ -80,7 +80,7 @@ class ClientEncryption {
       // Verify data age (max 24 hours for patient data)
       const maxAge = 24 * 60 * 60 * 1000; // 24 hours
       if (Date.now() - payload.timestamp > maxAge) {
-        console.warn('🕒 Encrypted patient data expired, removing');
+        // Encrypted patient data expired - removing
         throw new Error('Encrypted data expired');
       }
       
@@ -90,7 +90,7 @@ class ClientEncryption {
       // Verify checksum
       const expectedChecksum = this.generateChecksum(decrypted);
       if (expectedChecksum !== payload.checksum) {
-        console.error('🔒 Patient data checksum mismatch - possible corruption');
+        // Patient data checksum mismatch - possible corruption
         throw new Error('Data integrity check failed');
       }
       
@@ -103,7 +103,7 @@ class ClientEncryption {
       
       return parsedData;
     } catch (error) {
-      console.error('🔒 Failed to decrypt patient data:', error);
+      // Failed to decrypt patient data
       throw new Error('Patient data decryption failed');
     }
   }
@@ -136,9 +136,9 @@ class ClientEncryption {
       
       localStorage.setItem(`medical_access_${patientId}_${Date.now()}`, JSON.stringify(accessLog));
       
-      console.log(`🔒 Patient data encrypted and stored securely: ${patientId}`);
+      // Patient data encrypted and stored securely
     } catch (error) {
-      console.error('🔒 Failed to store encrypted patient data:', error);
+      // Failed to store encrypted patient data
       throw error;
     }
   }
@@ -166,10 +166,10 @@ class ClientEncryption {
       
       localStorage.setItem(`medical_access_${patientId}_${Date.now()}`, JSON.stringify(accessLog));
       
-      console.log(`🔒 Patient data retrieved and decrypted: ${patientId}`);
+      // Patient data retrieved and decrypted
       return decryptedData;
     } catch (error) {
-      console.error('🔒 Failed to retrieve encrypted patient data:', error);
+      // Failed to retrieve encrypted patient data
       // Remove corrupted data
       this.removePatientData(patientId);
       return null;
@@ -196,7 +196,7 @@ class ClientEncryption {
       localStorage.removeItem(key);
     });
     
-    console.log(`🗑️ Encrypted patient data removed: ${patientId}`);
+    // Encrypted patient data removed
   }
 
   /**
@@ -243,7 +243,7 @@ class ClientEncryption {
     });
     
     if (keysToRemove.length > 0) {
-      console.log(`🧹 Cleaned up ${keysToRemove.length} expired medical data entries`);
+      // Cleaned up expired medical data entries
     }
   }
 

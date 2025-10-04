@@ -13,6 +13,7 @@ interface PatientInvestigationsProps {
   investigations: investigation[];
   setInvestigations: React.Dispatch<React.SetStateAction<investigation[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
@@ -20,7 +21,8 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
   currentUser,
   investigations,
   setInvestigations,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }) => {
   const {
     isAddingInvestigation,
@@ -43,7 +45,8 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
     currentUser,
     investigations,
     setInvestigations,
-    addCaseSheetEntry
+    addCaseSheetEntry,
+    setCaseEntries
   });
 
   return (
@@ -153,7 +156,7 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
                   </div>
                 </div>
                 <div className="text-sm text-gray-600 mb-2">
-                  <p><span className="font-medium">Type:</span> {inv.type} • <span className="font-medium">Ordered by:</span> {inv.performedBy}</p>
+                  <p><span className="font-medium">Type:</span> {inv.type} • <span className="font-medium">Ordered by:</span> {inv.prescribedByName || inv.prescribedBy || 'Unknown'}</p>
                   {inv.notes && <p><span className="font-medium">Notes:</span> {inv.notes}</p>}
                   {inv.results && <p><span className="font-medium">Results:</span> {inv.results}</p>}
 
@@ -417,7 +420,7 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
             />
             <div className="mt-4 text-center">
               <button
-                onClick={() => console.log('DICOM viewer disabled')}
+                onClick={() => {/* DICOM viewer feature disabled */}}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 mr-2"
               >
                 Open in DICOM Viewer

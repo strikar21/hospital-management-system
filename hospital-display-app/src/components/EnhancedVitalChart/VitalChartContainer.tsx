@@ -251,7 +251,7 @@ export const VitalChartContainer: React.FC<VitalChartContainerProps> = ({
         }
       }
     } catch (error) {
-      console.error('Error loading vital data:', error);
+      // Error handled silently
       setVitalData([]);
       setSecondaryVitalData([]);
     } finally {

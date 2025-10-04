@@ -92,7 +92,7 @@ const PINChange: React.FC<PINChangeProps> = ({ staffId, onClose, onPINChanged })
       }, 2000);
 
     } catch (err) {
-      console.error('PIN change error:', err);
+      // Error handled silently
       if (err instanceof Error) {
         setError(err.message);
       } else {

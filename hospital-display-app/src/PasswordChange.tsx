@@ -62,7 +62,7 @@ const PasswordChange: React.FC<PasswordChangeProps> = ({ staffId, onClose }) => 
         setError(data.detail || 'Error changing password');
       }
     } catch (error) {
-      console.error('Error changing password:', error);
+      // Error handled silently
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

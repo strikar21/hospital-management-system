@@ -41,7 +41,7 @@ const PatientGridComponent: React.FC<PatientGridProps> = ({
     const finalSpeed = Math.max(baseSpeed, minSpeedForCount);
 
     if (patientCount > 10) {
-      console.log(`🐌 Scroll speed adjusted: ${patientCount} patients, ${finalSpeed}s duration`);
+      // Performance optimization: Scroll speed auto-adjusted for large patient counts
     }
 
     return finalSpeed;

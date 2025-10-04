@@ -118,6 +118,51 @@ async def migrateDeviceTable(conn):
     except Exception as e:
         logger.warning(f"⚠️ Device table migration error: {e}")
 
+
+async def migrateInvestigationsTable(conn):
+    """Add missing columns to investigations table for compliance tracking"""
+    try:
+        # Add missing columns to investigations table
+        missingColumns = [
+            ('"canEdit"', "BOOLEAN DEFAULT true"),
+            ("urgency", "TEXT DEFAULT 'routine'"),
+            ('"orderedAt"', "TIMESTAMPTZ")
+        ]
+
+        for columnName, columnType in missingColumns:
+            try:
+                await conn.execute(f"ALTER TABLE investigations ADD COLUMN IF NOT EXISTS {columnName} {columnType}")
+                logger.info(f"✅ Added column {columnName} to investigations table")
+            except Exception as e:
+                logger.debug(f"Column {columnName} might already exist: {e}")
+
+        logger.info("✅ Investigations table migration completed successfully")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Investigations table migration error: {e}")
+
+
+async def migrateMedicationsTable(conn):
+    """Add missing columns to medications table for medication status tracking"""
+    try:
+        # Add missing columns to medications table
+        missingColumns = [
+            ('"modifiedBy"', "TEXT")
+        ]
+
+        for columnName, columnType in missingColumns:
+            try:
+                await conn.execute(f"ALTER TABLE medications ADD COLUMN IF NOT EXISTS {columnName} {columnType}")
+                logger.info(f"✅ Added column {columnName} to medications table")
+            except Exception as e:
+                logger.debug(f"Column {columnName} might already exist: {e}")
+
+        logger.info("✅ Medications table migration completed successfully")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Medications table migration error: {e}")
+
+
 async def createTables():
     """Create PostgreSQL database tables"""
 
@@ -264,6 +309,8 @@ async def createTables():
             "performedBy" TEXT,
             results TEXT,
             notes TEXT,
+            "canEdit" BOOLEAN DEFAULT true,
+            urgency TEXT DEFAULT 'routine',
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -325,7 +372,22 @@ async def createTables():
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
-        
+
+        -- Patient Alerts table
+        CREATE TABLE IF NOT EXISTS patient_alerts (
+            id TEXT PRIMARY KEY,
+            "patientId" TEXT NOT NULL,
+            type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            message TEXT NOT NULL,
+            timestamp TIMESTAMPTZ DEFAULT NOW(),
+            status TEXT DEFAULT 'active',
+            "acknowledgedBy" TEXT,
+            "acknowledgedAt" TIMESTAMPTZ,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+        );
+
         -- Admission Recommendations table
         CREATE TABLE IF NOT EXISTS admissionrecommendations (
             id SERIAL PRIMARY KEY,
@@ -395,6 +457,13 @@ async def createTables():
 
                 # Apply device table migrations for device management system
                 await migrateDeviceTable(conn)
+
+                # Apply investigations table migrations for compliance tracking
+                await migrateInvestigationsTable(conn)
+
+                # Apply medications table migrations for medication status tracking
+                await migrateMedicationsTable(conn)
+
 
             except Exception as migrationError:
                 logger.warning(f"⚠️ Migration warning (may be expected): {migrationError}")

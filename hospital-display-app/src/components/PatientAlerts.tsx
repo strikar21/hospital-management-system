@@ -29,12 +29,21 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
   useEffect(() => {
     const acknowledgedAlerts = alerts.filter(alert => alert.isAcknowledged);
     if (acknowledgedAlerts.length > 0) {
-      const timer = setTimeout(() => {
-        setAlerts(prev => prev.filter(alert => !alert.isAcknowledged));
+      const timer = setTimeout(async () => {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
+          if (alertsResponse.ok) {
+            const data = await alertsResponse.json();
+            setAlerts(data.alerts || data);
+          }
+        } catch (refreshError) {
+          // Failed to refresh alerts - handle silently
+        }
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [alerts, setAlerts]);
+  }, [alerts, setAlerts, patient.id]);
 
   // Generate clinical alerts based on patient data
   useEffect(() => {
@@ -58,27 +67,35 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
     try {
       await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
 
-      setAlerts(prev => prev.map(alert =>
-        alert.id === alertId ? {
-          ...alert,
-          isAcknowledged: true,
-          acknowledgedAt: new Date().toISOString(),
-          performedBy: currentUser.id,
-          performedByName: currentUser.name,
-          performedByRole: currentUser.role
-        } : alert
-      ));
+      // Refetch fresh data from backend (single source of truth)
+      try {
+        const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
+        if (alertsResponse.ok) {
+          const data = await alertsResponse.json();
+          setAlerts(data.alerts || data);
+        }
+      } catch (refreshError) {
+        // Failed to refresh alerts after acknowledgment - handle silently
+      }
 
-      // Auto-hide acknowledged alert after 2 seconds
-      setTimeout(() => {
-        setAlerts(prev => prev.filter(alert => alert.id !== alertId));
+      // Auto-hide acknowledged alert after 2 seconds with fresh data fetch
+      setTimeout(async () => {
+        try {
+          const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
+          if (alertsResponse.ok) {
+            const data = await alertsResponse.json();
+            setAlerts(data.alerts || data);
+          }
+        } catch (refreshError) {
+          // Failed to refresh alerts - handle silently
+        }
       }, 2000);
 
       const alertMessage = alerts.find(a => a.id === alertId)?.message || 'Unknown Alert';
-      console.log(`Alert "${alertMessage}" acknowledged by ${currentUser.name}`);
+      // Removed console.log for production
 
     } catch (error) {
-      console.error('Failed to acknowledge alert:', error);
+      // Error handled silently
       alert('Failed to acknowledge alert. Please try again.');
     } finally {
       setAcknowledgingAlert(null);

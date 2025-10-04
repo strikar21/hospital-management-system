@@ -14,6 +14,7 @@ import PatientTherapies from '../PatientTherapies';
 import PatientNotes from '../PatientNotes';
 import CaseSheetBook from '../../CaseSheetBook';
 import { PatientCaseService } from '../../services/patient';
+import { getApiUrl } from '../../config/apiConfig';
 
 interface PatientDetailContainerProps {
   patient: patient;
@@ -48,6 +49,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
 
   // Sync local states with props when patient data changes
   useEffect(() => {
+    // Initial load from props - subsequent updates come from backend refetch
     setCaseSheet(patient.caseSheet || []);
     setMedications(patient.medications || []);
     setInvestigations(patient.investigations || []);
@@ -56,26 +58,57 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
     setAlerts(patient.alerts || []);
   }, [patient]);
 
-  // Load case sheet entries from backend
+  // Load comprehensive patient data with case sheet entries and staff data
   useEffect(() => {
-    const loadCaseSheetEntries = async () => {
+    const loadComprehensivePatientData = async () => {
       try {
+        // Comprehensive single API call for all patient data including staff
+        const freshPatientData = await fetch(getApiUrl(`/patients/${patient.id}?includeStaff=true`));
+        if (freshPatientData.ok) {
+          const patientResponse = await freshPatientData.json();
+          // Production: Log to monitoring service - comprehensive patient data received
+
+          // Update all states with fresh comprehensive data
+          if (patientResponse.medications) setMedications(patientResponse.medications);
+          if (patientResponse.investigations) setInvestigations(patientResponse.investigations);
+          if (patientResponse.therapies) setTherapies(patientResponse.therapies);
+          if (patientResponse.notes) setNotes(patientResponse.notes);
+          if (patientResponse.alerts) setAlerts(patientResponse.alerts);
+          if (patientResponse.caseSheet) setCaseSheet(patientResponse.caseSheet);
+
+          // Store staff data globally for consistent name resolution across all tabs
+          if (patientResponse.staff) {
+            // Production: Log to monitoring service - staff data embedded in patient response
+            // TODO: Store staff data in a global context or service for consistent access
+          }
+        }
+
+        // Also load case sheet entries separately (with embedded staff) as backup
         const entries = await PatientCaseService.getCaseEntries(patient.id);
-        console.log('🏥 Case Sheet Data Received:', entries);
+        // Production: Log to monitoring service - case sheet data received
         if (entries && entries.length > 0) {
           setCaseSheet(entries);
         }
       } catch (error) {
-        console.error('Failed to load case sheet entries:', error);
+        // Error handled silently
       }
     };
 
-    loadCaseSheetEntries();
+    loadComprehensivePatientData();
   }, [patient.id]);
 
   // Add case sheet entry helper function
-  const addCaseSheetEntry = (entry: caseSheetEntry) => {
-    setCaseSheet(prev => [...prev, entry]);
+  const addCaseSheetEntry = async (entry: caseSheetEntry) => {
+    // Refetch fresh data from backend after case entry added (single source of truth)
+    try {
+      const entriesResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`));
+      if (entriesResponse.ok) {
+        const data = await entriesResponse.json();
+        setCaseSheet(data.entries || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh case entries - handle silently
+    }
   };
 
   // Handle tab changes
@@ -171,6 +204,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               investigations={investigations}
               setInvestigations={setInvestigations}
               addCaseSheetEntry={addCaseSheetEntry}
+              setCaseEntries={setCaseSheet}
             />
           )}
 
@@ -182,6 +216,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               therapies={therapies}
               setTherapies={setTherapies}
               addCaseSheetEntry={addCaseSheetEntry}
+              setCaseEntries={setCaseSheet}
             />
           )}
 

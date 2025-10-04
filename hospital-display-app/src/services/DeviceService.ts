@@ -44,7 +44,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend(`/watch-management/available`);
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.error('❌ Error fetching free devices:', error);
+      // Error fetching free devices - handle silently
       return [];
     }
   }
@@ -59,7 +59,7 @@ export class DeviceService extends BaseService {
    * @example
    * ```typescript
    * const status = await DeviceService.getDevicePoolStatus('STAFF123');
-   * console.log(`Available: ${status.availableDevices}/${status.totalDevices}`);
+   * // Removed console.log for production
    * ```
    */
   static async getDevicePoolStatus(staffId: string): Promise<any> {
@@ -67,7 +67,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend(`/watch-management/available`);
       return response || { totalDevices: 0, availableDevices: 0, assignedDevices: 0 };
     } catch (error) {
-      console.error('❌ Error fetching device pool status:', error);
+      // Error fetching device pool status - handle silently
       return { totalDevices: 0, availableDevices: 0, assignedDevices: 0 };
     }
   }
@@ -94,7 +94,7 @@ export class DeviceService extends BaseService {
    *   'PATIENT789',
    *   'patientAdmission'
    * );
-   * console.log('Assignment successful:', result.assignmentId);
+   * // Removed console.log for production
    * ```
    */
   static async assignDevice(staffId: string, deviceId: string, patientId: string, assignmentReason: string): Promise<any> {
@@ -110,10 +110,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device assigned successfully:', response);
+      // Removed console.log for production
       return response;
     } catch (error) {
-      console.error('❌ Error assigning device:', error);
+      // Error assigning device - handle silently
       throw error;
     }
   }
@@ -146,7 +146,7 @@ export class DeviceService extends BaseService {
    */
   static async unassignDevice(staffId: string, deviceId: string, unassignmentReason: string = 'patientDischarge'): Promise<boolean> {
     const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
-    console.log('🌐 API.unassignDevice called:', { staffId, deviceId, unassignmentReason, caller });
+    // Unassigning device - processing silently
 
     try {
       const response = await this.fetchFromBackend(`/watch-management/unassign`, {
@@ -159,10 +159,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device unassigned successfully:', response);
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error unassigning device:', error);
+      // Error unassigning device - handle silently
       return false;
     }
   }
@@ -172,10 +172,10 @@ export class DeviceService extends BaseService {
       // Backend doesn't have reassign endpoint, so we unassign then assign
       await this.unassignDevice(staffId, oldDeviceId, reassignmentReason);
       // Note: We'd need the patientId to reassign to new device
-      console.log('⚠️ Reassignment requires patient ID - partial operation completed');
+      // Removed console.log for production
       return { success: true, message: 'Old device unassigned, manual assignment of new device required' };
     } catch (error) {
-      console.error('❌ Error reassigning device:', error);
+      // Error reassigning device - handle silently
       throw error;
     }
   }
@@ -195,7 +195,7 @@ export class DeviceService extends BaseService {
 
       return null;
     } catch (error) {
-      console.error('❌ Error fetching patient device:', error);
+      // Error fetching patient device - handle silently
       return null;
     }
   }
@@ -205,7 +205,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend(`/watch-management/assigned`);
       return Array.isArray(response) ? response.slice(0, limit) : [];
     } catch (error) {
-      console.error('❌ Error fetching assignment history:', error);
+      // Error fetching assignment history - handle silently
       return [];
     }
   }
@@ -217,14 +217,14 @@ export class DeviceService extends BaseService {
 
       if (patientDevice && patientDevice.deviceId) {
         const result = await this.unassignDevice(staffId, patientDevice.deviceId, unassignmentReason);
-        console.log('✅ Bulk unassignment completed for patient:', patientId);
+        // Removed console.log for production
         return { success: result, devicesUnassigned: result ? 1 : 0 };
       }
 
-      console.log('ℹ️ No devices found for patient:', patientId);
+      // Removed console.log for production
       return { success: true, devicesUnassigned: 0 };
     } catch (error) {
-      console.error('❌ Error in bulk unassignment:', error);
+      // Error in bulk unassignment - handle silently
       return { success: false, devicesUnassigned: 0 };
     }
   }
@@ -247,10 +247,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ NFC tap logged successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error logging NFC tap:', error);
+      // Error logging NFC tap - handle silently
       return false;
     }
   }
@@ -265,7 +265,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend(`/nfc/tap-history?${params.toString()}`);
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.error('❌ Error fetching NFC tap history:', error);
+      // Error fetching NFC tap history - handle silently
       return [];
     }
   }
@@ -279,7 +279,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend(`/devices/${deviceId}/status`);
       return response || { status: 'unknown', batteryLevel: 0, lastSeen: null };
     } catch (error) {
-      console.error('❌ Error fetching device status:', error);
+      // Error fetching device status - handle silently
       return { status: 'unknown', batteryLevel: 0, lastSeen: null };
     }
   }
@@ -294,10 +294,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device status updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating device status:', error);
+      // Error updating device status - handle silently
       return false;
     }
   }
@@ -307,7 +307,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend('/devices/alerts');
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.error('❌ Error fetching device alerts:', error);
+      // Error fetching device alerts - handle silently
       return [];
     }
   }
@@ -321,7 +321,7 @@ export class DeviceService extends BaseService {
       const response = await this.fetchFromBackend('/devices/proximity');
       return response;
     } catch (error) {
-      console.error('Failed to detect room proximity:', error);
+      // Failed to detect room proximity - handle silently
       return { roomId: null, distance: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
@@ -336,10 +336,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device location updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating device location:', error);
+      // Error updating device location - handle silently
       return false;
     }
   }
@@ -365,10 +365,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device provisioned successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error provisioning device:', error);
+      // Error provisioning device - handle silently
       return false;
     }
   }
@@ -383,10 +383,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device decommissioned successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error decommissioning device:', error);
+      // Error decommissioning device - handle silently
       return false;
     }
   }
@@ -420,10 +420,10 @@ export class DeviceService extends BaseService {
         })
       });
 
-      console.log('✅ Device calibration initiated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error calibrating device:', error);
+      // Error calibrating device - handle silently
       return false;
     }
   }

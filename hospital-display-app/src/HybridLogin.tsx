@@ -113,7 +113,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
         setError('Invalid staff ID or password. Please check your credentials and try again.');
       }
     } catch (err) {
-      console.error('Authentication error:', err);
+      // Error handled silently
       setError('Authentication failed. Please check your credentials and network connection.');
     } finally {
       setIsLoading(false);
@@ -143,7 +143,7 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
         return false;
       }
     } catch (err) {
-      console.error('PIN Authentication error:', err);
+      // Error handled silently
       setError('Authentication failed. Please check your credentials and network connection.');
       return false;
     }

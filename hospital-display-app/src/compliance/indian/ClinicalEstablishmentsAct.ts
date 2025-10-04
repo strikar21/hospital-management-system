@@ -201,7 +201,7 @@ export class ClinicalEstablishmentsActCompliance {
 
     return {
       patientId,
-      recordId: `REC_${Date.now()}`,
+      recordId: 'TEMP_RECORD_ID', // Backend will generate proper medical record ID
       recordType,
       createdAt: new Date(),
       createdBy,

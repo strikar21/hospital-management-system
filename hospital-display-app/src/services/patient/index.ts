@@ -86,6 +86,15 @@ export class PatientService {
   static async acknowledgeAlert(patientId: string, alertId: string, userId: string) {
     return PatientCaseService.acknowledgeAlert(patientId, alertId, userId);
   }
+
+  // ================================
+  // VITAL MONITORING
+  // ================================
+
+  static async toggleECGMode(patientId: string, isECGMode: boolean, userId?: string) {
+    const { VitalService } = await import('../VitalService');
+    return VitalService.switchMonitoringMode(patientId, isECGMode, userId || 'system');
+  }
 }
 
 // Default export for backwards compatibility

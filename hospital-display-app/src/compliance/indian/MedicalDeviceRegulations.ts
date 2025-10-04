@@ -210,7 +210,8 @@ export class MedicalDeviceRegulationsCompliance {
     modelNumber: string,
     riskClass: DeviceRiskClass
   ): MedicalDeviceRegistration {
-    const registrationNumber = `MDR${Date.now()}${riskClass.toUpperCase()}`;
+    // Backend will generate registration number
+    const registrationNumber = `MDR${riskClass.toUpperCase()}`;
 
     // Registration validity based on risk class
     const validityYears = riskClass === DeviceRiskClass.CLASS_D ? 3 : 5;
@@ -218,11 +219,11 @@ export class MedicalDeviceRegulationsCompliance {
     validUntil.setFullYear(validUntil.getFullYear() + validityYears);
 
     return {
-      deviceId: `DEV_${Date.now()}`,
+      deviceId: "", // Backend will generate UUID,
       deviceName,
       manufacturer,
       modelNumber,
-      serialNumber: `SN${Date.now()}`,
+      serialNumber: "", // Backend will generate serial number,
       riskClass,
       registrationNumber,
       registrationDate: new Date(),
@@ -297,7 +298,7 @@ export class MedicalDeviceRegulationsCompliance {
     eventSeverity: EventSeverity,
     patientId?: string
   ): AdverseEventReport {
-    const reportId = `AE_${Date.now()}`;
+    const reportId = ""; // Backend will generate report ID
 
     return {
       reportId,
@@ -357,7 +358,7 @@ export class MedicalDeviceRegulationsCompliance {
 
     return {
       deviceId,
-      maintenanceId: `MAINT_${Date.now()}`,
+      maintenanceId: "", // Backend will generate UUID,
       maintenanceType,
       scheduledDate,
       performedBy: 'Biomedical Engineer',
@@ -381,7 +382,7 @@ export class MedicalDeviceRegulationsCompliance {
     const riskAssessment = this.assessRisk(findings);
 
     return {
-      recordId: `PMS_${Date.now()}`,
+      recordId: "", // Backend will generate UUID,
       deviceId,
       surveillanceType,
       reportDate: new Date(),
@@ -390,7 +391,7 @@ export class MedicalDeviceRegulationsCompliance {
       riskAssessment,
       correctiveActions: this.generateCorrectiveActions(riskAssessment),
       regulatoryReporting: [{
-        reportId: `REG_${Date.now()}`,
+        reportId: "", // Backend will generate UUID,
         authority: RegulatoryAuthority.CDSCO,
         reportType: 'Post Market Surveillance',
         submissionDate: new Date(),
@@ -424,8 +425,8 @@ export class MedicalDeviceRegulationsCompliance {
       standardNumber: standard.number,
       standardName: standard.name,
       complianceDate: new Date(),
-      certificateNumber: `BIS_${Date.now()}`,
-      validUntil: new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000), // 3 years
+      certificateNumber: "", // Backend will generate certificate number,
+      validUntil: new Date(new Date().setFullYear(new Date().getFullYear() + 3)), // 3 years
       testingLab: 'NABL Accredited Lab',
       isCompliant: true
     }));
@@ -512,11 +513,11 @@ export class MedicalDeviceRegulationsCompliance {
     if (risk.riskLevel === 'low') return [];
 
     return [{
-      actionId: `CA_${Date.now()}`,
+      actionId: "", // Backend will generate UUID,
       description: 'Enhanced monitoring and user training',
       actionType: 'user_notification',
       assignedTo: 'Quality Assurance Team',
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      dueDate: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 days
       status: 'planned',
       effectivenessVerified: false
     }];

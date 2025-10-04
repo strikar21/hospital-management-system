@@ -196,7 +196,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
         onVitalClick={onVitalClick}
         onECGView={(patient: patient) => onSetShowECGViewer(patient)}
         onToggleECGMode={(patient: patient) => {
-          console.log('Toggle ECG mode for patient:', patient.name);
+          // Removed console.log for production
         }}
         onPatientDischarge={onPatientDischarge}
       />

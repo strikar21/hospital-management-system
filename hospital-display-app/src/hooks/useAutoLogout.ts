@@ -51,7 +51,7 @@ export const useAutoLogout = ({ settings, onLogout, userId }: UseAutoLogoutOptio
       const autoLogoutTime = (settings.autoLogoutMinutes || 15) * 60 * 1000; // Convert to milliseconds
 
       if (timeSinceLastActivity >= autoLogoutTime) {
-        console.log('🔐 Auto-logout triggered due to inactivity');
+        // Auto-logout triggered due to inactivity
         onLogout();
         return;
       }

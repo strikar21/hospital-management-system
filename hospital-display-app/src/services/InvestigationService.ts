@@ -23,10 +23,10 @@ export class InvestigationService extends BaseService {
       const response = await this.fetchFromBackend(`/investigations/patient/${patientId}`);
       const investigations = this.handleV2Response<investigation>(response);
 
-      console.log(`✅ Retrieved ${investigations.length} investigations for patient ${patientId}`);
+      // Removed console.log for production
       return investigations;
     } catch (error) {
-      console.error('❌ Error fetching patient investigations:', error);
+      // Error fetching patient investigations - handle silently
       return [];
     }
   }
@@ -36,31 +36,31 @@ export class InvestigationService extends BaseService {
       const response = await this.fetchFromBackend(`/investigations/patient/${patientId}/pending`);
       const investigations = this.handleV2Response<investigation>(response);
 
-      console.log(`✅ Retrieved ${investigations.length} pending investigations for patient ${patientId}`);
+      // Removed console.log for production
       return investigations;
     } catch (error) {
-      console.error('❌ Error fetching pending investigations:', error);
+      // Error fetching pending investigations - handle silently
       return [];
     }
   }
 
-  static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id'>, userId: string): Promise<boolean> {
+  static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id'>, userId: string): Promise<investigation | null> {
     try {
-      await this.fetchFromBackend(`/investigations/patient/${patientId}/add`, {
+      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}/add`, {
         method: 'POST',
         body: JSON.stringify({
           ...investigation,
-          orderedBy: userId,
+          performedBy: userId,
           orderedAt: new Date().toISOString(),
           status: 'ordered'
         })
       });
 
-      console.log('✅ Investigation added successfully');
-      return true;
+      // Removed console.log for production
+      return response;
     } catch (error) {
-      console.error('❌ Error adding investigation:', error);
-      return false;
+      // Error adding investigation - handle silently
+      return null;
     }
   }
 
@@ -75,10 +75,10 @@ export class InvestigationService extends BaseService {
         })
       });
 
-      console.log('✅ Investigation status updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating investigation status:', error);
+      // Error updating investigation status - handle silently
       return false;
     }
   }
@@ -94,10 +94,10 @@ export class InvestigationService extends BaseService {
         })
       });
 
-      console.log('✅ Investigation completed successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error completing investigation:', error);
+      // Error completing investigation - handle silently
       return false;
     }
   }
@@ -113,10 +113,10 @@ export class InvestigationService extends BaseService {
         })
       });
 
-      console.log('✅ Investigation results updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating investigation results:', error);
+      // Error updating investigation results - handle silently
       return false;
     }
   }
@@ -130,10 +130,10 @@ export class InvestigationService extends BaseService {
       const response = await this.fetchFromBackend(`/investigations/types`);
       const types = this.handleV2Response<any>(response);
 
-      console.log(`✅ Retrieved ${types.length} investigation types`);
+      // Removed console.log for production
       return types;
     } catch (error) {
-      console.error('❌ Error fetching investigation types:', error);
+      // Error fetching investigation types - handle silently
       return [];
     }
   }
@@ -153,7 +153,7 @@ export class InvestigationService extends BaseService {
 
       return investigations;
     } catch (error) {
-      console.error('❌ Error fetching investigation history:', error);
+      // Error fetching investigation history - handle silently
       return [];
     }
   }
@@ -168,7 +168,7 @@ export class InvestigationService extends BaseService {
       const investigations = await this.getPatientInvestigations(patientId);
       return investigations.filter(inv => inv.status === status);
     } catch (error) {
-      console.error(`❌ Error fetching investigations with status ${status}:`, error);
+      // Error fetching investigations with status - handle silently
       return [];
     }
   }
@@ -194,7 +194,7 @@ export class InvestigationService extends BaseService {
         return dateB.getTime() - dateA.getTime();
       });
     } catch (error) {
-      console.error('❌ Error fetching investigation timeline:', error);
+      // Error fetching investigation timeline - handle silently
       return [];
     }
   }
@@ -225,7 +225,7 @@ export class InvestigationService extends BaseService {
 
       return String(results);
     } catch (error) {
-      console.error('❌ Error formatting investigation results:', error);
+      // Error formatting investigation results - handle silently
       return 'Invalid results format';
     }
   }

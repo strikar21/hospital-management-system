@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { patient } from '../types';
 import { PatientService } from '../services';
+import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientDataOptions {
   userId: string;
@@ -40,9 +41,9 @@ export const usePatientData = ({
       setPatients(patientData);
       setLastSync(new Date());
 
-      console.log(`📊 Loaded ${patientData.length} patients for ${selectedWard}`);
+      // Loaded patients for ward - tracking completed silently
     } catch (error) {
-      console.error('Failed to load patients:', error);
+      // Failed to load patients - handle silently
       setError(error instanceof Error ? error.message : 'Failed to load patients');
     } finally {
       setLoading(false);
@@ -69,18 +70,43 @@ export const usePatientData = ({
   }, [loadPatients, loading, refreshInterval]);
 
   // Patient-specific operations
-  const updatePatient = useCallback((patientId: string, updates: Partial<patient>) => {
-    setPatients(prev => prev.map(p =>
-      p.id === patientId ? { ...p, ...updates } : p
-    ));
+  const updatePatient = useCallback(async (patientId: string, updates: Partial<patient>) => {
+    // Refetch fresh data from backend (single source of truth)
+    try {
+      const response = await fetch(getApiUrl('/patients'));
+      if (response.ok) {
+        const data = await response.json();
+        setPatients(data.patients || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh patients after update - handle silently
+    }
   }, []);
 
-  const removePatient = useCallback((patientId: string) => {
-    setPatients(prev => prev.filter(p => p.id !== patientId));
+  const removePatient = useCallback(async (patientId: string) => {
+    // Refetch fresh data from backend (single source of truth)
+    try {
+      const response = await fetch(getApiUrl('/patients'));
+      if (response.ok) {
+        const data = await response.json();
+        setPatients(data.patients || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh patients after removal - handle silently
+    }
   }, []);
 
-  const addPatient = useCallback((newPatient: patient) => {
-    setPatients(prev => [...prev, newPatient]);
+  const addPatient = useCallback(async (newPatient: patient) => {
+    // Refetch fresh data from backend (single source of truth)
+    try {
+      const response = await fetch(getApiUrl('/patients'));
+      if (response.ok) {
+        const data = await response.json();
+        setPatients(data.patients || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh patients after addition - handle silently
+    }
   }, []);
 
   const getPatientById = useCallback((patientId: string) => {

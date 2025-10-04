@@ -21,9 +21,9 @@ export class InvestigationTransformer extends BaseTransformer {
 
     try {
       // Validate required investigation fields
-      const requiredFields = ['type', 'orderedBy'];
+      const requiredFields = ['type', 'performedBy'];
       if (!this.validateMedicalData(data, requiredFields)) {
-        console.warn('Investigation data missing required fields:', data);
+        // Warning noted
       }
 
       // Transform object keys to camelCase
@@ -46,7 +46,7 @@ export class InvestigationTransformer extends BaseTransformer {
 
       return transformed;
     } catch (error) {
-      console.error('Error transforming investigation data:', error);
+      // Error handled silently
       return data;
     }
   }
@@ -180,7 +180,7 @@ export class InvestigationTransformer extends BaseTransformer {
       // Validate required therapy fields
       const requiredFields = ['therapyType'];
       if (!this.validateMedicalData(data, requiredFields)) {
-        console.warn('Therapy data missing required fields:', data);
+        // Warning noted
       }
 
       // Transform object keys to camelCase
@@ -203,7 +203,7 @@ export class InvestigationTransformer extends BaseTransformer {
 
       return transformed;
     } catch (error) {
-      console.error('Error transforming therapy data:', error);
+      // Error handled silently
       return data;
     }
   }

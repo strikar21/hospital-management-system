@@ -38,13 +38,14 @@ export interface investigation {
   type: 'lab' | 'imaging' | 'biopsy' | 'culture';
   name: string;
   createdAt: string;
+  orderedAt?: string; // Add missing orderedAt field
   scheduledAt?: string;
   completedAt?: string;
-  status: 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+  status: 'pending' | 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
   results?: string;
   labResults?: labresult[]; // Detailed lab results
-  performedBy: string;
-  performedByName?: string;
+  prescribedBy: string;
+  prescribedByName?: string;
   priority: 'routine' | 'urgent' | 'stat';
   urgency: 'STAT' | 'Emergency' | 'Urgent' | 'Routine'; // Added urgency field
   notes?: string;
@@ -61,8 +62,8 @@ export interface therapy {
   startDate: string;
   endDate?: string;
   status: 'active' | 'completed' | 'cancelled';
-  performedBy: string;
-  performedByName?: string;
+  prescribedBy: string;
+  prescribedByName?: string;
   therapist?: string;
   notes?: string;
   sessions: therapySession[];
@@ -193,7 +194,7 @@ export interface medicationbarcode {
 
 // Type aliases for medical types
 export type medicationstatus = 'active' | 'stopped' | 'held';
-export type investigationstatus = 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
+export type investigationstatus = 'pending' | 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
 export type therapystatus = 'active' | 'completed' | 'cancelled';
 
 // Type aliases for backward compatibility

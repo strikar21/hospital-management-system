@@ -50,16 +50,16 @@ export class AuthService extends BaseService {
       });
 
       if (response && response.id) {
-        console.log('🏥 NFC authentication successful:', response.name || response.id);
+        // NFC authentication successful
         await SecureStorage.setToken(response.token || 'nfc-auth-token');
         await SecureStorage.setUser(response);
         return response;
       }
 
-      console.warn('⚠️ NFC authentication failed: Invalid response');
+      // NFC authentication failed - invalid response
       return null;
     } catch (error) {
-      console.error('❌ NFC authentication error:', error);
+      // NFC authentication error
       return null;
     }
   }
@@ -77,7 +77,7 @@ export class AuthService extends BaseService {
         throw new Error('Invalid PIN format - must be 4-8 digits');
       }
 
-      console.log('🔍 Attempting authentication for:', sanitizedStaffId, pin ? '(PIN)' : '(Password)');
+      // Attempting authentication with provided credentials
 
       const loginData: any = { staffId: sanitizedStaffId };
 
@@ -89,29 +89,17 @@ export class AuthService extends BaseService {
         loginData.password = password;
       }
 
-      console.log('📤 Sending login request with data:', {
-        ...loginData,
-        ...(loginData.pin && { pin: '****' }),
-        ...(loginData.password && { password: '****' })
-      });
+      // Sending login request to backend
 
       const response = await this.fetchFromBackend('/auth/login', {
         method: 'POST',
         body: JSON.stringify(loginData)
       });
 
-      // Log response without sensitive data (tokens, passwords, etc.)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('📥 Login response received:', {
-          id: response?.id,
-          name: response?.firstName || response?.name,
-          role: response?.role,
-          success: !!response?.id
-        });
-      }
+      // Login response received from backend
 
       if (response && response.id) {
-        console.log('✅ Authentication successful for:', response.firstName, response.lastName);
+        // Removed console.log for production
 
         // Transform backend response to frontend user format
         const fullName = `${response.firstName || ''} ${response.lastName || ''}`.trim();
@@ -133,10 +121,10 @@ export class AuthService extends BaseService {
         return user;
       }
 
-      console.warn('⚠️ Authentication failed: Invalid credentials');
+      // Authentication failed - invalid credentials
       return null;
     } catch (error) {
-      console.error('❌ Authentication error:', error);
+      // Authentication error occurred
       return null;
     }
   }
@@ -166,7 +154,7 @@ export class AuthService extends BaseService {
         return { requiresPin: false, requiresPassword: true };
       }
     } catch (error) {
-      console.error('❌ Error checking auth type:', error);
+      // Error checking authentication type
       // Fallback to PIN for safety
       return { requiresPin: true, requiresPassword: false };
     }
@@ -175,7 +163,7 @@ export class AuthService extends BaseService {
   static logout(): void {
     SecureStorage.clearAll();
     localStorage.removeItem('currentUser');
-    console.log('🔐 User logged out, secure storage cleared');
+    // User logged out - secure storage cleared
   }
 
   // ================================

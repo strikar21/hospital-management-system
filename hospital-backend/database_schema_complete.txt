@@ -1,0 +1,353 @@
+# DATABASE SCHEMA - ALL TABLES AND COLUMNS
+
+================================================================================
+
+
+
+## TABLE: admissionrecommendations
+
+
+  - id: integer NOT NULL DEFAULT nextval('admissionrecommendations_id_seq'::regclass)
+  - patientName: text NOT NULL
+  - age: integer NULL
+  - dateOfBirth: date NULL
+  - gender: text NOT NULL
+  - diagnosis: text NOT NULL
+  - priority: text NOT NULL DEFAULT 'routine'::text
+  - department: text NOT NULL
+  - recommendedWard: text NOT NULL
+  - assignedDoctor: text NOT NULL
+  - recommendedBy: text NOT NULL
+  - status: text NULL DEFAULT 'pending'::text
+  - weight: numeric NULL
+  - admissionDate: date NULL
+  - insuranceType: text NULL
+  - emergencyContact: text NULL
+  - allergies: text NULL
+  - admissionNotes: text NULL
+  - processedBy: text NULL
+  - processedAt: timestamp with time zone NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: atomic_transactions
+
+
+  - id: uuid NOT NULL DEFAULT gen_random_uuid()
+  - transaction_id: uuid NOT NULL
+  - patient_id: text NOT NULL
+  - operation_type: character varying NOT NULL
+  - operation_data: jsonb NOT NULL
+  - status: character varying NOT NULL DEFAULT 'pending'::character varying
+  - started_at: timestamp with time zone NOT NULL DEFAULT now()
+  - completed_at: timestamp with time zone NULL
+  - error_message: text NULL
+  - retry_count: integer NULL DEFAULT 0
+
+
+## TABLE: auditlog
+
+
+  - id: integer NOT NULL DEFAULT nextval('auditlog_id_seq'::regclass)
+  - userId: text NOT NULL
+  - action: text NOT NULL
+  - resourceType: text NOT NULL
+  - resourceId: text NULL
+  - details: text NULL
+  - ipAddress: text NULL
+  - userAgent: text NULL
+  - timestamp: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: beds
+
+
+  - id: text NOT NULL
+  - bedNumber: text NOT NULL
+  - roomNumber: text NOT NULL
+  - wardType: text NOT NULL
+  - department: text NOT NULL
+  - status: text NULL DEFAULT 'available'::text
+  - occupiedBy: text NULL
+  - lastCleaned: timestamp with time zone NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: caseEntries
+
+
+  - id: uuid NOT NULL DEFAULT gen_random_uuid()
+  - patientId: text NOT NULL
+  - entryType: text NOT NULL
+  - description: text NOT NULL
+  - findings: text NULL
+  - recommendations: text NULL
+  - followUpDate: date NULL
+  - severity: text NULL
+  - category: text NULL
+  - createdBy: text NOT NULL
+  - timestamp: timestamp with time zone NOT NULL
+  - createdAt: timestamp with time zone NOT NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NOT NULL DEFAULT now()
+  - deletedAt: timestamp with time zone NULL
+
+
+## TABLE: casesheetentries
+
+
+  - id: integer NOT NULL DEFAULT nextval('casesheetentries_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - entryType: text NOT NULL
+  - description: text NOT NULL
+  - performedBy: text NOT NULL
+  - timestamp: timestamp with time zone NULL DEFAULT now()
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: deviceassignments
+
+
+  - id: integer NOT NULL DEFAULT nextval('deviceassignments_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - deviceId: text NOT NULL
+  - assignedBy: text NOT NULL
+  - assignedAt: timestamp with time zone NULL DEFAULT now()
+  - unassignedAt: timestamp with time zone NULL
+  - status: text NULL DEFAULT 'active'::text
+  - notes: text NULL
+
+
+## TABLE: devices
+
+
+  - id: text NOT NULL
+  - deviceType: text NOT NULL
+  - name: text NOT NULL
+  - model: text NULL
+  - manufacturer: text NULL
+  - serialNumber: text NOT NULL
+  - macAddress: text NULL
+  - firmwareVersion: text NULL
+  - batteryLevel: integer NULL
+  - status: text NULL DEFAULT 'available'::text
+  - lastSeen: timestamp with time zone NULL
+  - assignedPatientId: text NULL
+  - location: text NULL
+  - description: text NULL
+  - calibrationDate: timestamp with time zone NULL
+  - nextMaintenanceDate: timestamp with time zone NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: investigations
+
+
+  - id: integer NOT NULL DEFAULT nextval('investigations_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - type: text NOT NULL
+  - name: text NOT NULL
+  - scheduledAt: timestamp with time zone NULL
+  - completedAt: timestamp with time zone NULL
+  - priority: text NULL DEFAULT 'routine'::text
+  - status: text NULL DEFAULT 'ordered'::text
+  - performedBy: text NULL
+  - results: text NULL
+  - notes: text NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+  - canEdit: boolean NULL DEFAULT true
+  - urgency: text NULL DEFAULT 'routine'::text
+  - orderedAt: timestamp with time zone NULL
+
+
+## TABLE: medical_operations
+
+
+  - id: uuid NOT NULL DEFAULT gen_random_uuid()
+  - idempotency_key: character varying NOT NULL
+  - operation_type: character varying NOT NULL
+  - patient_id: text NOT NULL
+  - result: jsonb NULL
+  - status: character varying NOT NULL DEFAULT 'pending'::character varying
+  - created_at: timestamp with time zone NOT NULL DEFAULT now()
+  - completed_at: timestamp with time zone NULL
+
+
+## TABLE: medicationadministrations
+
+
+  - id: text NOT NULL
+  - medicationId: text NOT NULL
+  - patientId: text NOT NULL
+  - scheduledTime: timestamp with time zone NOT NULL
+  - administeredAt: timestamp with time zone NULL
+  - administeredBy: text NULL
+  - dosageGiven: text NULL
+  - route: text NULL
+  - status: text NULL DEFAULT 'scheduled'::text
+  - notes: text NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: medications
+
+
+  - id: integer NOT NULL DEFAULT nextval('medications_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - name: text NOT NULL
+  - dosage: text NOT NULL
+  - frequency: text NOT NULL
+  - route: text NOT NULL
+  - status: text NULL DEFAULT 'active'::text
+  - startDate: timestamp with time zone NULL
+  - endDate: timestamp with time zone NULL
+  - duration: text NULL
+  - prescribedBy: text NOT NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+
+## TABLE: patient_alerts
+
+
+  - id: text NOT NULL DEFAULT (gen_random_uuid())::text
+  - patientId: text NOT NULL
+  - type: character varying NOT NULL DEFAULT 'vital'::character varying
+  - message: text NOT NULL
+  - severity: character varying NOT NULL
+  - status: character varying NOT NULL DEFAULT 'active'::character varying
+  - vitalType: character varying NULL
+  - vitalValue: numeric NULL
+  - thresholdValue: numeric NULL
+  - createdAt: timestamp with time zone NOT NULL DEFAULT now()
+  - acknowledgedBy: character varying NULL
+  - acknowledgedAt: timestamp with time zone NULL
+  - resolvedBy: character varying NULL
+  - resolvedAt: timestamp with time zone NULL
+  - deletedAt: timestamp with time zone NULL
+
+
+## TABLE: patientnotes
+
+
+  - id: integer NOT NULL DEFAULT nextval('patientnotes_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - content: text NOT NULL
+  - authorId: text NOT NULL
+  - authorName: text NOT NULL
+  - authorRole: text NOT NULL
+  - timestamp: timestamp with time zone NULL DEFAULT now()
+  - editedAt: timestamp with time zone NULL
+  - isEdited: boolean NULL DEFAULT false
+
+
+## TABLE: patients
+
+
+  - id: text NOT NULL
+  - firstName: text NOT NULL
+  - lastName: text NOT NULL
+  - dateOfBirth: date NULL
+  - gender: text NULL
+  - phoneNumber: text NULL
+  - emergencyContactName: text NULL
+  - emergencyContactPhone: text NULL
+  - bloodType: text NULL
+  - allergies: text NULL
+  - medicalHistory: text NULL
+  - currentMedications: text NULL
+  - admissionDate: timestamp with time zone NULL
+  - dischargeDate: timestamp with time zone NULL
+  - roomNumber: text NULL
+  - bedNumber: text NULL
+  - assignedDeviceId: text NULL
+  - attendingPhysician: text NULL
+  - nurseInCharge: text NULL
+  - status: text NULL DEFAULT 'active'::text
+  - dischargeStatus: text NULL DEFAULT 'active'::text
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+  - recommendedFrom: text NULL
+  - mrn: character varying NULL
+  - weight: numeric NULL
+  - diagnosis: text NULL
+
+
+## TABLE: staff
+
+
+  - id: text NOT NULL
+  - role: text NOT NULL
+  - email: text NULL
+  - phoneNumber: text NULL
+  - department: text NULL
+  - pin: text NULL
+  - password: text NULL
+  - isActive: boolean NULL DEFAULT true
+  - lastSeen: timestamp with time zone NULL
+  - nfcCardId: text NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+  - firstName: text NULL
+  - lastName: text NULL
+
+
+## TABLE: therapies
+
+
+  - id: text NOT NULL
+  - patientId: text NOT NULL
+  - therapyType: character varying NOT NULL
+  - therapyName: character varying NOT NULL
+  - description: text NULL
+  - startDate: date NULL
+  - endDate: date NULL
+  - frequency: character varying NULL
+  - sessionDuration: integer NULL
+  - status: character varying NULL DEFAULT 'active'::character varying
+  - createdAt: timestamp without time zone NULL DEFAULT CURRENT_TIMESTAMP
+  - updatedAt: timestamp without time zone NULL DEFAULT CURRENT_TIMESTAMP
+  - createdBy: text NULL
+
+
+## TABLE: therapy
+
+
+  - id: integer NOT NULL DEFAULT nextval('therapy_id_seq'::regclass)
+  - patientId: text NOT NULL
+  - type: text NOT NULL
+  - description: text NOT NULL
+  - startDate: timestamp with time zone NULL
+  - endDate: timestamp with time zone NULL
+  - frequency: text NULL
+  - duration: text NULL
+  - status: text NULL DEFAULT 'active'::text
+  - performedBy: text NULL
+  - notes: text NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+  - canEdit: boolean NULL DEFAULT true
+
+
+## TABLE: therapysessions
+
+
+  - id: text NOT NULL
+  - therapyId: text NOT NULL
+  - patientId: text NOT NULL
+  - sessionNumber: integer NOT NULL
+  - scheduledDate: timestamp with time zone NULL
+  - completedAt: timestamp with time zone NULL
+  - performedBy: text NULL
+  - sessionNotes: text NULL
+  - status: text NULL DEFAULT 'scheduled'::text
+  - duration: text NULL
+  - createdAt: timestamp with time zone NULL DEFAULT now()
+  - updatedAt: timestamp with time zone NULL DEFAULT now()
+
+

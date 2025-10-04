@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { noteComment, patient, user, caseSheetEntry } from '../types';
 import { PatientService } from '../services';
+import { useDataRefresh } from './useDataRefresh';
+import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientNotesProps {
   patient: patient;
@@ -8,6 +10,7 @@ interface UsePatientNotesProps {
   notes: noteComment[];
   setNotes: React.Dispatch<React.SetStateAction<noteComment[]>>;
   addCaseSheetEntry: (entry: caseSheetEntry) => void;
+  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
 }
 
 export const usePatientNotes = ({
@@ -15,8 +18,11 @@ export const usePatientNotes = ({
   currentUser,
   notes,
   setNotes,
-  addCaseSheetEntry
+  addCaseSheetEntry,
+  setCaseEntries
 }: UsePatientNotesProps) => {
+  // Initialize data refresh hook for single source of truth
+  const { refreshNotes, refreshCaseEntries } = useDataRefresh(patient.id);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -24,21 +30,19 @@ export const usePatientNotes = ({
   const [isAddingHandoff, setIsAddingHandoff] = useState(false);
   const [newHandoff, setNewHandoff] = useState('');
 
-  // Add new clinical note
+  // Add new clinical note using atomic operation
   const handleAddNote = useCallback(async () => {
     if (!newNote.trim() || isAddingNote) return;
 
     setIsAddingNote(true);
     try {
-      const timestamp = new Date().toISOString();
       const noteData = {
-        comment: newNote.trim(),
-        commentedBy: currentUser.name,
-        timestamp,
-        isHandoffNote: false
+        content: newNote.trim(),
+        authorName: currentUser.name
       };
 
-      const response = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/notes`, {
+      // Use atomic endpoint - creates note and case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -46,59 +50,49 @@ export const usePatientNotes = ({
         body: JSON.stringify(noteData)
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        const newNoteEntry: noteComment = {
-          id: result.id || 'note_' + Date.now(),
-          content: newNote.trim(),
-          authorId: currentUser.id,
-          authorName: currentUser.name,
-          authorRole: currentUser.role,
-          timestamp,
-          canEdit: PatientService.canEditItem(timestamp),
-          isEdited: false,
-          isHandoffNote: false
-        };
+      if (!response.ok) {
+        throw new Error(`Failed to add note: ${response.statusText}`);
+      }
 
-        setNotes(prev => [newNoteEntry, ...prev]);
-        setNewNote('');
+      const result = await response.json();
 
-        // Add case sheet entry
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_note_' + Date.now(),
-          timestamp,
-          type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
-          description: `Clinical note added by ${currentUser.name}`,
-          performedBy: currentUser.staffId,
-          canEdit: PatientService.canEditItem(timestamp)
-        };
-        addCaseSheetEntry(newCaseEntry);
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshNotes = await refreshNotes();
+          setNotes(freshNotes);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+          setNewNote('');
+        } catch (refreshError) {
+          // Failed to refresh data after adding note - handle silently
+        }
       } else {
-        alert('Failed to add note. Please try again.');
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to add note:', error);
+      // Failed to add note - handle silently
       alert('Failed to add note. Please try again.');
     } finally {
       setIsAddingNote(false);
     }
-  }, [newNote, isAddingNote, currentUser, patient.id, setNotes, addCaseSheetEntry]);
+  }, [newNote, isAddingNote, currentUser, patient.id, setNotes, setCaseEntries, refreshNotes, refreshCaseEntries]);
 
-  // Add shift handoff note
+  // Add shift handoff note using atomic operation
   const handleAddHandoff = useCallback(async () => {
     if (!newHandoff.trim() || isAddingHandoff) return;
 
     setIsAddingHandoff(true);
     try {
-      const timestamp = new Date().toISOString();
       const handoffData = {
-        comment: newHandoff.trim(),
-        commentedBy: currentUser.name,
-        timestamp,
-        isHandoffNote: true
+        content: newHandoff.trim(),
+        authorName: currentUser.name
       };
 
-      const response = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/notes`, {
+      // Use atomic endpoint - creates handoff note and case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -106,43 +100,35 @@ export const usePatientNotes = ({
         body: JSON.stringify(handoffData)
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        const newHandoffEntry: noteComment = {
-          id: result.id || 'handoff_' + Date.now(),
-          content: newHandoff.trim(),
-          authorId: currentUser.id,
-          authorName: currentUser.name,
-          authorRole: currentUser.role,
-          timestamp,
-          canEdit: PatientService.canEditItem(timestamp),
-          isEdited: false,
-          isHandoffNote: true
-        };
+      if (!response.ok) {
+        throw new Error(`Failed to add handoff note: ${response.statusText}`);
+      }
 
-        setNotes(prev => [newHandoffEntry, ...prev]);
-        setNewHandoff('');
+      const result = await response.json();
 
-        // Add case sheet entry
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_handoff_' + Date.now(),
-          timestamp,
-          type: 'handoffNote',
-          description: `Shift handoff note by ${currentUser.name}: ${newHandoff.trim()}`,
-          performedBy: currentUser.staffId,
-          canEdit: PatientService.canEditItem(timestamp)
-        };
-        addCaseSheetEntry(newCaseEntry);
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshNotes = await refreshNotes();
+          setNotes(freshNotes);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+          setNewHandoff('');
+        } catch (refreshError) {
+          // Failed to refresh data after adding handoff note - handle silently
+        }
       } else {
-        alert('Failed to add handoff note. Please try again.');
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to add handoff note:', error);
+      // Failed to add handoff note - handle silently
       alert('Failed to add handoff note. Please try again.');
     } finally {
       setIsAddingHandoff(false);
     }
-  }, [newHandoff, isAddingHandoff, currentUser, patient.id, setNotes, addCaseSheetEntry]);
+  }, [newHandoff, isAddingHandoff, currentUser, patient.id, setNotes, setCaseEntries, refreshNotes, refreshCaseEntries]);
 
   // Start editing a note
   const startEditNote = useCallback((noteId: string, currentText: string) => {
@@ -150,55 +136,53 @@ export const usePatientNotes = ({
     setEditText(currentText);
   }, []);
 
-  // Save edited note
+  // Save edited note using atomic operation
   const handleSaveEdit = useCallback(async (noteId: string) => {
     if (!editText.trim()) return;
 
     try {
-      const response = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/notes/${noteId}`, {
-        method: 'PUT',
+
+      // Use atomic endpoint - updates note and creates case entry in single transaction
+      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes/${noteId}/edit`), {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          comment: editText.trim(),
-          modifiedBy: currentUser.name
+          note_id: noteId,
+          content: editText.trim(),
+          edited_by: currentUser.staffId
         })
       });
 
-      if (response.ok) {
-        setNotes(prev => prev.map(note =>
-          note.id === noteId
-            ? {
-                ...note,
-                comment: editText.trim(),
-                modifiedBy: currentUser.name,
-                updatedat: new Date().toISOString()
-              }
-            : note
-        ));
+      if (!response.ok) {
+        throw new Error(`Failed to edit note: ${response.statusText}`);
+      }
 
-        // Add case sheet entry for edit
-        const newCaseEntry: caseSheetEntry = {
-          id: 'cs_edit_' + Date.now(),
-          timestamp: new Date().toISOString(),
-          type: currentUser.role === 'Doctor' ? 'doctorNote' : currentUser.role === 'Nurse' ? 'nurseNote' : 'clinicalNote',
-          description: `Note edited by ${currentUser.name}`,
-          performedBy: currentUser.staffId,
-          canEdit: PatientService.canEditItem(new Date().toISOString())
-        };
-        addCaseSheetEntry(newCaseEntry);
+      const result = await response.json();
 
-        setEditingNoteId(null);
-        setEditText('');
+      if (result.success) {
+        // Refetch fresh data from backend (single source of truth)
+        try {
+          const freshNotes = await refreshNotes();
+          setNotes(freshNotes);
+
+          const freshCaseEntries = await refreshCaseEntries();
+          setCaseEntries(freshCaseEntries);
+
+          setEditingNoteId(null);
+          setEditText('');
+        } catch (refreshError) {
+          // Failed to refresh data after note edit - handle silently
+        }
       } else {
-        alert('Failed to update note. Please try again.');
+        throw new Error('Atomic operation failed');
       }
     } catch (error) {
-      console.error('Failed to update note:', error);
-      alert('Failed to update note. Please try again.');
+      // Error editing note - handle silently
+      alert(`❌ Failed to edit note: ${(error as Error).message}`);
     }
-  }, [editText, patient.id, currentUser, setNotes, addCaseSheetEntry]);
+  }, [editText, patient.id, currentUser, setNotes, setCaseEntries, refreshNotes, refreshCaseEntries]);
 
   // Cancel editing
   const cancelEdit = useCallback(() => {

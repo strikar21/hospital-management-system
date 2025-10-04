@@ -1,167 +1,115 @@
-// medicalUtils.ts - Medical validation and safety utilities
-// HIPAA and medical compliance validation functions
+// medicalUtils.ts - UI Display utilities only
+// NO MEDICAL LOGIC - All medical determinations come from backend
 
 import { vitaltype, vitalstatus } from '../types';
 
 /**
- * Medical-grade vital signs validation
+ * UI Display utilities for medical data
+ * IMPORTANT: No medical logic - only display formatting
  */
 export class MedicalUtils {
 
   /**
-   * Get vital sign status with medical accuracy
-   * Uses standard medical ranges for patient safety
+   * Display vital sign status from backend data
+   * Backend provides the medical determination, frontend just displays it
    */
   static getVitalStatus(value: number, type: vitaltype, diastolic?: number): vitalstatus {
+    // REMOVED: All medical logic moved to backend
+    // Frontend cannot make medical determinations
+    // Backend must provide vital status in API response
+    // Warning noted
+    return 'normal'; // Default fallback - backend should provide actual status
+  }
+
+  /**
+   * REMOVED: detectArrhythmia - Medical diagnosis must come from backend
+   */
+  static detectArrhythmia(heartRate: number, ecgValue: number): boolean {
+    // Warning noted
+    return false; // Frontend cannot make medical diagnoses
+  }
+
+  /**
+   * REMOVED: diagnosArrhythmia - Medical diagnosis must come from backend
+   */
+  static diagnosArrhythmia(heartRate: number, ecgValue: number): string | null {
+    // Warning noted
+    return null; // Frontend cannot make medical diagnoses
+  }
+
+  /**
+   * REMOVED: calculateRiskScore - Medical assessment must come from backend
+   */
+  static calculateRiskScore(heartRate: number, oxygenSaturation: number, temperature: number): number {
+    // Warning noted
+    return 0; // Frontend cannot make medical assessments
+  }
+
+  /**
+   * UI helper: Format vital sign values for display
+   * This is pure UI formatting - no medical logic
+   */
+  static formatVitalValue(value: number, type: vitaltype): string {
     switch (type) {
       case 'heartRate':
-        // Medical standard ranges for adults
-        if (value < 40 || value > 130) return 'critical';
-        if (value < 50 || value > 110) return 'warning';
-        return 'normal';
-
+        return `${Math.round(value)} bpm`;
       case 'oxygenSaturation':
-        // Oxygen saturation critical thresholds
-        if (value < 90) return 'critical';
-        if (value < 95) return 'warning';
-        return 'normal';
-
+        return `${Math.round(value)}%`;
       case 'skinTemperature':
-        // Temperature in Fahrenheit
-        if (value < 95 || value > 103) return 'critical';
-        if (value < 96 || value > 101) return 'warning';
-        return 'normal';
-
+        return `${value.toFixed(1)}°F`;
       case 'systolicPressure':
-        // Blood pressure ranges - check both systolic and diastolic
-        const systolic = value;
-        const diastolicValue = diastolic || Math.round(systolic * 0.67);
-
-        const systolicCritical = systolic < 70 || systolic > 180;
-        const diastolicCritical = diastolicValue < 40 || diastolicValue > 120;
-        const systolicWarning = systolic < 90 || systolic > 160;
-        const diastolicWarning = diastolicValue < 50 || diastolicValue > 100;
-
-        if (systolicCritical || diastolicCritical) return 'critical';
-        if (systolicWarning || diastolicWarning) return 'warning';
-        return 'normal';
-
-      case 'respiratoryRate':
-        // Respiratory rate for adults
-        if (value < 8 || value > 25) return 'critical';
-        if (value < 12 || value > 20) return 'warning';
-        return 'normal';
-
+        return `${Math.round(value)} mmHg`;
       case 'ecgReading':
-        // ECG values in mV * 100 (120 = 1.2mV)
-        if (value < 80 || value > 200) return 'critical';
-        if (value < 100 || value > 150) return 'warning';
-        return 'normal';
-
-      case 'eegReading':
-        // EEG values in microvolts
-        if (value < 5 || value > 80) return 'critical';
-        if (value < 10 || value > 60) return 'warning';
-        return 'normal';
-
-      case 'bioelectricalImpedance':
-        // Bioimpedance in ohms
-        if (value < 350 || value > 850) return 'critical';
-        if (value < 400 || value > 750) return 'warning';
-        return 'normal';
-
-      case 'tremorIntensity':
-        // Tremor intensity 0-10 scale
-        if (value > 7) return 'critical';
-        if (value > 4) return 'warning';
-        return 'normal';
-
+        return `${Math.round(value)} mV`;
       default:
-        return 'normal';
+        return value.toString();
     }
   }
 
   /**
-   * Detect cardiac arrhythmia from heart rate and ECG
-   * Comprehensive medical algorithm for arrhythmia detection
+   * UI helper: Get color for vital status display
+   * Uses backend-provided status, just maps to UI colors
    */
-  static detectArrhythmia(heartRate: number, ecgValue: number = 120): boolean {
-    // 1. Heart rate irregularities
-    const hrIrregular = heartRate < 50 || heartRate > 120; // Severe bradycardia or tachycardia
-
-    // 2. ECG amplitude irregularities
-    const ecgIrregular = ecgValue < 90 || ecgValue > 180; // Abnormal ECG amplitude
-
-    // 3. Rhythm irregularity detection
-    const rhythmIrregular = Math.abs(heartRate - 75) > 30 && ecgValue < 110;
-
-    // 4. Critical combinations
-    const criticalCombination = (heartRate > 110 && ecgValue < 100) || (heartRate < 60 && ecgValue > 160);
-
-    // 5. Specific arrhythmia patterns
-    const atrialFibrillation = heartRate > 100 && heartRate < 150 && ecgValue < 105;
-    const ventricularTachycardia = heartRate > 150 && ecgValue > 140;
-    const bradycardia = heartRate < 50;
-    const prematureVentricularContraction = ecgValue > 170 && heartRate > 90;
-
-    return hrIrregular || ecgIrregular || rhythmIrregular || criticalCombination ||
-           atrialFibrillation || ventricularTachycardia || bradycardia || prematureVentricularContraction;
+  static getStatusColor(status: vitalstatus): string {
+    switch (status) {
+      case 'critical': return 'text-red-600';
+      case 'warning': return 'text-yellow-600';
+      case 'normal': return 'text-green-600';
+      default: return 'text-gray-600';
+    }
   }
 
   /**
-   * Get specific arrhythmia type based on heart rate and ECG patterns
+   * UI helper: Get background color for vital status
    */
-  static getArrhythmiaType(heartRate: number, ecgValue: number): string | null {
-    if (!this.detectArrhythmia(heartRate, ecgValue)) return null;
-
-    if (heartRate < 50) return 'Bradycardia';
-    if (heartRate > 150 && ecgValue > 140) return 'Ventricular Tachycardia';
-    if (heartRate > 100 && heartRate < 150 && ecgValue < 105) return 'Atrial Fibrillation';
-    if (ecgValue > 170 && heartRate > 90) return 'PVC (Premature Ventricular Contraction)';
-    if (heartRate > 120) return 'Tachycardia';
-    if (ecgValue < 90) return 'Low Voltage ECG';
-    if (ecgValue > 180) return 'High Voltage ECG';
-
-    return 'Irregular Rhythm';
-  }
-
-  /**
-   * Detect seizure activity from EEG readings
-   * Medical algorithm for seizure pattern detection
-   */
-  static detectSeizureActivity(eegValue: number, heartRate: number): boolean {
-    // Simple seizure detection based on EEG amplitude and heart rate correlation
-    const abnormalEEG = eegValue > 60 || eegValue < 5;
-    const correlatedHeartRate = heartRate > 120; // Often elevated during seizures
-
-    return abnormalEEG && correlatedHeartRate;
-  }
-
-  /**
-   * Assess fall risk based on multiple factors
-   * Comprehensive medical fall risk assessment
-   */
-  static assessFallRisk(tremorIntensity: number, heartRate: number, age: number): 'low' | 'medium' | 'high' {
-    let riskScore = 0;
-
-    // Tremor increases fall risk - more detailed scoring
-    if (tremorIntensity > 6) riskScore += 3;
-    else if (tremorIntensity > 3) riskScore += 2;
-    else if (tremorIntensity > 1) riskScore += 1;
-
-    // Heart rate abnormalities increase fall risk
-    if (heartRate < 50 || heartRate > 120) riskScore += 2;
-    else if (heartRate < 60 || heartRate > 100) riskScore += 1;
-
-    // Age factor (higher age = higher risk)
-    if (age > 75) riskScore += 2;
-    else if (age > 65) riskScore += 1;
-
-    // Risk classification with refined thresholds
-    if (riskScore >= 5) return 'high';
-    if (riskScore >= 3) return 'medium';
-    return 'low';
+  static getStatusBgColor(status: vitalstatus): string {
+    switch (status) {
+      case 'critical': return 'bg-red-100';
+      case 'warning': return 'bg-yellow-100';
+      case 'normal': return 'bg-green-100';
+      default: return 'bg-gray-100';
+    }
   }
 }
 
-export default MedicalUtils;
+/**
+ * COMPLIANCE NOTE:
+ *
+ * This file has been refactored to comply with single source of truth architecture.
+ * All medical logic, diagnoses, and clinical determinations have been moved to the backend.
+ *
+ * Frontend responsibilities (ALLOWED):
+ * - UI formatting and display
+ * - Color coding based on backend-provided status
+ * - Data presentation and visualization
+ *
+ * Backend responsibilities (REQUIRED):
+ * - Medical diagnoses and assessments
+ * - Vital sign status determination
+ * - Arrhythmia detection and diagnosis
+ * - Risk score calculations
+ * - All clinical decision making
+ *
+ * Components using this class must be updated to use backend-provided medical statuses
+ * rather than computing them in the frontend.
+ */

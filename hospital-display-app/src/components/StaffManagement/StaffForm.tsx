@@ -74,9 +74,9 @@ export const StaffForm: React.FC<StaffFormProps> = ({
 
     const cleanName = name.replace(/\s+/g, '').toLowerCase();
     const rolePrefix = role.slice(0, 3).toUpperCase();
-    const randomNum = Math.floor(Math.random() * 100);
-
-    return `${rolePrefix}${cleanName.slice(0, 4)}${randomNum.toString().padStart(2, '0')}`;
+    // Staff ID generation moved to backend for consistency and compliance
+    // Frontend should not generate medical staff IDs
+    return `TEMP_${rolePrefix}${cleanName.slice(0, 4)}`; // Backend will generate proper UUID
   };
 
   React.useEffect(() => {

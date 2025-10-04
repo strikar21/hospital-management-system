@@ -35,15 +35,13 @@ export class PatientNotesService extends BaseService {
         method: 'POST',
         body: JSON.stringify({
           content,
-          authorId: userId,
-          authorName: username || 'Unknown',
-          authorRole: userrole || 'Staff',
-          timestamp: new Date().toISOString()
+          authorId: userId
+          // Backend generates: id, timestamp, authorName (from staff lookup)
         })
       });
       return response;
     } catch (error) {
-      console.error('❌ Error adding note:', error);
+      // Error adding note - handle silently
       throw error;
     }
   }
@@ -70,7 +68,7 @@ export class PatientNotesService extends BaseService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Error editing note:', error);
+      // Error editing note - handle silently
       return false;
     }
   }
@@ -94,7 +92,7 @@ export class PatientNotesService extends BaseService {
       });
       return true;
     } catch (error) {
-      console.error('❌ Error deleting note:', error);
+      // Error deleting note - handle silently
       return false;
     }
   }

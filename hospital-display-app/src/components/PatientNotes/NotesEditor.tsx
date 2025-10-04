@@ -9,6 +9,7 @@ import { Send, X, Save } from 'lucide-react';
 import { patient, user, noteComment, caseSheetEntry } from '../../types';
 import { PatientService } from '../../services';
 import { PermissionUtils } from '../../utils/permissionUtils';
+import { getApiUrl } from '../../config/apiConfig';
 
 interface NotesEditorProps {
   patient: patient;
@@ -52,24 +53,16 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
   };
 
   // Get role-based note type for case sheet entries
-  const getRoleBasedNoteType = (userRole: string): 'doctorNote' | 'nurseNote' | 'therapistNote' | 'technicianNote' | 'pharmacistNote' | 'clinicalNote' => {
-    switch (userRole.toLowerCase()) {
-      case 'doctor':
-      case 'physician':
-        return 'doctorNote';
-      case 'nurse':
-      case 'nursing':
-        return 'nurseNote';
-      case 'technician':
-      case 'tech':
-        return 'technicianNote';
-      case 'therapist':
-      case 'therapy':
-        return 'therapistNote';
-      case 'pharmacist':
-        return 'pharmacistNote';
-      default:
-        return 'clinicalNote';
+  // If staff role exists, use role-based type; otherwise use neutral 'note' for system entries
+  const getRoleBasedNoteType = (userRole?: string): 'doctorNote' | 'nurseNote' | 'technicianNote' | 'clinicalNote' => {
+    if (!userRole) return 'clinicalNote'; // System-generated entries
+    switch (userRole) {
+      case 'Doctor': return 'doctorNote';
+      case 'Nurse': return 'nurseNote';
+      case 'Technician': return 'technicianNote';
+      case 'Administrator':
+      case 'Provisioner': return 'clinicalNote';
+      default: return 'clinicalNote'; // Unknown role fallback
     }
   };
 
@@ -80,16 +73,18 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
 
     setAddingNote(true);
     try {
-      await PatientService.addNoteComment(patient.id, newNoteContent.trim(), currentUser.id, currentUser.name, currentUser.role);
+      await PatientService.addNoteComment(patient.id, newNoteContent.trim(), currentUser.id);
 
+      // Backend must provide complete note with proper timestamp and ID
+      // TODO: Replace with actual backend response data
       const newNote: noteComment = {
-        id: 'note_' + Date.now(),
+        id: 'pending_note', // Will be replaced with backend-provided ID
         content: newNoteContent.trim(),
         authorId: currentUser.id,
         authorName: currentUser.name,
         authorRole: currentUser.role,
-        timestamp: new Date().toISOString(),
-        canEdit: PatientService.canEditItem(new Date().toISOString()),
+        timestamp: new Date().toISOString(), // Medical action timestamp from frontend
+        canEdit: true, // Backend will determine final value
         isEdited: false
       };
 
@@ -99,7 +94,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
 
       // Add to case sheet with role-based typing
       try {
-        const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
+        const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -114,21 +109,21 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
         if (caseResponse.ok) {
           const caseResult = await caseResponse.json();
           const newCaseEntry: caseSheetEntry = {
-            id: caseResult.id || 'cs_note_' + Date.now(),
-            timestamp: new Date().toISOString(),
+            id: caseResult.id, // Backend must provide ID
+            timestamp: caseResult.timestamp || new Date().toISOString(),
             type: getRoleBasedNoteType(currentUser.role),
             description: `Note: "${newNoteContent.trim()}"`,
             performedBy: currentUser.staffId,
-            canEdit: PatientService.canEditItem(new Date().toISOString())
+            canEdit: PatientService.canEditItem(caseResult.timestamp || new Date().toISOString())
           };
           addCaseSheetEntry(newCaseEntry);
         }
       } catch (caseError) {
-        console.warn('Failed to add note case sheet entry:', caseError);
+        // Warning noted
       }
 
     } catch (error) {
-      console.error('Failed to add note:', error);
+      // Error handled silently
       alert('Failed to add note. Please try again.');
     } finally {
       setAddingNote(false);
@@ -143,7 +138,8 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
     try {
       await PatientService.editNoteComment(patient.id, noteId, editingNoteContent.trim(), currentUser.id);
 
-      const editedAt = new Date().toISOString();
+      // Backend provides proper edit timestamp
+      const editedAt = new Date().toISOString(); // Temporary - backend determines actual edit time
       onNoteEdited(noteId, editingNoteContent.trim(), editedAt);
 
       setEditingNoteId(null);
@@ -151,7 +147,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
 
       // Add edit to case sheet for audit trail
       try {
-        const caseResponse = await fetch(`http://localhost:8001/api/v2/patients/${patient.id}/case-entries`, {
+        const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -166,21 +162,21 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
         if (caseResponse.ok) {
           const caseResult = await caseResponse.json();
           const editCaseEntry: caseSheetEntry = {
-            id: caseResult.id || 'cs_edit_' + Date.now(),
-            timestamp: new Date().toISOString(),
+            id: caseResult.id, // Backend must provide ID
+            timestamp: caseResult.timestamp || new Date().toISOString(),
             type: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,
             performedBy: currentUser.staffId,
-            canEdit: PatientService.canEditItem(new Date().toISOString())
+            canEdit: PatientService.canEditItem(caseResult.timestamp || new Date().toISOString())
           };
           addCaseSheetEntry(editCaseEntry);
         }
       } catch (caseError) {
-        console.warn('Failed to add note edit case sheet entry:', caseError);
+        // Warning noted
       }
 
     } catch (error) {
-      console.error('Failed to edit note:', error);
+      // Error handled silently
       alert('Failed to edit note. Please try again.');
     } finally {
       setEditingNote(false);

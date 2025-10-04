@@ -24,10 +24,10 @@ export class TherapyService extends BaseService {
       const response = await this.fetchFromBackend(`/therapy/patient/${patientId}`);
       const therapySessions = this.handleV2Response<therapy>(response);
 
-      console.log(`✅ Retrieved ${therapySessions.length} therapy sessions for patient ${patientId}`);
+      // Removed console.log for production
       return therapySessions;
     } catch (error) {
-      console.error('❌ Error fetching patient therapy sessions:', error);
+      // Error fetching patient therapy sessions - handle silently
       return [];
     }
   }
@@ -37,10 +37,10 @@ export class TherapyService extends BaseService {
       const response = await this.fetchFromBackend(`/therapy/patient/${patientId}/active`);
       const therapySessions = this.handleV2Response<therapy>(response);
 
-      console.log(`✅ Retrieved ${therapySessions.length} active therapy sessions for patient ${patientId}`);
+      // Removed console.log for production
       return therapySessions;
     } catch (error) {
-      console.error('❌ Error fetching active therapy sessions:', error);
+      // Error fetching active therapy sessions - handle silently
       return [];
     }
   }
@@ -57,10 +57,10 @@ export class TherapyService extends BaseService {
         })
       });
 
-      console.log('✅ Therapy added successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error adding therapy:', error);
+      // Error adding therapy - handle silently
       return false;
     }
   }
@@ -76,10 +76,10 @@ export class TherapyService extends BaseService {
         })
       });
 
-      console.log('✅ Therapy status updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating therapy status:', error);
+      // Error updating therapy status - handle silently
       return false;
     }
   }
@@ -95,10 +95,10 @@ export class TherapyService extends BaseService {
         })
       });
 
-      console.log('✅ Therapy session completed successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error completing therapy session:', error);
+      // Error completing therapy session - handle silently
       return false;
     }
   }
@@ -112,10 +112,10 @@ export class TherapyService extends BaseService {
       const response = await this.fetchFromBackend(`/therapy/types`);
       const types = this.handleV2Response<any>(response);
 
-      console.log(`✅ Retrieved ${types.length} therapy types`);
+      // Removed console.log for production
       return types;
     } catch (error) {
-      console.error('❌ Error fetching therapy types:', error);
+      // Error fetching therapy types - handle silently
       return [];
     }
   }
@@ -136,10 +136,10 @@ export class TherapyService extends BaseService {
         })
       });
 
-      console.log('✅ Therapy updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating therapy:', error);
+      // Error updating therapy - handle silently
       return false;
     }
   }
@@ -147,10 +147,10 @@ export class TherapyService extends BaseService {
   static async discontinueTherapy(patientId: string, sessionId: string, userId: string): Promise<boolean> {
     try {
       await this.updateTherapyStatus(sessionId, 'discontinued', userId);
-      console.log('✅ Therapy discontinued successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error discontinuing therapy:', error);
+      // Error discontinuing therapy - handle silently
       return false;
     }
   }
@@ -166,7 +166,7 @@ export class TherapyService extends BaseService {
 
       return sessions;
     } catch (error) {
-      console.error('❌ Error fetching therapy history:', error);
+      // Error fetching therapy history - handle silently
       return [];
     }
   }
@@ -181,7 +181,7 @@ export class TherapyService extends BaseService {
       const sessions = await this.getPatientTherapy(patientId);
       return sessions.filter(session => session.status === status);
     } catch (error) {
-      console.error(`❌ Error fetching therapy sessions with status ${status}:`, error);
+      // Error fetching therapy sessions with status - handle silently
       return [];
     }
   }
@@ -207,7 +207,7 @@ export class TherapyService extends BaseService {
         return dateB.getTime() - dateA.getTime();
       });
     } catch (error) {
-      console.error('❌ Error fetching therapy timeline:', error);
+      // Error fetching therapy timeline - handle silently
       return [];
     }
   }
@@ -241,7 +241,7 @@ export class TherapyService extends BaseService {
 
       return `${hours} hour${hours > 1 ? 's' : ''} ${minutes} minute${minutes > 1 ? 's' : ''}`;
     } catch (error) {
-      console.error('❌ Error formatting therapy duration:', error);
+      // Error formatting therapy duration - handle silently
       return 'Invalid duration';
     }
   }
@@ -255,7 +255,7 @@ export class TherapyService extends BaseService {
       const completedSessions = therapy.completedSessions || 0;
       return Math.min(100, Math.round((completedSessions / therapy.totalSessions) * 100));
     } catch (error) {
-      console.error('❌ Error calculating therapy progress:', error);
+      // Error calculating therapy progress - handle silently
       return 0;
     }
   }

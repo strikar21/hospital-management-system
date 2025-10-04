@@ -45,7 +45,7 @@ class PatientRepository(BaseRepository[Patient]):
                 LEFT JOIN patientnotes pn ON p.id = pn."patientId"
                 LEFT JOIN medications m ON p.id = m."patientId"
                 LEFT JOIN investigations i ON p.id = i."patientId"
-                LEFT JOIN therapy t ON p.id = t."patientId"
+                LEFT JOIN therapies t ON p.id = t."patientId"
                 WHERE p.id = $1
                 GROUP BY p.id
             """
@@ -157,7 +157,15 @@ class PatientRepository(BaseRepository[Patient]):
             """
 
             now = datetime.utcnow()
-            result = await self.execute_custom_query(query, [content, now, int(note_id), patient_id])
+            # Handle different note ID formats (from v1 logic)
+            if note_id.isdigit():
+                numeric_id = int(note_id)
+            elif note_id.startswith('note_'):
+                numeric_id = int(note_id.split('_')[1])
+            else:
+                raise ValueError(f"Invalid note ID format: {note_id}")
+
+            result = await self.execute_custom_query(query, [content, now, numeric_id, patient_id])
             return len(result) > 0
 
         except Exception as e:
@@ -173,7 +181,15 @@ class PatientRepository(BaseRepository[Patient]):
                 RETURNING id
             """
 
-            result = await self.execute_custom_query(query, [int(note_id), patient_id])
+            # Handle different note ID formats (from v1 logic)
+            if note_id.isdigit():
+                numeric_id = int(note_id)
+            elif note_id.startswith('note_'):
+                numeric_id = int(note_id.split('_')[1])
+            else:
+                raise ValueError(f"Invalid note ID format: {note_id}")
+
+            result = await self.execute_custom_query(query, [numeric_id, patient_id])
             return len(result) > 0
 
         except Exception as e:
@@ -335,9 +351,9 @@ class PatientRepository(BaseRepository[Patient]):
 
             # Get therapy sessions
             therapy_query = """
-                SELECT id, type, description, frequency, status, "performedBy",
+                SELECT id, "therapyType" as type, description, frequency, status, "createdBy" as "performedBy",
                        "createdAt" as timestamp, 'therapy' as entry_type
-                FROM therapy
+                FROM therapies
                 WHERE "patientId" = $1
                 ORDER BY "createdAt" DESC
             """

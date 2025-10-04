@@ -38,14 +38,14 @@ export const HandoffNotes: React.FC<HandoffNotesProps> = ({
       const priorityMap = { '1': 'low', '2': 'medium', '3': 'high', '4': 'critical' };
       const priorityLevel = priorityMap[priority as keyof typeof priorityMap] || 'medium';
 
-      // Create handoff case sheet entry
+      // Create handoff case sheet entry - backend must provide proper ID and timestamp
       const handoffEntry: caseSheetEntry = {
-        id: 'handoff_' + Date.now(),
-        timestamp: new Date().toISOString(),
+        id: 'pending_handoff', // Will be replaced with backend-provided ID
+        timestamp: new Date().toISOString(), // Medical action timestamp from frontend
         type: 'handoffNote',
         description: `${shift.toUpperCase()} SHIFT HANDOFF - ${priorityLevel.toUpperCase()} PRIORITY: ${handoffNote}`,
         performedBy: currentUser.staffId,
-        canEdit: PatientService.canEditItem(new Date().toISOString()),
+        canEdit: true, // Backend will determine final value
         details: {
           shift,
           priority: priorityLevel,

@@ -10,6 +10,7 @@ import logging
 
 from ...services.service_factory import get_patient_service
 from ...models.patient import PatientCreate, PatientUpdate
+from ...core.database import getDbConnection
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -53,8 +54,11 @@ async def get_all_patients(
 
 
 @router.get("/{patient_id}")
-async def get_patient(patient_id: str):
-    """Get complete patient data with medical records"""
+async def get_patient(
+    patient_id: str,
+    includeStaff: Optional[bool] = Query(False, description="Include staff data for name resolution")
+):
+    """Get complete patient data with medical records and optional staff data"""
     try:
         patient_service = get_patient_service()
         patient = await patient_service.get_complete_patient_data(patient_id)
@@ -62,7 +66,38 @@ async def get_patient(patient_id: str):
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
 
-        logger.info(f"✅ Retrieved patient data for: {patient_id}")
+        # Include staff data if requested for comprehensive single call
+        if includeStaff:
+            try:
+                # Direct database query for staff data to avoid service dependency
+                async with getDbConnection() as conn:
+                    from ...core.db_utils import fetchAll
+
+                    staff_query = """
+                        SELECT id, "firstName", "lastName", role, department, "isActive"
+                        FROM staff
+                        WHERE "isActive" = true
+                        ORDER BY role, "firstName"
+                    """
+                    staff_rows = await fetchAll(conn, staff_query)
+
+                    # Convert to list of dicts for frontend consumption
+                    staff_data = []
+                    for row in staff_rows:
+                        staff_dict = dict(row)
+                        # Add computed name field for frontend compatibility
+                        first_name = staff_dict.get('firstName', '')
+                        last_name = staff_dict.get('lastName', '')
+                        staff_dict['name'] = f"{first_name} {last_name}".strip() if first_name and last_name else staff_dict.get('id', 'Unknown')
+                        staff_data.append(staff_dict)
+
+                    patient["staff"] = staff_data
+                    logger.info(f"✅ Included {len(staff_data)} staff records in patient response")
+            except Exception as staff_error:
+                logger.warning(f"⚠️ Failed to include staff data: {staff_error}")
+                patient["staff"] = []
+
+        logger.info(f"✅ Retrieved complete patient data for: {patient_id}")
         logger.info(f"🔍 Patient attendingPhysician: {patient.get('attendingPhysician')}")
         logger.info(f"🔍 Patient attendingPhysicianName: {patient.get('attendingPhysicianName')}")
         logger.info(f"🔍 Patient assignedDoctor: {patient.get('assignedDoctor')}")
@@ -125,10 +160,10 @@ async def add_patient_note(
 
         note = await patient_service.add_note_comment(
             patient_id=patient_id,
-            content=note_data.get('content'),
-            author_id='system',
-            author_name='System User',
-            author_role='admin'
+            content=note_data.get('comment') or note_data.get('content'),  # Support both field names
+            author_id=note_data.get('authorId', 'system'),
+            author_name=note_data.get('commentedBy') or note_data.get('authorName', 'System User'),
+            author_role=note_data.get('authorRole', 'admin')
         )
 
         if not note:
@@ -157,8 +192,8 @@ async def edit_patient_note(
         success = await patient_service.edit_note_comment(
             patient_id=patient_id,
             note_id=note_id,
-            content=note_data.get('content'),
-            editor_id='system'
+            content=note_data.get('comment') or note_data.get('content'),  # Support both field names
+            editor_id=note_data.get('modifiedBy', 'system')
         )
 
         if not success:
@@ -263,14 +298,50 @@ async def acknowledge_alert(
 # ================================
 
 @router.get("/{patient_id}/case-entries")
-async def get_case_entries(patient_id: str):
-    """Get aggregated timeline of all medical activities for patient"""
+async def get_case_entries(
+    patient_id: str,
+    includeStaff: Optional[bool] = Query(False, description="Include staff data for name resolution")
+):
+    """Get aggregated timeline of all medical activities for patient with optional staff data"""
     try:
         patient_service = get_patient_service()
         case_entries = await patient_service.get_aggregated_timeline(patient_id)
 
+        response_data = {"caseEntries": case_entries, "count": len(case_entries)}
+
+        # Include staff data if requested for single lookup call efficiency
+        if includeStaff:
+            try:
+                # Direct database query for staff data to avoid service dependency
+                async with getDbConnection() as conn:
+                    from ...core.db_utils import fetchAll
+
+                    staff_query = """
+                        SELECT id, "firstName", "lastName", role, department, "isActive"
+                        FROM staff
+                        WHERE "isActive" = true
+                        ORDER BY role, "firstName"
+                    """
+                    staff_rows = await fetchAll(conn, staff_query)
+
+                    # Convert to list of dicts for frontend consumption
+                    staff_data = []
+                    for row in staff_rows:
+                        staff_dict = dict(row)
+                        # Add computed name field for frontend compatibility
+                        first_name = staff_dict.get('firstName', '')
+                        last_name = staff_dict.get('lastName', '')
+                        staff_dict['name'] = f"{first_name} {last_name}".strip() if first_name and last_name else staff_dict.get('id', 'Unknown')
+                        staff_data.append(staff_dict)
+
+                    response_data["staff"] = staff_data
+                    logger.info(f"✅ Included {len(staff_data)} staff records in response")
+            except Exception as staff_error:
+                logger.warning(f"⚠️ Failed to include staff data: {staff_error}")
+                response_data["staff"] = []
+
         logger.info(f"✅ Retrieved {len(case_entries)} timeline entries for patient {patient_id}")
-        return {"caseEntries": case_entries, "count": len(case_entries)}
+        return response_data
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

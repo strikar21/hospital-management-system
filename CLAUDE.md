@@ -1,6 +1,14 @@
 # Hospital Management System - Claude Instructions
 
 ## Development Approach - TOP PRIORITY REQUIREMENTS
+
+### MANDATORY BEHAVIOR CHECK - CLAUDE MUST DO BEFORE EVERY ACTION:
+1. **Research first** - Check what actual data exists using tools
+2. **Ask clarifying questions** - If uncertain about anything, ask before proceeding
+3. **Document plan** - Make a file and refer to it before executing
+4. **NEVER assume or guess data/IDs** - If Claude uses made-up data like "PAT0001", STOP immediately and research actual data first
+
+### Core Requirements:
 - **NEVER assume stuff** - always ask relevant questions first
 - **Ask before making changes** - get user approval before implementing solutions
 - **When user asks to show/list something** - make a file and show the content

@@ -32,14 +32,14 @@ export class PatientCRUDService extends BaseService {
       const response = await this.fetchFromBackend(`/patients/${patientId}`);
 
       if (!response) {
-        console.warn(`⚠️ No patient found with ID: ${patientId}`);
+        // Warning: No patient found with ID
         return null;
       }
 
       // Transform patient data with fallback values for missing fields
       return PatientTransformer.transformPatient(response);
     } catch (error) {
-      console.error(`❌ Error fetching patient ${patientId}:`, error);
+      // Error fetching patient - handle silently
       return null;
     }
   }
@@ -71,14 +71,14 @@ export class PatientCRUDService extends BaseService {
       // Handle v2 response format: {patients: [...], total: number, success: boolean}
       const patients = response?.patients || response;
       if (!Array.isArray(patients)) {
-        console.warn('⚠️ Invalid patient list response format');
+        // Warning: Invalid patient list response format
         return [];
       }
 
       // Transform patient array with fallback values for missing fields
       return PatientTransformer.transformPatientArray(patients);
     } catch (error) {
-      console.error('❌ Error fetching patients:', error);
+      // Error fetching patients - handle silently
       return [];
     }
   }
@@ -96,7 +96,7 @@ export class PatientCRUDService extends BaseService {
       const patients = Array.isArray(response) ? response : [];
       return PatientTransformer.transformPatientArray(patients);
     } catch (error) {
-      console.error('❌ Error searching patients:', error);
+      // Error searching patients - handle silently
       return [];
     }
   }
@@ -114,7 +114,7 @@ export class PatientCRUDService extends BaseService {
       const patients = Array.isArray(response) ? response : [];
       return PatientTransformer.transformPatientArray(patients);
     } catch (error) {
-      console.error(`❌ Error fetching patients by status ${status}:`, error);
+      // Error fetching patients by status - handle silently
       return [];
     }
   }
@@ -140,7 +140,7 @@ export class PatientCRUDService extends BaseService {
       });
 
       if (!initResponse?.success) {
-        console.error('❌ Discharge initiation failed');
+        // Error: Discharge initiation failed
         return false;
       }
 
@@ -154,7 +154,7 @@ export class PatientCRUDService extends BaseService {
           })
         });
       } catch (deviceError) {
-        console.warn('⚠️ Device unassignment warning:', deviceError);
+        // Warning: Device unassignment warning - handle silently
         // Continue with discharge even if device unassignment fails
       }
 
@@ -171,7 +171,7 @@ export class PatientCRUDService extends BaseService {
       return true;
 
     } catch (error) {
-      console.error('❌ Discharge process failed:', error);
+      // Error: Discharge process failed - handle silently
       return false;
     }
   }

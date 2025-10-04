@@ -145,8 +145,8 @@ class PatientService(BaseService):
             if patient_data.get('investigations'):
                 for inv in patient_data['investigations']:
                     if isinstance(inv, dict):
-                        if inv.get('orderedBy'):
-                            staff_ids.add(inv['orderedBy'])
+                        if inv.get('performedBy'):
+                            staff_ids.add(inv['performedBy'])
                         if inv.get('authorId'):
                             staff_ids.add(inv['authorId'])
                         if inv.get('createdBy'):
@@ -198,8 +198,8 @@ class PatientService(BaseService):
             if patient_data.get('investigations'):
                 for inv in patient_data['investigations']:
                     if isinstance(inv, dict):
-                        if inv.get('orderedBy') and inv['orderedBy'] in staff_names:
-                            inv['orderedByName'] = staff_names[inv['orderedBy']]
+                        if inv.get('prescribedBy') and inv['prescribedBy'] in staff_names:
+                            inv['prescribedByName'] = staff_names[inv['prescribedBy']]
                         if inv.get('authorId') and inv['authorId'] in staff_names:
                             inv['authorName'] = staff_names[inv['authorId']]
                         if inv.get('createdBy') and inv['createdBy'] in staff_names:
@@ -209,8 +209,8 @@ class PatientService(BaseService):
             if patient_data.get('therapies'):
                 for therapy in patient_data['therapies']:
                     if isinstance(therapy, dict):
-                        if therapy.get('conductedBy') and therapy['conductedBy'] in staff_names:
-                            therapy['conductedByName'] = staff_names[therapy['conductedBy']]
+                        if therapy.get('prescribedBy') and therapy['prescribedBy'] in staff_names:
+                            therapy['prescribedByName'] = staff_names[therapy['prescribedBy']]
                         if therapy.get('authorId') and therapy['authorId'] in staff_names:
                             therapy['authorName'] = staff_names[therapy['authorId']]
                         if therapy.get('createdBy') and therapy['createdBy'] in staff_names:
@@ -438,10 +438,8 @@ class PatientService(BaseService):
             if not await self.patient_repository.exists(patient_id):
                 raise ValueError(f"Patient {patient_id} not found")
 
-            # Transform from camelCase to snake_case for database
-            snake_data = self.patient_repository.transform_from_camel_case(entry_data)
-
-            result = await self.patient_repository.add_case_entry(patient_id, snake_data, created_by)
+            # Use direct field names - database expects camelCase entryType
+            result = await self.patient_repository.add_case_entry(patient_id, entry_data, created_by)
 
             if result:
                 return self.patient_repository.transform_to_camel_case(result)

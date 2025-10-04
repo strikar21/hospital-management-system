@@ -81,7 +81,7 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
         throw new Error('Failed to fetch staff');
       }
     } catch (error) {
-      console.error('Error fetching staff:', error);
+      // Error fetching staff - handle silently
       setError('Failed to load staff members');
       setStaff([]);
     } finally {
@@ -107,7 +107,7 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
         setDepartments(Array.isArray(deptsData) ? deptsData : []);
       }
     } catch (error) {
-      console.error('Error fetching roles/departments:', error);
+      // Error fetching roles/departments - handle silently
     }
   }, []);
 
@@ -146,7 +146,7 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
         return false;
       }
     } catch (error) {
-      console.error('Error adding staff:', error);
+      // Error adding staff - handle silently
       setError('Error adding staff member');
       return false;
     } finally {
@@ -183,7 +183,7 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
         return false;
       }
     } catch (error) {
-      console.error('Error updating staff:', error);
+      // Error updating staff - handle silently
       setError('Error updating staff member');
       return false;
     } finally {
@@ -208,7 +208,7 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
         return false;
       }
     } catch (error) {
-      console.error('Error deleting staff:', error);
+      // Error deleting staff - handle silently
       setError('Error deleting staff member');
       return false;
     } finally {

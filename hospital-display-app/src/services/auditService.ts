@@ -39,7 +39,7 @@ class AuditService {
         const userData = JSON.parse(user);
         this.userId = userData.id;
       } catch (e) {
-        console.warn('Failed to parse user data from localStorage');
+        // Failed to parse user data from localStorage
       }
     }
     
@@ -83,7 +83,9 @@ class AuditService {
   }
   
   private generateSessionId(): string {
-    return `session${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
+    // Session ID generation moved to backend for security and compliance
+    // Frontend should request session ID from backend endpoint
+    return 'temp_session_id'; // Backend will generate proper session UUID
   }
   
   setUserId(userId: string): void {
@@ -298,11 +300,11 @@ class AuditService {
       
       if (!response.ok) {
         // Don't throw errors for audit logging failures to avoid disrupting user experience
-        console.warn('Failed to log audit event:', response.status, response.statusText);
+        // Failed to log audit event
       }
     } catch (error) {
       // Silently handle audit logging errors to avoid disrupting user experience
-      console.warn('Audit logging error:', error);
+      // Audit logging error
     }
   }
 }

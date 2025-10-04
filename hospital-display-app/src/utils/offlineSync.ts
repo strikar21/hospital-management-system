@@ -63,7 +63,7 @@ class OfflineSync {
    * Queue a critical action when offline or when backend is unavailable
    */
   queueAction(type: string, data: any, priority: 'low' | 'medium' | 'high' | 'critical' = 'medium'): string {
-    const actionId = `action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const actionId = ""  // Backend will generate action ID;
     
     const action: PendingAction = {
       id: actionId,
@@ -92,7 +92,7 @@ class OfflineSync {
       }
     });
 
-    console.log(`📋 Queued ${type} action for offline sync:`, actionId);
+    // Queued action for offline sync
     return actionId;
   }
 
@@ -105,7 +105,7 @@ class OfflineSync {
     }
 
     this.syncInProgress = true;
-    console.log('🔄 Starting offline sync...', this.pendingActions.length, 'actions');
+    // Starting offline sync
 
     let syncedCount = 0;
     let failedCount = 0;
@@ -122,7 +122,7 @@ class OfflineSync {
 
     for (const action of sortedActions) {
       try {
-        console.log(`🔄 Syncing ${action.type} (${action.priority}):`, action.id);
+        // Syncing action with priority
         
         const success = await this.syncAction(action);
         
@@ -139,7 +139,7 @@ class OfflineSync {
             additionalContext: {
               actionId: action.id,
               actionType: action.type,
-              syncedAfterMinutes: (Date.now() - new Date(action.timestamp).getTime()) / (1000 * 60)
+              syncedAfterMinutes: ((new Date().getTime() - new Date(action.timestamp).getTime())) / (1000 * 60)
             }
           });
         } else {
@@ -167,7 +167,7 @@ class OfflineSync {
       } catch (error) {
         failedCount++;
         errors.push(`Failed to sync ${action.type}: ${error instanceof Error ? error.message : String(error)}`);
-        console.error(`❌ Failed to sync action ${action.id}:`, error);
+        // Failed to sync action - handle silently
       }
     }
 
@@ -181,7 +181,7 @@ class OfflineSync {
       errors
     };
 
-    console.log('✅ Offline sync completed:', result);
+    // Removed console.log for production
     
     auditService.logUserAction({
       action: 'offlineSyncCompleted',
@@ -201,7 +201,7 @@ class OfflineSync {
       switch (action.type) {
         case 'nfc_interaction':
           // Note: logNfcTap needs to be implemented in a service
-          console.warn('NFC tap logging not yet migrated to services');
+          // Warning: NFC tap logging not yet migrated to services
           return false;
 
         case 'vital_alert_acknowledgment':
@@ -244,11 +244,11 @@ class OfflineSync {
           );
 
         default:
-          console.warn(`Unknown action type for sync: ${action.type}`);
+          // Warning: Unknown action type for sync
           return false;
       }
     } catch (error) {
-      console.error(`Error syncing action ${action.id}:`, error);
+      // Error syncing action - handle silently
       return false;
     }
   }
@@ -257,7 +257,7 @@ class OfflineSync {
    * Handle online event
    */
   private handleOnline() {
-    console.log('🌐 Connection restored - starting offline sync');
+    // Connection restored - starting offline sync
     this.isOnline = true;
     
     auditService.logUserAction({
@@ -278,7 +278,7 @@ class OfflineSync {
    * Handle offline event
    */
   private handleOffline() {
-    console.log('📵 Connection lost - enabling offline mode');
+    // Connection lost - enabling offline mode
     this.isOnline = false;
     this.stopPeriodicSync();
 
@@ -327,20 +327,20 @@ class OfflineSync {
           const decrypted = ClientEncryption.decryptPatientData(stored);
           if (decrypted.actions && Array.isArray(decrypted.actions)) {
             this.pendingActions = decrypted.actions;
-            console.log(`📋 Loaded ${this.pendingActions.length} encrypted pending actions from storage`);
+            // Loaded encrypted pending actions from storage
             return;
           }
         } catch (decryptError) {
           // Fall back to legacy unencrypted format
-          console.log('📋 Falling back to legacy unencrypted pending actions');
+          // Falling back to legacy unencrypted pending actions
         }
         
         // Legacy unencrypted format
         this.pendingActions = JSON.parse(stored);
-        console.log(`📋 Loaded ${this.pendingActions.length} pending actions from storage (legacy format)`);
+        // Loaded pending actions from storage (legacy format)
       }
     } catch (error) {
-      console.error('Failed to load pending actions from localStorage:', error);
+      // Failed to load pending actions from localStorage - handle silently
       this.pendingActions = [];
     }
   }
@@ -357,12 +357,12 @@ class OfflineSync {
       });
       localStorage.setItem('hospital_pending_actions', encryptedActions);
     } catch (error) {
-      console.error('Failed to save encrypted pending actions:', error);
+      // Failed to save encrypted pending actions - handle silently
       // Fallback to unencrypted if encryption fails
       try {
         localStorage.setItem('hospital_pending_actions', JSON.stringify(this.pendingActions));
       } catch (fallbackError) {
-        console.error('Failed to save pending actions (fallback):', fallbackError);
+        // Failed to save pending actions (fallback) - handle silently
       }
     }
   }

@@ -57,24 +57,24 @@ export class VitalService extends BaseService {
     limit: number = 1000
   ): Promise<vitalhistory[]> {
     try {
-      console.log(`🫀 Fetching ${vitalType} time series for patient ${patientId} (${timeRange})`);
+      // Fetching vital time series for patient
 
       const response = await this.fetchFromBackend(
         `/patients/${patientId}/vitals/timeseries?vitalType=${vitalType}&timeRange=${timeRange}&limit=${limit}`
       );
 
       if (!Array.isArray(response)) {
-        console.warn('⚠️ Invalid vital time series response');
+        // Invalid vital time series response
         return [];
       }
 
       // Return data directly - transformation removed per user request
       const convertedData = Array.isArray(response) ? response : [];
-      console.log(`✅ Retrieved ${convertedData.length} vital data points`);
+      // Removed console.log for production
 
       return convertedData;
     } catch (error) {
-      console.error(`❌ Error fetching vital time series for ${patientId}:`, error);
+      // Error fetching vital time series
       return [];
     }
   }
@@ -101,7 +101,7 @@ export class VitalService extends BaseService {
       const response = await this.fetchFromBackend(`/patients/${patientId}/vitals/history?timeRange=${timeRange}`);
       return response || [];
     } catch (error) {
-      console.error('Failed to get vital history:', error);
+      // Failed to get vital history
       return [];
     }
   }
@@ -124,8 +124,8 @@ export class VitalService extends BaseService {
    *   48
    * );
    *
-   * console.log('Medication:', correlation.medication.name);
-   * console.log('Correlated vitals:', correlation.vitals.length);
+   * // Removed console.log for production
+   * // Removed console.log for production
    * ```
    */
   static async getMedicationCorrelatedVitals(
@@ -134,7 +134,7 @@ export class VitalService extends BaseService {
     hoursBack: number = 24
   ): Promise<{ medication: any; vitals: vitalhistory[] }> {
     try {
-      console.log(`💊 Fetching medication-correlated vitals for patient ${patientId}, medication ${medicationId}`);
+      // Fetching medication-correlated vitals
 
       const response = await this.fetchFromBackend(
         `/patients/${patientId}/vitals/medication-correlation?medicationId=${medicationId}&hoursBack=${hoursBack}`
@@ -149,7 +149,7 @@ export class VitalService extends BaseService {
         vitals: response.vitals || []
       };
     } catch (error) {
-      console.error('❌ Error fetching medication-correlated vitals:', error);
+      // Error fetching medication-correlated vitals
       return { medication: null, vitals: [] };
     }
   }
@@ -160,17 +160,17 @@ export class VitalService extends BaseService {
 
   static async updatePatientVitals(patientId: string, vitals: any): Promise<boolean> {
     try {
-      console.log(`🔄 Updating vitals for patient: ${patientId}`);
+      // Updating vitals for patient
 
       await this.fetchFromBackend(`/patients/${patientId}/vitals`, {
         method: 'POST',
         body: JSON.stringify(vitals)
       });
 
-      console.log('✅ Patient vitals updated successfully');
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error updating patient vitals:', error);
+      // Error updating patient vitals
       return false;
     }
   }
@@ -184,7 +184,7 @@ export class VitalService extends BaseService {
       const response = await this.fetchFromBackend(`/patients/${patientId}/ecg?range=${timeRange}`);
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.error('❌ Error fetching ECG readings:', error);
+      // Error fetching ECG readings
       return [];
     }
   }
@@ -200,10 +200,10 @@ export class VitalService extends BaseService {
         })
       });
 
-      console.log(`✅ Monitoring mode switched to ${isECGMode ? 'ECG' : 'Standard'} for patient ${patientId}`);
+      // Removed console.log for production
       return true;
     } catch (error) {
-      console.error('❌ Error switching monitoring mode:', error);
+      // Error switching monitoring mode
       return false;
     }
   }
@@ -217,7 +217,7 @@ export class VitalService extends BaseService {
       const response = await this.fetchFromBackend('/devices/proximity');
       return response;
     } catch (error) {
-      console.error('Failed to detect room proximity:', error);
+      // Failed to detect room proximity
       return { roomId: null, distance: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
@@ -230,7 +230,7 @@ export class VitalService extends BaseService {
     try {
       const currentUser = this.getCurrentUser();
       if (!currentUser) {
-        console.warn('⚠️ No current user found for medication timeline request');
+        // No current user found for medication timeline request
         return [];
       }
 
@@ -240,7 +240,7 @@ export class VitalService extends BaseService {
 
       return Array.isArray(response) ? response : [];
     } catch (error) {
-      console.error('❌ Error fetching medication timeline:', error);
+      // Error fetching medication timeline
       return [];
     }
   }
@@ -267,7 +267,7 @@ export class VitalService extends BaseService {
         lastSync: response?.lastSync || new Date().toISOString()
       };
     } catch (error) {
-      console.error('❌ Error fetching system status:', error);
+      // Error fetching system status
       return {
         totalPatients: 0,
         criticalAlerts: 0,

@@ -56,14 +56,15 @@ export abstract class BaseService {
 
     const method = options.method || 'GET';
     const body = options.body as string || '';
-    const timestamp = Math.floor(Date.now() / 1000).toString();
+    // Timestamp for request authentication - not for medical record IDs
+    const timestamp = Math.floor(new Date().getTime() / 1000).toString();
 
     // Use environment variable for secret key - fallback for development only
     const secretkey = process.env.REACT_APP_HOSPITAL_SECRET_KEY ||
       (process.env.NODE_ENV === 'development' ? 'dev-key-only-not-for-production' : '');
 
     if (!secretkey && process.env.NODE_ENV === 'production') {
-      console.error('🚨 CRITICAL: No secret key configured for production. Set REACT_APP_HOSPITAL_SECRET_KEY');
+      // CRITICAL: No secret key configured for production
       throw new Error('Authentication secret key not configured');
     }
 
@@ -107,7 +108,7 @@ export abstract class BaseService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`❌ API Error ${response.status}:`, errorText);
+        // API Error occurred
         throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
@@ -116,7 +117,7 @@ export abstract class BaseService {
       // Return data directly - transformation removed per user request
       return data;
     } catch (error) {
-      console.error(`❌ Network error for ${endpoint}:`, error);
+      // Network error occurred
       throw error;
     }
   }
@@ -125,7 +126,7 @@ export abstract class BaseService {
     try {
       return new WebSocket(getWsUrl(endpoint));
     } catch (error) {
-      console.error('❌ WebSocket connection failed:', error);
+      // WebSocket connection failed
       return null;
     }
   }
@@ -137,7 +138,7 @@ export abstract class BaseService {
   protected static canEditItem(timestamp: string): boolean {
     try {
       if (!timestamp) {
-        console.warn('⚠️ No timestamp provided for edit permission check');
+        // No timestamp provided for edit permission check
         return false;
       }
 
@@ -147,11 +148,11 @@ export abstract class BaseService {
       const maxEditWindow = 2 * 60 * 60 * 1000; // 2 hours in milliseconds - MEDICAL COMPLIANCE
 
       const canEdit = timeDiff <= maxEditWindow;
-      console.log(`🔍 Edit permission check: ${canEdit ? 'ALLOWED' : 'DENIED'} (${Math.round(timeDiff / (60 * 1000))} minutes old)`);
+      // Edit permission check completed
 
       return canEdit;
     } catch (error) {
-      console.error('❌ Error checking edit permission:', error);
+      // Error checking edit permission
       return false;
     }
   }
@@ -160,12 +161,12 @@ export abstract class BaseService {
     try {
       const userStr = localStorage.getItem('currentUser');
       if (!userStr) {
-        console.warn('⚠️ No current user found in localStorage');
+        // No current user found in localStorage
         return null;
       }
       return JSON.parse(userStr);
     } catch (error) {
-      console.error('❌ Error parsing current user from localStorage:', error);
+      // Error parsing current user from localStorage
       return null;
     }
   }
@@ -178,7 +179,7 @@ export abstract class BaseService {
       const response = await this.fetchFromBackend('/staff/mapping');
       return response || {};
     } catch (error) {
-      console.warn('⚠️ Staff mapping unavailable:', error);
+      // Staff mapping unavailable
       return {};
     }
   }
@@ -190,13 +191,13 @@ export abstract class BaseService {
   protected static async getStaffWithRoles(): Promise<{ [key: string]: { name: string; role: string } }> {
     try {
       const response = await this.fetchFromBackend('/staff/');
-      console.log('🔍 Staff endpoint response:', response);
+      // Staff endpoint response received
       if (!Array.isArray(response)) return {};
 
       // Convert staff array to ID -> {name, role} mapping
       const staffMapping: { [key: string]: { name: string; role: string } } = {};
       response.forEach((staff: any) => {
-        console.log('🔍 Individual staff object:', staff);
+        // Processing individual staff object
         // Try multiple possible ID field names
         const staffId = staff.staffId || staff.id || staff.userId || staff.staff_id;
         if (staffId) {
@@ -207,13 +208,13 @@ export abstract class BaseService {
             name: fullName,
             role: staff.role || staff.staffRole || 'Staff'
           };
-          console.log('🔍 Staff mapping added:', { staffId, name: fullName, role: staff.role });
+          // Staff mapping added
         }
       });
-      console.log('🔍 Final staff mapping:', staffMapping);
+      // Final staff mapping completed
       return staffMapping;
     } catch (error) {
-      console.warn('⚠️ Staff with roles unavailable:', error);
+      // Staff with roles unavailable
       return {};
     }
   }

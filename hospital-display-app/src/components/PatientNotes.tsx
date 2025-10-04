@@ -33,21 +33,31 @@ const PatientNotes: React.FC<PatientNotesProps> = ({
   const [editingNoteContent, setEditingNoteContent] = useState('');
 
   // Handle note added from editor
-  const handleNoteAdded = (newNote: noteComment) => {
-    setNotes(prev => [...prev, newNote]);
+  const handleNoteAdded = async (newNote: noteComment) => {
+    // Refetch fresh data from backend (single source of truth)
+    try {
+      const notesResponse = await fetch(`/api/v2/patients/${patient.id}/notes`);
+      if (notesResponse.ok) {
+        const data = await notesResponse.json();
+        setNotes(data.notes || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh notes after adding - handle silently
+    }
   };
 
   // Handle note edited from editor
-  const handleNoteEdited = (noteId: string, content: string, editedAt: string) => {
-    setNotes(prev => prev.map(note =>
-      note.id === noteId ? {
-        ...note,
-        content: content,
-        isEdited: true,
-        editedAt: editedAt,
-        canEdit: false // Edit time expired after successful edit
-      } : note
-    ));
+  const handleNoteEdited = async (noteId: string, content: string, editedAt: string) => {
+    // Refetch fresh data from backend (single source of truth)
+    try {
+      const notesResponse = await fetch(`/api/v2/patients/${patient.id}/notes`);
+      if (notesResponse.ok) {
+        const data = await notesResponse.json();
+        setNotes(data.notes || data);
+      }
+    } catch (refreshError) {
+      // Failed to refresh notes after editing - handle silently
+    }
   };
 
   // Handle edit note initiation

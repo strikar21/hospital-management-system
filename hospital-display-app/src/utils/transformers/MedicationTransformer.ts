@@ -23,7 +23,7 @@ export class MedicationTransformer extends BaseTransformer {
       // Validate required medication fields
       const requiredFields = ['name', 'dosage'];
       if (!this.validateMedicalData(data, requiredFields)) {
-        console.warn('Medication data missing required fields:', data);
+        // Warning noted
       }
 
       // Transform object keys to camelCase
@@ -46,7 +46,7 @@ export class MedicationTransformer extends BaseTransformer {
 
       return transformed;
     } catch (error) {
-      console.error('Error transforming medication data:', error);
+      // Error handled silently
       return data;
     }
   }

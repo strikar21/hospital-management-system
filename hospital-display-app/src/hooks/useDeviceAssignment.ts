@@ -186,7 +186,7 @@ export const useDeviceAssignment = (
       setFreeDevices(devices || []);
       setAvailableWatches(devices || []);
     } catch (error) {
-      console.error('Error loading free devices:', error);
+      // Error loading free devices - handle silently
       setFreeDevices([]);
       setAvailableWatches([]);
     }
@@ -197,7 +197,7 @@ export const useDeviceAssignment = (
       const patients = await PatientService.getPatients();
       setPatients(patients || []);
     } catch (error) {
-      console.error('Error loading patients:', error);
+      // Error loading patients - handle silently
       setPatients([]);
     }
   }, []);
@@ -208,7 +208,7 @@ export const useDeviceAssignment = (
       setAssignedDevices(assigned || []);
       setAssignedWatches(assigned || []);
     } catch (error) {
-      console.error('Error loading assigned devices:', error);
+      // Error loading assigned devices - handle silently
       setAssignedDevices([]);
       setAssignedWatches([]);
     }
@@ -219,7 +219,7 @@ export const useDeviceAssignment = (
       const status = await DeviceService.getDevicePoolStatus(currentUser.staffId);
       setPoolStatus(status);
     } catch (error) {
-      console.error('Error loading pool status:', error);
+      // Error loading pool status - handle silently
       setPoolStatus(null);
     }
   }, [currentUser.staffId]);
@@ -235,7 +235,7 @@ export const useDeviceAssignment = (
         loadPoolStatus()
       ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      // Error refreshing data - handle silently
       showMessage('Failed to refresh device data', true);
     } finally {
       setLoading(false);
@@ -257,7 +257,7 @@ export const useDeviceAssignment = (
 
       return true;
     } catch (error) {
-      console.error('Error assigning device:', error);
+      // Error assigning device - handle silently
       showMessage('Failed to assign device', true);
       return false;
     } finally {
@@ -273,7 +273,7 @@ export const useDeviceAssignment = (
       await refreshData();
       return true;
     } catch (error) {
-      console.error('Error unassigning device:', error);
+      // Error unassigning device - handle silently
       showMessage('Failed to unassign device', true);
       return false;
     } finally {
@@ -289,7 +289,7 @@ export const useDeviceAssignment = (
       await refreshData();
       return true;
     } catch (error) {
-      console.error('Error calibrating device:', error);
+      // Error calibrating device - handle silently
       showMessage('Failed to calibrate device', true);
       return false;
     } finally {

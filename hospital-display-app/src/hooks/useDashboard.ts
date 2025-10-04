@@ -121,7 +121,7 @@ export const useDashboard = ({
       const proximity = await VitalService.detectRoomProximity();
       setRoomProximity(proximity);
     } catch (error) {
-      console.error('Failed to detect room proximity:', error);
+      // Failed to detect room proximity - handle silently
     } finally {
       setProximityScanning(false);
     }
@@ -141,11 +141,16 @@ export const useDashboard = ({
   }, [currentUser, detectProximity]);
 
   // Event handlers
-  const handleToggleECGMode = (patient: patient) => {
+  const handleToggleECGMode = async (patient: patient) => {
     if (!patient.vitals) return;
-    updatePatient(patient.id, {
-      vitals: { ...patient.vitals, isEcgMode: !patient.vitals.isEcgMode }
-    });
+    try {
+      // Send ECG mode toggle to backend first
+      await PatientService.toggleECGMode(patient.id, !patient.vitals.isEcgMode);
+      // Refetch fresh patient data from backend (single source of truth)
+      loadPatients();
+    } catch (error) {
+      // Failed to toggle ECG mode - handle silently
+    }
   };
 
   const handleVitalClick = async (patient: patient, vitalType: string) => {
@@ -168,18 +173,8 @@ export const useDashboard = ({
     try {
       await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
 
-      const updatedAlerts = (patient.alerts || []).map(alert =>
-        alert.id === alertId ? {
-          ...alert,
-          isAcknowledged: true,
-          performedby: currentUser.id,
-          performedbyName: currentUser.name,
-          performedbyRole: currentUser.role,
-          completedat: new Date().toISOString()
-        } : alert
-      );
-
-      updatePatient(patient.id, { alerts: updatedAlerts });
+      // Refetch fresh patient data from backend (single source of truth)
+      loadPatients();
 
       const existingTimeout = alertTimeoutsRef.current.get(alertId);
       if (existingTimeout) {
@@ -187,14 +182,14 @@ export const useDashboard = ({
       }
 
       const timeout = setTimeout(() => {
-        const filteredAlerts = updatedAlerts.filter(a => a.id !== alertId);
-        updatePatient(patient.id, { alerts: filteredAlerts });
+        // Refetch fresh data from backend after alert auto-hide period
+        loadPatients();
         alertTimeoutsRef.current.delete(alertId);
       }, 2000);
 
       alertTimeoutsRef.current.set(alertId, timeout);
     } catch (error) {
-      console.error('Failed to acknowledge alert:', error);
+      // Failed to acknowledge alert - handle silently
       alert('Failed to acknowledge alert. Please try again.');
     }
   };
@@ -217,7 +212,7 @@ export const useDashboard = ({
 
   const handlePatientSelection = async (patient: patient) => {
     try {
-      console.log(`🔍 Fetching complete details for patient: ${patient.id}`);
+      // Fetching complete details for patient - processing silently
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Request timeout')), 10000);
@@ -229,14 +224,14 @@ export const useDashboard = ({
       ]);
 
       if (fullPatientData) {
-        console.log(`✅ Got complete patient data with ${fullPatientData.medications?.length || 0} medications, ${fullPatientData.investigations?.length || 0} investigations, ${fullPatientData.therapies?.length || 0} therapies`);
+        // Removed console.log for production
         setSelectedPatient(fullPatientData);
       } else {
-        console.error('❌ Failed to fetch complete patient data');
+        // Failed to fetch complete patient data - handle silently
         setSelectedPatient(patient);
       }
     } catch (error) {
-      console.error('❌ Error fetching complete patient data:', error);
+      // Error fetching complete patient data - handle silently
       setSelectedPatient(patient);
     }
   };

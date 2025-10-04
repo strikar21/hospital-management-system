@@ -114,7 +114,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       setFreeDevices(devices || []);
       setAvailableWatches(devices || []);
     } catch (error) {
-      console.error('Error loading free devices:', error);
+      // Error handled silently
       setFreeDevices([]);
       setAvailableWatches([]);
     }
@@ -125,7 +125,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       const patients = await PatientService.getPatients();
       setPatients(patients || []);
     } catch (error) {
-      console.error('Error loading patients:', error);
+      // Error handled silently
       setPatients([]);
     }
   };
@@ -158,7 +158,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
       setPoolStatus(poolStatusData);
     } catch (error) {
-      console.error('Error loading pool status:', error);
+      // Error handled silently
     }
   };
 
@@ -167,7 +167,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       const data = await DeviceService.getAssignmentHistory(currentUser.staffId, undefined, undefined, 20);
       setAssignedWatches(data || []);
     } catch (error) {
-      console.error('Error loading assignment history:', error);
+      // Error handled silently
       setAssignedWatches([]);
     }
   };
@@ -184,7 +184,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 
       setAssignedDevices(assignedWithPatients);
     } catch (error) {
-      console.error('Error loading assigned devices:', error);
+      // Error handled silently
     }
   };
 
@@ -203,7 +203,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       setSelectedPatient('');
       await refreshData();
     } catch (error: any) {
-      console.error('Error assigning device:', error);
+      // Error handled silently
       showMessage(error.message || 'Assignment failed', true);
     }
     setLoading(false);
@@ -218,7 +218,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
       showMessage('Device unassigned successfully!');
       await refreshData();
     } catch (error: any) {
-      console.error('Error unassigning device:', error);
+      // Error handled silently
       showMessage(error.message || 'Unassignment failed', true);
     }
     setLoading(false);

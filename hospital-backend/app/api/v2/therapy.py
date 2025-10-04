@@ -149,7 +149,7 @@ async def get_active_therapy_sessions(patient_id: str):
 @router.post("/patient/{patient_id}/add")
 async def add_therapy_session_simplified(patient_id: str, session_data: dict):
     """Add therapy session to patient (simplified path for frontend)"""
-    return await add_therapy_session(patient_id, session_data)
+    return await add_therapy(patient_id, session_data)
 
 
 @router.put("/{session_id}/status")

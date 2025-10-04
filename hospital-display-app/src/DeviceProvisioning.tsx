@@ -82,7 +82,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
       if (response.ok) {
         const result = await response.json();
         showMessage(`Device provisioned successfully! Backend assigned ID: ${result.deviceId}`);
-        console.log('Device provisioned:', result);
+        // Removed console.log for production
         
         // Reset form
         setFormData({
@@ -99,7 +99,7 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
         showMessage(errorData.detail || 'Failed to provision device', true);
       }
     } catch (error: any) {
-      console.error('Error provisioning device:', error);
+      // Error handled silently
       showMessage('Failed to provision device', true);
     }
     setLoading(false);

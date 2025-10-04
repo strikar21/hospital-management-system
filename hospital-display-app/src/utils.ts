@@ -227,93 +227,9 @@ export const formatBloodPressure = (systolic: number, diastolic?: number): strin
   return `${sys}/${dia}`;
 };
 
-// Enhanced vital sign interpretation with clinical context including new vitals
-export const getVitalInterpretation = (
-  heartRate: number,
-  systolicPressure: number,
-  diastolicPressure: number,
-  oxygenSaturation: number,
-  skinTemperature: number,
-  ecgReading: number,
-  eegReading?: number,
-  respiratoryRate?: number,
-  bioelectricalImpedance?: number,
-  tremorIntensity?: number
-): string => {
-  const interpretations: string[] = [];
-
-  // Heart rate interpretation
-  if (heartRate < 50) interpretations.push('Severe bradycardia detected');
-  else if (heartRate < 60) interpretations.push('Bradycardia present');
-  else if (heartRate > 120) interpretations.push('Tachycardia present');
-  else if (heartRate > 100) interpretations.push('Mild tachycardia');
-
-  // Blood pressure interpretation - check both systolic and diastolic
-  if (systolicPressure > 180 || diastolicPressure > 120) interpretations.push('Hypertensive crisis');
-  else if (systolicPressure > 160 || diastolicPressure > 100) interpretations.push('Stage 2 hypertension');
-  else if (systolicPressure > 140 || diastolicPressure > 90) interpretations.push('Stage 1 hypertension');
-  else if (systolicPressure < 90 || diastolicPressure < 60) interpretations.push('Hypotension');
-  
-  // Oxygen saturation interpretation
-  if (oxygenSaturation < 90) interpretations.push('Severe hypoxemia');
-  else if (oxygenSaturation < 95) interpretations.push('Mild hypoxemia');
-  
-  // Temperature interpretation
-  if (skinTemperature > 102) interpretations.push('High fever');
-  else if (skinTemperature > 100.4) interpretations.push('Fever present');
-  else if (skinTemperature < 96) interpretations.push('Hypothermia');
-  
-  // Additional temperature interpretation
-  if (skinTemperature) {
-    if (skinTemperature > 103) interpretations.push('Elevated skin temperature');
-    else if (skinTemperature < 95) interpretations.push('Low skin temperature');
-  }
-  
-  // Respiratory rate interpretation
-  if (respiratoryRate) {
-    if (respiratoryRate > 25) interpretations.push('Tachypnea');
-    else if (respiratoryRate < 8) interpretations.push('Bradypnea');
-  }
-  
-  // Arrhythmia detection
-  if (MedicalUtils.detectArrhythmia(heartRate, ecgReading)) {
-    const arrhythmiaType = MedicalUtils.getArrhythmiaType(heartRate, ecgReading);
-    if (arrhythmiaType) {
-      interpretations.push(`${arrhythmiaType} detected`);
-    }
-  }
-  
-  // EEG interpretation
-  if (eegReading) {
-    if (MedicalUtils.detectSeizureActivity(eegReading, heartRate)) {
-      interpretations.push('Possible seizure activity detected');
-    } else if (eegReading > 70) {
-      interpretations.push('Elevated brain activity');
-    } else if (eegReading < 5) {
-      interpretations.push('Low brain activity');
-    }
-  }
-  
-  // Tremor interpretation
-  if (tremorIntensity) {
-    if (tremorIntensity > 7) interpretations.push('Severe tremor detected');
-    else if (tremorIntensity > 4) interpretations.push('Moderate tremor present');
-    else if (tremorIntensity > 1) interpretations.push('Mild tremor noted');
-  }
-  
-  // Bioimpedance interpretation
-  if (bioelectricalImpedance) {
-    if (bioelectricalImpedance < 350 || bioelectricalImpedance > 850) {
-      interpretations.push('Abnormal bioimpedance reading');
-    }
-  }
-  
-  if (interpretations.length === 0) {
-    return 'All vital signs within normal limits';
-  }
-  
-  return interpretations.join('; ');
-};
+// REMOVED: Frontend medical interpretation function
+// All clinical interpretations now come from backend only
+// Frontend displays backend-provided interpretations without analysis
 
 // Vital trend analysis
 export const getVitalTrend = (currentValue: number, previousValue: number, vitalType: vitaltype): 'rising' | 'falling' | 'stable' => {
