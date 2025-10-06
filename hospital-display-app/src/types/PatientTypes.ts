@@ -79,10 +79,10 @@ export interface alert {
   type?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: string;
-  performedBy?: string;
-  performedByName?: string;
-  performedByRole?: string;
-  completedAt?: string;
+  acknowledgedBy?: string;
+  acknowledgedByName?: string;
+  acknowledgedByRole?: string;
+  acknowledgedAt?: string;
   isAcknowledged: boolean;
 }
 

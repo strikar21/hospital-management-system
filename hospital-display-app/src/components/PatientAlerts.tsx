@@ -175,9 +175,9 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
                   <span className="text-xs text-green-700 font-medium truncate flex-1">{alert.message}</span>
                 </div>
                 <div className="text-xs text-gray-600 flex-shrink-0">
-                  by {alert.performedByName || `User ${alert.performedBy}`}
-                  {alert.performedByRole && ` (${alert.performedByRole})`}
-                  {alert.completedAt && ` • ${formatTimeOnly(alert.completedAt)}`}
+                  by {alert.acknowledgedByName || `User ${alert.acknowledgedBy}`}
+                  {alert.acknowledgedByRole && ` (${alert.acknowledgedByRole})`}
+                  {alert.acknowledgedAt && ` • ${formatTimeOnly(alert.acknowledgedAt)}`}
                 </div>
               </div>
             ))}
