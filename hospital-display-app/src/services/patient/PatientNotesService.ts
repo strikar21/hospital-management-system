@@ -36,7 +36,7 @@ export class PatientNotesService extends BaseService {
         body: JSON.stringify({
           content,
           comment: content, // Support both field names
-          commentedBy: userId,
+          createdBy: userId,
           authorName: username
         })
       });
@@ -64,8 +64,8 @@ export class PatientNotesService extends BaseService {
         method: 'PUT',
         body: JSON.stringify({
           content: newContent,
-          editedBy: userId,
-          editedAt: new Date().toISOString()
+          modifiedBy: userId,
+          modifiedAt: new Date().toISOString()
         })
       });
       return true;
