@@ -479,9 +479,9 @@ class PatientRepository(BaseRepository[Patient]):
 
                 # Add performedByName to entries that don't have it
                 for entry in timeline_entries:
-                    performed_by = entry.get('performedBy')
-                    if performed_by and performed_by in staff_names and not entry.get('performedByName'):
-                        entry['performedByName'] = staff_names[performed_by]
+                    performedBy = entry.get('performedBy')
+                    if performedBy and performedBy in staff_names and not entry.get('performedByName'):
+                        entry['performedByName'] = staff_names[performedBy]
 
             # Sort all entries by timestamp (newest first)
             timeline_entries.sort(key=lambda x: x['timestamp'], reverse=True)

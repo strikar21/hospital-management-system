@@ -48,7 +48,7 @@ export class TherapyService extends BaseService {
   // Exclude backend-generated audit fields from creation payload
   static async addTherapy(patientId: string, therapy: Omit<therapy, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>, userId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/therapies?performed_by=${userId}`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/therapies?performedBy=${userId}`, {
         method: 'POST',
         body: JSON.stringify({
           ...therapy,

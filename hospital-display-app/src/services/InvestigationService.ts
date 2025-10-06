@@ -47,7 +47,7 @@ export class InvestigationService extends BaseService {
   // Exclude backend-generated audit fields from creation payload
   static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>, userId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/investigations?performed_by=${userId}`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/investigations?performedBy=${userId}`, {
         method: 'POST',
         body: JSON.stringify({
           ...investigation,

@@ -73,7 +73,7 @@ class TherapySessionRequest(BaseModel):
     therapy_id: str
     duration: int  # minutes
     notes: str
-    performed_by: str
+    performedBy: str
 
 
 class AlertAcknowledgmentRequest(BaseModel):
@@ -106,7 +106,7 @@ class AtomicResponse(BaseModel):
 async def add_medication_atomic_endpoint(
     patient_id: str,
     medication: MedicationRequest,
-    performed_by: str = "SYSTEM"  # In real implementation, get from auth
+    performedBy: str = "SYSTEM"  # In real implementation, get from auth
 ) -> AtomicResponse:
     """
     Add medication atomically with automatic case entry creation
@@ -121,14 +121,14 @@ async def add_medication_atomic_endpoint(
     try:
         logger.info(f"Atomic medication request for patient {patient_id}")
         logger.info(f"DEBUG: Raw medication object: {medication}")
-        logger.info(f"DEBUG: performed_by parameter: {performed_by}")
+        logger.info(f"DEBUG: performedBy parameter: {performedBy}")
 
         # Convert to dict for service
         medication_data = medication.dict(exclude_none=True)
         logger.info(f"DEBUG: medication_data after dict conversion: {medication_data}")
 
         # Execute atomic operation
-        result = await add_medication_atomic(patient_id, medication_data, performed_by)
+        result = await add_medication_atomic(patient_id, medication_data, performedBy)
 
         return AtomicResponse(
             success=True,
@@ -151,7 +151,7 @@ async def add_medication_atomic_endpoint(
 async def add_investigation_atomic_endpoint(
     patient_id: str,
     investigation: InvestigationRequest,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Add investigation atomically with automatic case entry creation
@@ -168,7 +168,7 @@ async def add_investigation_atomic_endpoint(
 
         investigation_data = investigation.dict(exclude_none=True)
 
-        result = await add_investigation_atomic(patient_id, investigation_data, performed_by)
+        result = await add_investigation_atomic(patient_id, investigation_data, performedBy)
 
         return AtomicResponse(
             success=True,
@@ -191,7 +191,7 @@ async def add_investigation_atomic_endpoint(
 async def add_therapy_atomic_endpoint(
     patient_id: str,
     therapy: TherapyRequest,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Add therapy atomically with automatic case entry creation
@@ -208,7 +208,7 @@ async def add_therapy_atomic_endpoint(
 
         therapy_data = therapy.dict(exclude_none=True)
 
-        result = await add_therapy_atomic(patient_id, therapy_data, performed_by)
+        result = await add_therapy_atomic(patient_id, therapy_data, performedBy)
 
         return AtomicResponse(
             success=True,
@@ -231,7 +231,7 @@ async def add_therapy_atomic_endpoint(
 async def add_note_atomic_endpoint(
     patient_id: str,
     note: NoteRequest,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Add patient note atomically with automatic case entry creation
@@ -248,7 +248,7 @@ async def add_note_atomic_endpoint(
 
         note_data = note.dict(exclude_none=True)
 
-        result = await add_note_atomic(patient_id, note_data, performed_by)
+        result = await add_note_atomic(patient_id, note_data, performedBy)
 
         return AtomicResponse(
             success=True,
@@ -272,7 +272,7 @@ async def execute_medical_action_endpoint(
     patient_id: str,
     action_type: str,
     action_data: Dict[str, Any],
-    performed_by: str = "SYSTEM",
+    performedBy: str = "SYSTEM",
     idempotency_key: Optional[str] = None
 ) -> AtomicResponse:
     """
@@ -285,7 +285,7 @@ async def execute_medical_action_endpoint(
         logger.info(f"Universal atomic action '{action_type}' for patient {patient_id}")
 
         result = await medical_action_service.execute_medical_action(
-            action_type, patient_id, action_data, performed_by, idempotency_key
+            action_type, patient_id, action_data, performedBy, idempotency_key
         )
 
         return AtomicResponse(
@@ -385,7 +385,7 @@ async def record_therapy_session_atomic_endpoint(
             'therapy_session',
             patient_id,
             session_data,
-            request.performed_by
+            request.performedBy
         )
 
         return AtomicResponse(
@@ -412,7 +412,7 @@ async def update_investigation_status_atomic(
     patient_id: str,
     investigation_id: str,
     new_status: str,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Update investigation status atomically with automatic case entry creation
@@ -435,7 +435,7 @@ async def update_investigation_status_atomic(
                 'new_status': new_status,
                 'action': f'Investigation status changed to {new_status}'
             },
-            performed_by
+            performedBy
         )
 
         return AtomicResponse(
@@ -460,7 +460,7 @@ async def update_medication_status_atomic(
     patient_id: str,
     medication_id: str,
     new_status: str,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Update medication status atomically with automatic case entry creation
@@ -476,7 +476,7 @@ async def update_medication_status_atomic(
                 'new_status': new_status,
                 'action': f'Medication status changed to {new_status}'
             },
-            performed_by
+            performedBy
         )
 
         return AtomicResponse(
@@ -501,7 +501,7 @@ async def update_therapy_status_atomic(
     patient_id: str,
     therapy_id: str,
     new_status: str,
-    performed_by: str = "SYSTEM"
+    performedBy: str = "SYSTEM"
 ) -> AtomicResponse:
     """
     Update therapy status atomically with automatic case entry creation
@@ -517,7 +517,7 @@ async def update_therapy_status_atomic(
                 'new_status': new_status,
                 'action': f'Therapy status changed to {new_status}'
             },
-            performed_by
+            performedBy
         )
 
         return AtomicResponse(

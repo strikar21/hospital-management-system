@@ -1221,8 +1221,8 @@ async def get_case_entries(patient_id: str):
                     c.timestamp as event_time,
                     c."entryType" as sub_type,
                     c.description,
-                    COALESCE(c."createdBy", 'Unknown') as performed_by,
-                    c."createdBy" as performed_by_id,
+                    COALESCE(c."createdBy", 'Unknown') as performedBy,
+                    c."createdBy" as performedBy_id,
                     c."createdAt",
                     c.id::text as record_id
                 FROM "caseEntries" c
@@ -1241,8 +1241,8 @@ async def get_case_entries(patient_id: str):
                     ma.status as sub_type,
                     (m.name || ' - ' || COALESCE(ma.dosagegiven, m.dosage) ||
                      CASE WHEN ma.notes IS NOT NULL THEN ' (' || ma.notes || ')' ELSE '' END) as description,
-                    COALESCE(ma."performedBy", 'System') as performed_by,
-                    ma."performedBy" as performed_by_id,
+                    COALESCE(ma."performedBy", 'System') as performedBy,
+                    ma."performedBy" as performedBy_id,
                     ma.createdat,
                     ma.id::text as record_id
                 FROM medicationadministrations ma
@@ -1266,8 +1266,8 @@ async def get_case_entries(patient_id: str):
                           WHEN i.status = 'cancelled' THEN ' - Cancelled'
                           WHEN i.status = 'critical' THEN ' - Critical'
                           ELSE ' - ' || i.status END) as description,
-                    COALESCE(i.performedby, 'System') as performed_by,
-                    i.performedby as performed_by_id,
+                    COALESCE(i.performedby, 'System') as performedBy,
+                    i.performedby as performedBy_id,
                     i.createdat,
                     i.id::text as record_id
                 FROM investigations i
@@ -1286,8 +1286,8 @@ async def get_case_entries(patient_id: str):
                     ts.status as sub_type,
                     (th.type || ' session #' || ts.sessionnumber ||
                      CASE WHEN ts.sessionnotes IS NOT NULL THEN ' (' || ts.sessionnotes || ')' ELSE '' END) as description,
-                    COALESCE(ts.performedby, 'System') as performed_by,
-                    ts.performedby as performed_by_id,
+                    COALESCE(ts.performedby, 'System') as performedBy,
+                    ts.performedby as performedBy_id,
                     ts.createdat,
                     ts.id::text as record_id
                 FROM therapysessions ts
@@ -1306,8 +1306,8 @@ async def get_case_entries(patient_id: str):
                     CASE WHEN pn.isedited THEN 'edited' ELSE 'added' END as sub_type,
                     (CASE WHEN LENGTH(pn.content) > 100 THEN LEFT(pn.content, 100) || '...'
                           ELSE pn.content END) as description,
-                    COALESCE(s.firstname || ' ' || s.lastname, pn.authorid) as performed_by,
-                    pn.authorid as performed_by_id,
+                    COALESCE(s.firstname || ' ' || s.lastname, pn.authorid) as performedBy,
+                    pn.authorid as performedBy_id,
                     pn.timestamp as createdat,
                     pn.id::text as record_id
                 FROM patientnotes pn
@@ -1328,8 +1328,8 @@ async def get_case_entries(patient_id: str):
                           THEN 'Unassigned ' || d.devicetype || ' (' || d.serialnumber || ')'
                           ELSE 'Assigned ' || d.devicetype || ' (' || d.serialnumber || ')' END ||
                      CASE WHEN da.notes IS NOT NULL THEN ' - ' || da.notes ELSE '' END) as description,
-                    (s.firstname || ' ' || s.lastname) as performed_by,
-                    da.assignedby as performed_by_id,
+                    (s.firstname || ' ' || s.lastname) as performedBy,
+                    da.assignedby as performedBy_id,
                     da.assignedat as createdat,
                     da.id::text as record_id
                 FROM deviceassignments da
@@ -1350,8 +1350,8 @@ async def get_case_entries(patient_id: str):
                     ('Admitted to ' || COALESCE(p.roomnumber, 'unassigned room') ||
                      CASE WHEN p.bednumber IS NOT NULL THEN ' - Bed ' || p.bednumber ELSE '' END ||
                      CASE WHEN p.attendingphysician IS NOT NULL THEN ' - ' || p.attendingphysician ELSE '' END) as description,
-                    COALESCE(p.nurseincharge, 'System') as performed_by,
-                    NULL as performed_by_id,
+                    COALESCE(p.nurseincharge, 'System') as performedBy,
+                    NULL as performedBy_id,
                     p.createdat,
                     p.id as record_id
                 FROM patients p
@@ -1364,8 +1364,8 @@ async def get_case_entries(patient_id: str):
                     p.dischargedate as event_time,
                     'discharged' as sub_type,
                     'Patient discharged' as description,
-                    'System' as performed_by,
-                    NULL as performed_by_id,
+                    'System' as performedBy,
+                    NULL as performedBy_id,
                     p.dischargedate as createdat,
                     p.id as record_id
                 FROM patients p
@@ -1388,8 +1388,8 @@ async def get_case_entries(patient_id: str):
                     'entryType': entry['entry_type'],
                     'subType': entry.get('sub_type'),
                     'description': entry['description'],
-                    'performedBy': entry.get('performed_by', 'System'),
-                    'performedById': entry.get('performed_by_id'),
+                    'performedBy': entry.get('performedBy', 'System'),
+                    'performedById': entry.get('performedBy_id'),
                     'timestamp': entry['event_time'] if entry['event_time'] else entry['createdat'],
                     'createdAt': entry['createdat']
                 }

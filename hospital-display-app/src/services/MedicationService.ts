@@ -46,7 +46,7 @@ export class MedicationService extends BaseService {
 
   static async addMedication(patientId: string, medication: Omit<medication, 'id' | 'history'>, userId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/medications?performed_by=${userId}`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/medications?performedBy=${userId}`, {
         method: 'POST',
         body: JSON.stringify({
           name: medication.name,

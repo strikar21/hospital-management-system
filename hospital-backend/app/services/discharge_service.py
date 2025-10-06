@@ -71,7 +71,7 @@ class DischargeService(BaseService):
     async def complete_discharge(
         self,
         request_id: int,
-        performed_by: str,
+        performedBy: str,
         discharge_notes: Optional[str] = None
     ) -> Dict:
         """Nurse completes patient discharge"""
@@ -88,7 +88,7 @@ class DischargeService(BaseService):
 
         result = await self.execute_custom_query(
             query,
-            [performed_by, discharge_notes, request_id]
+            [performedBy, discharge_notes, request_id]
         )
 
         if result:
@@ -103,7 +103,7 @@ class DischargeService(BaseService):
             """
             await self.execute_custom_query(patient_query, [request_id])
 
-            logger.info(f"Discharge completed for request {request_id} by {performed_by}")
+            logger.info(f"Discharge completed for request {request_id} by {performedBy}")
 
         return result[0] if result else None
 

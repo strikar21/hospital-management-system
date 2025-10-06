@@ -68,7 +68,7 @@ class MedicalActionService:
         action_type: str,
         patient_id: str,
         action_data: Dict[str, Any],
-        performed_by: str,
+        performedBy: str,
         idempotency_key: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -78,7 +78,7 @@ class MedicalActionService:
             action_type: Type of medical action ('medication', 'investigation', 'therapy', 'note')
             patient_id: Patient ID
             action_data: Medical action data
-            performed_by: Staff ID performing the action
+            performedBy: Staff ID performing the action
             idempotency_key: Optional key for idempotent operations
 
         Returns:
@@ -92,8 +92,8 @@ class MedicalActionService:
         if not patient_id or not patient_id.strip():
             raise ValidationException("Patient ID is required", field="patient_id")
 
-        if not performed_by or not performed_by.strip():
-            raise ValidationException("Performed by staff ID is required", field="performed_by")
+        if not performedBy or not performedBy.strip():
+            raise ValidationException("Performed by staff ID is required", field="performedBy")
 
         if not action_data or not isinstance(action_data, dict):
             raise ValidationException("Action data must be a non-empty dictionary", field="action_data")
@@ -134,12 +134,12 @@ class MedicalActionService:
                 try:
                     # Execute the specific medical action
                     medical_record = await self._execute_action(
-                        conn, action_type, patient_id, action_data, performed_by
+                        conn, action_type, patient_id, action_data, performedBy
                     )
 
                     # Auto-create case entry in same transaction
                     case_entry = await self._create_case_entry(
-                        conn, patient_id, action_type, medical_record, performed_by
+                        conn, patient_id, action_type, medical_record, performedBy
                     )
 
                     # Store idempotency result
@@ -158,7 +158,7 @@ class MedicalActionService:
 
                     # Audit logging
                     await logAuditEvent(
-                        userId=performed_by,
+                        userId=performedBy,
                         action=f"atomic_{action_type}",
                         resourceType=action_type,
                         resourceId=str(medical_record.get('id')),
@@ -227,28 +227,28 @@ class MedicalActionService:
         action_type: str,
         patient_id: str,
         action_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Execute specific medical action based on type"""
 
         if action_type == 'medication':
-            return await self._create_medication(conn, patient_id, action_data, performed_by)
+            return await self._create_medication(conn, patient_id, action_data, performedBy)
         elif action_type == 'investigation':
-            return await self._create_investigation(conn, patient_id, action_data, performed_by)
+            return await self._create_investigation(conn, patient_id, action_data, performedBy)
         elif action_type == 'therapy':
-            return await self._create_therapy(conn, patient_id, action_data, performed_by)
+            return await self._create_therapy(conn, patient_id, action_data, performedBy)
         elif action_type == 'note':
-            return await self._create_note(conn, patient_id, action_data, performed_by)
+            return await self._create_note(conn, patient_id, action_data, performedBy)
         elif action_type == 'medication_administration':
-            return await self._record_medication_administration(conn, patient_id, action_data, performed_by)
+            return await self._record_medication_administration(conn, patient_id, action_data, performedBy)
         elif action_type == 'therapy_session':
-            return await self._record_therapy_session(conn, patient_id, action_data, performed_by)
+            return await self._record_therapy_session(conn, patient_id, action_data, performedBy)
         elif action_type == 'alert_acknowledgment':
-            return await self._record_alert_acknowledgment(conn, patient_id, action_data, performed_by)
+            return await self._record_alert_acknowledgment(conn, patient_id, action_data, performedBy)
         elif action_type == 'investigation_completion':
-            return await self._record_investigation_completion(conn, patient_id, action_data, performed_by)
+            return await self._record_investigation_completion(conn, patient_id, action_data, performedBy)
         elif action_type == 'medication_status_change':
-            return await self._record_medication_status_change(conn, patient_id, action_data, performed_by)
+            return await self._record_medication_status_change(conn, patient_id, action_data, performedBy)
         else:
             raise ValueError(f"Unknown action type: {action_type}")
 
@@ -257,12 +257,12 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         medication_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Create medication record atomically"""
 
         self.logger.info(f"DEBUG: _create_medication called with medication_data: {medication_data}")
-        self.logger.info(f"DEBUG: performed_by: {performed_by}")
+        self.logger.info(f"DEBUG: performedBy: {performedBy}")
 
         med_data = {
             'patientId': patient_id,
@@ -273,7 +273,7 @@ class MedicalActionService:
             'startDate': medication_data.get('startDate', datetime.now()),
             'endDate': medication_data.get('endDate'),
             'duration': medication_data.get('duration'),
-            'prescribedBy': medication_data.get('prescribedBy', performed_by),
+            'prescribedBy': medication_data.get('prescribedBy', performedBy),
             'status': medication_data.get('status', 'active')
         }
 
@@ -309,7 +309,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         investigation_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Create investigation record atomically"""
 
@@ -320,7 +320,7 @@ class MedicalActionService:
             'status': 'pending',
             'priority': investigation_data.get('priority', 'Routine'),
             'urgency': investigation_data.get('urgency', 'Routine'),
-            'prescribedBy': investigation_data.get('prescribedBy', performed_by),
+            'prescribedBy': investigation_data.get('prescribedBy', performedBy),
             'notes': investigation_data.get('notes'),
             'createdAt': datetime.now()
         }
@@ -344,7 +344,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         therapy_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Create therapy record atomically"""
 
@@ -356,7 +356,7 @@ class MedicalActionService:
             'endDate': therapy_data.get('endDate'),
             'frequency': therapy_data.get('frequency'),
             'duration': therapy_data.get('duration'),
-            'prescribedBy': therapy_data.get('prescribedBy', performed_by),
+            'prescribedBy': therapy_data.get('prescribedBy', performedBy),
             'notes': therapy_data.get('notes'),
             'status': 'active'
         }
@@ -380,7 +380,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         note_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Create patient note atomically"""
 
@@ -390,7 +390,7 @@ class MedicalActionService:
         note_record = {
             'patientId': patient_id,
             'content': content,
-            'createdBy': performed_by
+            'createdBy': performedBy
             # timestamp is auto-generated by database DEFAULT NOW()
             # authorName is resolved via JOIN when fetching notes
         }
@@ -414,7 +414,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         administration_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Record medication administration atomically with database persistence"""
 
@@ -433,8 +433,8 @@ class MedicalActionService:
             'patientId': patient_id,
             'scheduledTime': administered_at,  # Required field - use current time
             'performedAt': administered_at,
-            'performedBy': performed_by,
-            'createdBy': performed_by,  # Audit trail - who created this administration record
+            'performedBy': performedBy,
+            'createdBy': performedBy,  # Audit trail - who created this administration record
             'dosageGiven': medication_details['dosage'] if medication_details else 'Unknown',
             'route': medication_details['route'] if medication_details else 'Unknown',
             'status': 'completed',
@@ -475,7 +475,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         session_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Record therapy session completion atomically with database persistence"""
 
@@ -501,7 +501,7 @@ class MedicalActionService:
             'sessionNumber': next_session_number,
             'scheduledDate': completed_at,  # Use current time as scheduled
             'completedAt': completed_at,
-            'performedBy': performed_by,
+            'performedBy': performedBy,
             'sessionNotes': session_data.get('notes', ''),
             'status': 'completed',
             'duration': str(session_data.get('duration', 0)) + ' minutes',
@@ -541,7 +541,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         acknowledgment_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Record alert acknowledgment atomically with database persistence"""
 
@@ -567,14 +567,14 @@ class MedicalActionService:
                 "performedBy" = $1,
                 "performedAt" = $2
             WHERE id = $3 AND "patientId" = $4
-        ''', performed_by, acknowledged_at, alert_id, patient_id)
+        ''', performedBy, acknowledged_at, alert_id, patient_id)
 
         # Return the acknowledgment record for case entry creation
         acknowledgment_record = {
             'id': alert_id,
             'alertId': alert_id,
             'patientId': patient_id,
-            'performedBy': performed_by,
+            'performedBy': performedBy,
             'performedAt': acknowledged_at,
             'alertType': alert_details['type'],
             'alertMessage': alert_details['message'],
@@ -583,7 +583,7 @@ class MedicalActionService:
             'updatedAt': acknowledged_at
         }
 
-        self.logger.info(f"Alert {alert_id} acknowledged by {performed_by} for patient {patient_id}")
+        self.logger.info(f"Alert {alert_id} acknowledged by {performedBy} for patient {patient_id}")
 
         return acknowledgment_record
 
@@ -592,7 +592,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         completion_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Record investigation completion atomically with database persistence"""
 
@@ -627,7 +627,7 @@ class MedicalActionService:
             'id': investigation_id,
             'investigationId': investigation_id,
             'patientId': patient_id,
-            'completedBy': performed_by,
+            'completedBy': performedBy,
             'completedAt': completed_at,
             'results': results,
             'investigationName': investigation_details['name'],
@@ -636,7 +636,7 @@ class MedicalActionService:
             'updatedAt': completed_at
         }
 
-        self.logger.info(f"Investigation {investigation_id} completed by {performed_by} for patient {patient_id}")
+        self.logger.info(f"Investigation {investigation_id} completed by {performedBy} for patient {patient_id}")
 
         return completion_record
 
@@ -645,7 +645,7 @@ class MedicalActionService:
         conn: asyncpg.Connection,
         patient_id: str,
         status_change_data: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Record medication status change atomically with database persistence"""
 
@@ -674,14 +674,14 @@ class MedicalActionService:
                 "modifiedBy" = $2,
                 "updatedAt" = $3
             WHERE id = $4 AND "patientId" = $5
-        ''', new_status, performed_by, changed_at, int(medication_id), patient_id)
+        ''', new_status, performedBy, changed_at, int(medication_id), patient_id)
 
         # Return the status change record for case entry creation
         status_change_record = {
             'id': medication_id,
             'medicationId': medication_id,
             'patientId': patient_id,
-            'changedBy': performed_by,
+            'changedBy': performedBy,
             'changedAt': changed_at,
             'oldStatus': medication_details['status'],
             'newStatus': new_status,
@@ -691,7 +691,7 @@ class MedicalActionService:
             'updatedAt': changed_at
         }
 
-        self.logger.info(f"Medication {medication_id} status changed from {medication_details['status']} to {new_status} by {performed_by} for patient {patient_id}")
+        self.logger.info(f"Medication {medication_id} status changed from {medication_details['status']} to {new_status} by {performedBy} for patient {patient_id}")
 
         return status_change_record
 
@@ -701,7 +701,7 @@ class MedicalActionService:
         patient_id: str,
         action_type: str,
         medical_record: Dict[str, Any],
-        performed_by: str
+        performedBy: str
     ) -> Dict[str, Any]:
         """Create case entry automatically for medical action"""
 
@@ -710,7 +710,7 @@ class MedicalActionService:
         # Use the database function for atomic case entry creation
         result = await conn.fetchrow(
             'SELECT create_atomic_case_entry($1, $2, $3, $4) as id',
-            patient_id, action_type, description, performed_by
+            patient_id, action_type, description, performedBy
         )
 
         # Fetch the complete case entry record
@@ -767,8 +767,8 @@ class MedicalActionService:
             alert_type = medical_record.get('alertType', 'Unknown alert')
             alert_message = medical_record.get('alertMessage', '')
             alert_severity = medical_record.get('alertSeverity', '')
-            performed_by_staff = medical_record.get('performedBy', 'Unknown staff')
-            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''} by {performed_by_staff}".strip()
+            performedBy_staff = medical_record.get('performedBy', 'Unknown staff')
+            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''} by {performedBy_staff}".strip()
 
         elif action_type == 'investigation_completion':
             investigation_name = medical_record.get('investigationName', 'Unknown investigation')
@@ -883,29 +883,29 @@ medical_action_service = MedicalActionService()
 
 
 # Convenience functions for easy usage
-async def add_medication_atomic(patient_id: str, medication_data: Dict[str, Any], performed_by: str) -> Dict[str, Any]:
+async def add_medication_atomic(patient_id: str, medication_data: Dict[str, Any], performedBy: str) -> Dict[str, Any]:
     """Add medication atomically with auto case entry"""
     return await medical_action_service.execute_medical_action(
-        'medication', patient_id, medication_data, performed_by
+        'medication', patient_id, medication_data, performedBy
     )
 
 
-async def add_investigation_atomic(patient_id: str, investigation_data: Dict[str, Any], performed_by: str) -> Dict[str, Any]:
+async def add_investigation_atomic(patient_id: str, investigation_data: Dict[str, Any], performedBy: str) -> Dict[str, Any]:
     """Add investigation atomically with auto case entry"""
     return await medical_action_service.execute_medical_action(
-        'investigation', patient_id, investigation_data, performed_by
+        'investigation', patient_id, investigation_data, performedBy
     )
 
 
-async def add_therapy_atomic(patient_id: str, therapy_data: Dict[str, Any], performed_by: str) -> Dict[str, Any]:
+async def add_therapy_atomic(patient_id: str, therapy_data: Dict[str, Any], performedBy: str) -> Dict[str, Any]:
     """Add therapy atomically with auto case entry"""
     return await medical_action_service.execute_medical_action(
-        'therapy', patient_id, therapy_data, performed_by
+        'therapy', patient_id, therapy_data, performedBy
     )
 
 
-async def add_note_atomic(patient_id: str, note_data: Dict[str, Any], performed_by: str) -> Dict[str, Any]:
+async def add_note_atomic(patient_id: str, note_data: Dict[str, Any], performedBy: str) -> Dict[str, Any]:
     """Add patient note atomically with auto case entry"""
     return await medical_action_service.execute_medical_action(
-        'note', patient_id, note_data, performed_by
+        'note', patient_id, note_data, performedBy
     )

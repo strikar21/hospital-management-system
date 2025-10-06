@@ -608,9 +608,9 @@ class PatientService(BaseService):
 
                     # Update timeline entries with resolved names
                     for entry in camel_results:
-                        performed_by = entry.get('performedBy')
-                        if performed_by and performed_by in staff_names:
-                            entry['performedByName'] = staff_names[performed_by]
+                        performedBy = entry.get('performedBy')
+                        if performedBy and performedBy in staff_names:
+                            entry['performedByName'] = staff_names[performedBy]
 
             return camel_results
 
