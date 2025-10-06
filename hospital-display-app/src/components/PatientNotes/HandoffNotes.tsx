@@ -121,7 +121,7 @@ export const HandoffNotes: React.FC<HandoffNotesProps> = ({
   );
 
   return (
-    <div className="mt-6 border-t pt-4">
+    <div>
       {/* Section Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-purple-800 flex items-center space-x-2">

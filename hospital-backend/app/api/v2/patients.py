@@ -161,9 +161,7 @@ async def add_patient_note(
         note = await patient_service.add_note_comment(
             patient_id=patient_id,
             content=note_data.get('comment') or note_data.get('content'),  # Support both field names
-            author_id=note_data.get('authorId', 'system'),
-            author_name=note_data.get('commentedBy') or note_data.get('authorName', 'System User'),
-            author_role=note_data.get('authorRole', 'admin')
+            author_id=note_data.get('createdBy') or note_data.get('authorId', 'system')  # Support both field names
         )
 
         if not note:

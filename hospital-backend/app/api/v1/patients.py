@@ -309,10 +309,10 @@ async def get_patient(patient_id: str):
             
             # Get patient notes
             notes_query = """
-                SELECT pn.*, (s.firstname || ' ' || s.lastname) as authorname 
+                SELECT pn.*, (s.firstname || ' ' || s.lastname) as authorname
                 FROM patientnotes pn
-                LEFT JOIN staff s ON pn.authorId = s.id
-                WHERE pn.patientid = ? 
+                LEFT JOIN staff s ON pn."createdBy" = s.id
+                WHERE pn.patientid = ?
                 ORDER BY pn.timestamp DESC
             """
             notes_rows = await fetch_all(conn, notes_query, (patient_id,))
@@ -360,7 +360,8 @@ async def get_patient(patient_id: str):
                 'medications': medications,
                 'investigations': investigations,
                 'therapies': therapies,
-                'notes': notes
+                'notes': notes,
+                'caseSheet': []  # Frontend fetches case entries separately via /case-entries
             }
             
             # Transform to camelCase for frontend compatibility
@@ -1114,8 +1115,8 @@ async def add_note(patient_id: str, note_data: dict, created_by: str = Query(...
                     elif hasattr(created_note, '_asdict'):
                         note_dict = created_note._asdict()
                     elif isinstance(created_note, (list, tuple)):
-                        # Handle tuple/list format
-                        keys = ['id', 'patientid', 'content', 'authorId', 'authorName', 'authorRole', 'timestamp', 'editedAt', 'isEdited']
+                        # Handle tuple/list format - note: authorName/authorRole now added by repository
+                        keys = ['id', 'patientid', 'content', 'createdBy', 'timestamp', 'editedAt', 'isEdited']
                         note_dict = dict(zip(keys, created_note))
                     else:
                         note_dict = dict(created_note)
@@ -1136,7 +1137,7 @@ async def add_note(patient_id: str, note_data: dict, created_by: str = Query(...
                         "note": {
                             "id": patient_note_id,
                             "patientid": patient_id,
-                            "authorId": created_by,
+                            "createdBy": created_by,
                             "content": note_data.get('content'),
                             "timestamp": now.isoformat(),
                             "canEdit": True  # Since it's just created
@@ -1150,7 +1151,7 @@ async def add_note(patient_id: str, note_data: dict, created_by: str = Query(...
                     "note": {
                         "id": patient_note_id,
                         "patientid": patient_id,
-                        "authorId": created_by,
+                        "createdBy": created_by,
                         "content": note_data.get('content'),
                         "timestamp": now.isoformat(),
                         "canEdit": True
@@ -1216,16 +1217,16 @@ async def get_case_entries(patient_id: str):
             # Exclude entries that duplicate medications, investigations, therapies, and notes
             case_entries_query = """
                 SELECT
-                    c.entrytype as entry_type,
+                    c."entryType" as entry_type,
                     c.timestamp as event_time,
-                    c.entrytype as sub_type,
+                    c."entryType" as sub_type,
                     c.description,
-                    COALESCE(c.performedby, 'Unknown') as performed_by,
-                    c.performedby as performed_by_id,
-                    c.createdat,
+                    COALESCE(c."createdBy", 'Unknown') as performed_by,
+                    c."createdBy" as performed_by_id,
+                    c."createdAt",
                     c.id::text as record_id
-                FROM casesheetentries c
-                WHERE c.patientid = $1
+                FROM "caseEntries" c
+                WHERE c."patientId" = $1 AND c."deletedAt" IS NULL
             """
             case_entries = await conn.fetch(case_entries_query, patient_id)
             for entry in case_entries:
@@ -1236,12 +1237,12 @@ async def get_case_entries(patient_id: str):
             medications_query = """
                 SELECT
                     'medication_administration' as entry_type,
-                    COALESCE(ma.administeredat, ma.scheduledtime) as event_time,
+                    COALESCE(ma."performedAt", ma.scheduledtime) as event_time,
                     ma.status as sub_type,
                     (m.name || ' - ' || COALESCE(ma.dosagegiven, m.dosage) ||
                      CASE WHEN ma.notes IS NOT NULL THEN ' (' || ma.notes || ')' ELSE '' END) as description,
-                    COALESCE(ma.administeredby, 'System') as performed_by,
-                    ma.administeredby as performed_by_id,
+                    COALESCE(ma."performedBy", 'System') as performed_by,
+                    ma."performedBy" as performed_by_id,
                     ma.createdat,
                     ma.id::text as record_id
                 FROM medicationadministrations ma
@@ -1432,18 +1433,18 @@ async def get_medications(patient_id: str):
                 
                 # Get administration history for this medication
                 administrations_query = """
-                    SELECT 
+                    SELECT
                         ma.id,
                         ma.scheduledtime,
-                        ma.administeredat,
+                        ma."performedAt",
                         ma.status,
                         ma.dosagegiven,
                         ma.route,
-                        ma.administeredby,
+                        ma."performedBy",
                         ma.notes,
-                        (s.firstname || ' ' || s.lastname) as administeredbyname
+                        (s.firstname || ' ' || s.lastname) as "performedByName"
                     FROM medicationadministrations ma
-                    LEFT JOIN staff s ON ma.administeredby = s.id
+                    LEFT JOIN staff s ON ma."performedBy" = s.id
                     WHERE ma.medicationid::text = $1::text AND ma.patientid = $2
                     ORDER BY ma.scheduledtime DESC
                 """

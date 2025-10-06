@@ -162,10 +162,18 @@ class BaseService(ABC):
     def can_edit_item(self, timestamp: str) -> bool:
         """Check if item can be edited based on timestamp (24-hour window)"""
         try:
-            if not timestamp:
+            if not timestamp or not isinstance(timestamp, str):
                 return False
 
-            item_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            # Strip microseconds entirely - seconds precision is sufficient
+            timestamp_cleaned = timestamp.replace('Z', '+00:00')
+            if '.' in timestamp_cleaned:
+                # Remove everything from the decimal point to the timezone
+                base = timestamp_cleaned.split('.')[0]
+                tz = '+00:00' if '+' in timestamp_cleaned else ''
+                timestamp_cleaned = base + tz
+
+            item_time = datetime.fromisoformat(timestamp_cleaned)
             now = datetime.utcnow()
             time_diff = now - item_time.replace(tzinfo=None)
             max_edit_window = timedelta(hours=24)

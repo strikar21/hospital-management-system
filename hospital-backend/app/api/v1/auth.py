@@ -2,8 +2,9 @@
 Authentication API endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Request, Query, status, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from datetime import datetime
 import logging
 import json
@@ -12,10 +13,22 @@ from ...models.staff import StaffLogin, StaffLoginResponse, Staff
 from ...core.database import getDbConnection
 from ...core.db_utils import fetchOne
 from ...core.security import verify_pin, verify_password, validate_pin_format, validate_staff_id_format
+from ...core.jwt_handler import create_access_token, create_refresh_token, verify_token
 from ...services.audit import logAuditEvent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request model for token refresh"""
+    refreshToken: str
+
+
+class RefreshTokenResponse(BaseModel):
+    """Response model for token refresh"""
+    accessToken: str
+    tokenType: str = "bearer"
 
 @router.post("/simple-test")
 async def simpleTest(data: dict):
@@ -193,13 +206,28 @@ async def staffLogin(loginData: StaffLogin):
             
             logger.info(f"Staff login successful: {staffDict['firstName']} {staffDict['lastName']} ({staffDict['role']})")
 
+            # Generate JWT tokens
+            token_data = {
+                "sub": staffDict['id'],  # Subject (user ID)
+                "role": staffDict['role'],
+                "department": staffDict.get('department'),
+                "firstName": staffDict['firstName'],
+                "lastName": staffDict['lastName']
+            }
+
+            access_token = create_access_token(data=token_data)
+            refresh_token = create_refresh_token(data={"sub": staffDict['id']})
+
             return StaffLoginResponse(
                 id=staffDict['id'],
                 firstName=staffDict['firstName'],
                 lastName=staffDict['lastName'],
                 role=staffDict['role'],
                 department=staffDict.get('department'),
-                lastSeen=datetime.now()
+                lastSeen=datetime.now(),
+                accessToken=access_token,
+                refreshToken=refresh_token,
+                tokenType="bearer"
             )
             
     except HTTPException:
@@ -351,13 +379,28 @@ async def authenticateNfc(nfcData: dict):
 
             logger.info(f"📱 NFC authentication: {staffDict['firstName']} {staffDict['lastName']} ({staffDict['role']})")
 
+            # Generate JWT tokens
+            token_data = {
+                "sub": staffDict['id'],
+                "role": staffDict['role'],
+                "department": staffDict.get('department'),
+                "firstName": staffDict['firstName'],
+                "lastName": staffDict['lastName']
+            }
+
+            access_token = create_access_token(data=token_data)
+            refresh_token = create_refresh_token(data={"sub": staffDict['id']})
+
             return StaffLoginResponse(
                 id=staffDict['id'],
                 firstName=staffDict['firstName'],
                 lastName=staffDict['lastName'],
                 role=staffDict['role'],
                 department=staffDict.get('department'),
-                lastSeen=datetime.now()
+                lastSeen=datetime.now(),
+                accessToken=access_token,
+                refreshToken=refresh_token,
+                tokenType="bearer"
             )
 
     except HTTPException:
@@ -405,12 +448,28 @@ async def nfcTapLogin(nfcCardId: str):
 
             logger.info(f"📱 NFC tap login: {staffDict['name']} ({staffDict['role']})")
 
+            # Generate JWT tokens
+            token_data = {
+                "sub": staffDict['id'],
+                "role": staffDict['role'],
+                "department": staffDict.get('department'),
+                "firstName": staffDict.get('firstName', ''),
+                "lastName": staffDict.get('lastName', '')
+            }
+
+            access_token = create_access_token(data=token_data)
+            refresh_token = create_refresh_token(data={"sub": staffDict['id']})
+
             return StaffLoginResponse(
                 id=staffDict['id'],
-                name=staffDict['name'],
+                firstName=staffDict.get('firstName', ''),
+                lastName=staffDict.get('lastName', ''),
                 role=staffDict['role'],
                 department=staffDict.get('department'),
-                lastSeen=datetime.now()
+                lastSeen=datetime.now(),
+                accessToken=access_token,
+                refreshToken=refresh_token,
+                tokenType="bearer"
             )
 
     except HTTPException:
@@ -418,3 +477,114 @@ async def nfcTapLogin(nfcCardId: str):
     except Exception as e:
         logger.error(f"❌ NFC tap error: {e}")
         raise HTTPException(status_code=500, detail="NFC authentication failed")
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_access_token(request: RefreshTokenRequest):
+    """
+    Refresh access token using refresh token
+
+    The refresh token is long-lived (7 days) and used to get new access tokens
+    without requiring the user to login again
+    """
+    try:
+        # Verify refresh token
+        payload = verify_token(request.refreshToken, token_type="refresh")
+        user_id = payload.get("sub")
+
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+
+        # Verify user still exists and is active
+        async with getDbConnection() as conn:
+            staff_row = await conn.fetchrow(
+                'SELECT id, "firstName", "lastName", role, department, "isActive" FROM staff WHERE id = $1',
+                user_id
+            )
+
+            if not staff_row:
+                logger.warning(f"Refresh token for non-existent user: {user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found",
+                )
+
+            staff_dict = dict(staff_row)
+
+            if not staff_dict.get("isActive"):
+                logger.warning(f"Refresh token for inactive user: {user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User account is inactive",
+                )
+
+            # Create new access token
+            token_data = {
+                "sub": staff_dict['id'],
+                "role": staff_dict['role'],
+                "department": staff_dict.get('department'),
+                "firstName": staff_dict['firstName'],
+                "lastName": staff_dict['lastName']
+            }
+
+            new_access_token = create_access_token(data=token_data)
+
+            logger.info(f"🔄 Access token refreshed for user: {user_id}")
+
+            return RefreshTokenResponse(
+                accessToken=new_access_token,
+                tokenType="bearer"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Token refresh error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refresh token"
+        )
+
+
+# Example protected endpoint - demonstrates how to use authentication
+from ...core.auth_dependencies import get_current_user, require_medical_staff, require_admin
+
+@router.get("/protected/profile")
+async def get_protected_profile(current_user: dict = Depends(get_current_user)):
+    """
+    Example protected endpoint - requires valid JWT token
+    Returns the current user's profile
+    """
+    logger.info(f"✅ Protected endpoint accessed by: {current_user['id']}")
+    return {
+        "message": "This is a protected endpoint",
+        "user": current_user,
+        "accessed_at": datetime.now().isoformat()
+    }
+
+
+@router.get("/protected/medical-only")
+async def medical_staff_only(current_user: dict = Depends(require_medical_staff)):
+    """
+    Example endpoint that requires Doctor or Nurse role
+    """
+    logger.info(f"✅ Medical endpoint accessed by: {current_user['id']} ({current_user['role']})")
+    return {
+        "message": "This endpoint is for medical staff only",
+        "user": current_user,
+        "role": current_user['role']
+    }
+
+
+@router.get("/protected/admin-only")
+async def admin_only(current_user: dict = Depends(require_admin)):
+    """
+    Example endpoint that requires Administrator role
+    """
+    logger.info(f"✅ Admin endpoint accessed by: {current_user['id']}")
+    return {
+        "message": "This endpoint is for administrators only",
+        "user": current_user
+    }

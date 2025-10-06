@@ -45,23 +45,23 @@ export class TherapyService extends BaseService {
     }
   }
 
-  static async addTherapy(patientId: string, therapy: Omit<therapy, 'id'>, userId: string): Promise<boolean> {
+  // Exclude backend-generated audit fields from creation payload
+  static async addTherapy(patientId: string, therapy: Omit<therapy, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>, userId: string): Promise<any> {
     try {
-      await this.fetchFromBackend(`/therapy/patient/${patientId}/add`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/therapies`, {
         method: 'POST',
         body: JSON.stringify({
           ...therapy,
           prescribedBy: userId,
-          prescribedAt: new Date().toISOString(),
           status: 'active'
         })
       });
 
-      // Removed console.log for production
-      return true;
+      // Atomic response includes {success: true, medical_record: {...}, case_entry: {...}}
+      return response;
     } catch (error) {
       // Error adding therapy - handle silently
-      return false;
+      return null;
     }
   }
 

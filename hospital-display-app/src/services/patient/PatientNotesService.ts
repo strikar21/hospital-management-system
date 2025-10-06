@@ -31,14 +31,16 @@ export class PatientNotesService extends BaseService {
    */
   static async addNoteComment(patientId: string, content: string, userId: string, username?: string, userrole?: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/patients/${patientId}/notes?createdBy=${encodeURIComponent(userId)}`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/notes`, {
         method: 'POST',
         body: JSON.stringify({
           content,
-          authorId: userId
-          // Backend generates: id, timestamp, authorName (from staff lookup)
+          comment: content, // Support both field names
+          commentedBy: userId,
+          authorName: username
         })
       });
+      // Atomic response includes {success: true, medical_record: {...}, case_entry: {...}}
       return response;
     } catch (error) {
       // Error adding note - handle silently

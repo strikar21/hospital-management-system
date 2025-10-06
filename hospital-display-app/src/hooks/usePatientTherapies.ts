@@ -36,43 +36,43 @@ export const usePatientTherapies = ({
 
     setAddingTherapy(true);
     try {
-      const therapyData = {
+      // Exclude backend-generated audit fields (createdAt, updatedAt, createdBy, createdByName)
+      const therapyData: Omit<therapy, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'> = {
         type: newTherapy.type,
+        name: `${newTherapy.type.charAt(0).toUpperCase() + newTherapy.type.slice(1)} Therapy`,
         description: newTherapy.description,
         frequency: newTherapy.frequency,
         duration: newTherapy.duration,
-        prescribedBy: currentUser.staffId
+        prescribedBy: currentUser.staffId,
+        status: 'active',
+        startDate: new Date().toISOString(),
+        sessions: [],
+        canEdit: true
       };
 
-      // Use atomic endpoint - creates therapy and case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/therapies`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(therapyData)
-      });
+      // Use Service layer for API call
+      const result = await TherapyService.addTherapy(patient.id, therapyData, currentUser.staffId);
 
-      if (!response.ok) {
-        throw new Error(`Failed to add therapy: ${response.statusText}`);
-      }
+      if (result && result.success) {
+        // Use therapy from atomic response
+        const newTherapyRecord = result.medical_record;
+        setTherapies(prev => [...prev, newTherapyRecord]);
 
-      const result = await response.json();
-
-      if (result.success) {
-        // Refetch fresh data from backend (single source of truth)
-        try {
-          const freshTherapies = await refreshTherapies();
-          setTherapies(freshTherapies);
-
-          const freshCaseEntries = await refreshCaseEntries();
-          setCaseEntries(freshCaseEntries);
-
-          setNewTherapy({ type: 'physiotherapy', description: '', frequency: '', duration: '' });
-          setIsAddingTherapy(false);
-        } catch (refreshError) {
-          // Failed to refresh data after adding therapy - handle silently
+        // Add case sheet entry from atomic result (already created atomically)
+        if (result.case_entry) {
+          const newCaseEntry: caseSheetEntry = {
+            id: result.case_entry.id,
+            timestamp: result.case_entry.timestamp,
+            type: result.case_entry.entryType,
+            description: result.case_entry.description,
+            performedBy: result.case_entry.performedBy,
+            canEdit: true
+          };
+          addCaseSheetEntry(newCaseEntry);
         }
+
+        setNewTherapy({ type: 'physiotherapy', description: '', frequency: '', duration: '' });
+        setIsAddingTherapy(false);
       } else {
         throw new Error('Atomic operation failed');
       }
@@ -82,7 +82,7 @@ export const usePatientTherapies = ({
     } finally {
       setAddingTherapy(false);
     }
-  }, [addingTherapy, newTherapy, currentUser, patient.id, setTherapies, setCaseEntries, refreshTherapies, refreshCaseEntries]);
+  }, [addingTherapy, newTherapy, currentUser, patient.id, setTherapies, addCaseSheetEntry]);
 
   // Cancel adding therapy
   const handleCancelAddTherapy = useCallback(() => {
@@ -118,18 +118,25 @@ export const usePatientTherapies = ({
         const result = await response.json();
 
         if (result.success) {
-          // Refetch fresh data from backend (single source of truth)
-          try {
-            const freshTherapies = await refreshTherapies();
-            setTherapies(freshTherapies);
+          // Update therapy in state with response data
+          setTherapies(prev => prev.map(t =>
+            t.id === therapy.id ? result.medical_record : t
+          ));
 
-            const freshCaseEntries = await refreshCaseEntries();
-            setCaseEntries(freshCaseEntries);
-
-            alert(`✅ Therapy session #${result.medical_record.sessionNumber} recorded successfully!`);
-          } catch (refreshError) {
-            // Failed to refresh data after adding therapy session - handle silently
+          // Add case sheet entry from atomic response
+          if (result.case_entry) {
+            const sessionEntry: caseSheetEntry = {
+              id: result.case_entry.id,
+              timestamp: result.case_entry.timestamp,
+              type: result.case_entry.entryType,
+              description: result.case_entry.description,
+              performedBy: result.case_entry.performedBy,
+              canEdit: true
+            };
+            addCaseSheetEntry(sessionEntry);
           }
+
+          alert(`✅ Therapy session recorded successfully!`);
         } else {
           throw new Error('Atomic operation failed');
         }
@@ -138,7 +145,7 @@ export const usePatientTherapies = ({
         alert('Failed to record therapy session. Please try again.');
       }
     }
-  }, [patient.id, currentUser, setTherapies, setCaseEntries, refreshTherapies, refreshCaseEntries]);
+  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
 
   // Complete therapy using atomic operation
   const handleCompleteTherapy = useCallback(async (therapy: therapy) => {
@@ -164,16 +171,22 @@ export const usePatientTherapies = ({
         const result = await response.json();
 
         if (result.success) {
-          // Refetch fresh data from backend (single source of truth)
-          try {
-            const freshTherapies = await refreshTherapies();
-            setTherapies(freshTherapies);
+          // Update therapy in state with response data
+          setTherapies(prev => prev.map(t =>
+            t.id === therapy.id ? result.medical_record : t
+          ));
 
-            const freshCaseEntries = await refreshCaseEntries();
-            setCaseEntries(freshCaseEntries);
-
-          } catch (refreshError) {
-            // Failed to refresh data after therapy completion - handle silently
+          // Add case sheet entry from atomic response
+          if (result.case_entry) {
+            const completionEntry: caseSheetEntry = {
+              id: result.case_entry.id,
+              timestamp: result.case_entry.timestamp,
+              type: result.case_entry.entryType,
+              description: result.case_entry.description,
+              performedBy: result.case_entry.performedBy,
+              canEdit: true
+            };
+            addCaseSheetEntry(completionEntry);
           }
         } else {
           throw new Error('Atomic operation failed');
@@ -183,7 +196,7 @@ export const usePatientTherapies = ({
         alert(`❌ Failed to complete therapy: ${(error as Error).message}`);
       }
     }
-  }, [patient.id, currentUser, setTherapies, setCaseEntries, refreshTherapies, refreshCaseEntries]);
+  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
 
   // Cancel therapy using atomic operation
   const handleCancelTherapy = useCallback(async (therapy: therapy) => {
@@ -209,16 +222,22 @@ export const usePatientTherapies = ({
         const result = await response.json();
 
         if (result.success) {
-          // Refetch fresh data from backend (single source of truth)
-          try {
-            const freshTherapies = await refreshTherapies();
-            setTherapies(freshTherapies);
+          // Update therapy in state with response data
+          setTherapies(prev => prev.map(t =>
+            t.id === therapy.id ? result.medical_record : t
+          ));
 
-            const freshCaseEntries = await refreshCaseEntries();
-            setCaseEntries(freshCaseEntries);
-
-          } catch (refreshError) {
-            // Failed to refresh data after therapy cancellation - handle silently
+          // Add case sheet entry from atomic response
+          if (result.case_entry) {
+            const cancellationEntry: caseSheetEntry = {
+              id: result.case_entry.id,
+              timestamp: result.case_entry.timestamp,
+              type: result.case_entry.entryType,
+              description: result.case_entry.description,
+              performedBy: result.case_entry.performedBy,
+              canEdit: true
+            };
+            addCaseSheetEntry(cancellationEntry);
           }
         } else {
           throw new Error('Atomic operation failed');
@@ -228,7 +247,7 @@ export const usePatientTherapies = ({
         alert(`❌ Failed to cancel therapy: ${(error as Error).message}`);
       }
     }
-  }, [patient.id, currentUser, setTherapies, setCaseEntries, refreshTherapies, refreshCaseEntries]);
+  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
 
   return {
     // Form state

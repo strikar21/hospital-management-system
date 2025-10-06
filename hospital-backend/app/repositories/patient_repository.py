@@ -45,7 +45,7 @@ class PatientRepository(BaseRepository[Patient]):
                 LEFT JOIN patientnotes pn ON p.id = pn."patientId"
                 LEFT JOIN medications m ON p.id = m."patientId"
                 LEFT JOIN investigations i ON p.id = i."patientId"
-                LEFT JOIN therapies t ON p.id = t."patientId"
+                LEFT JOIN therapy t ON p.id = t."patientId"
                 WHERE p.id = $1
                 GROUP BY p.id
             """
@@ -117,30 +117,39 @@ class PatientRepository(BaseRepository[Patient]):
     # PATIENT NOTES OPERATIONS
     # ================================
 
-    async def add_patient_note(self, patient_id: str, content: str, author_id: str,
-                              author_name: str, author_role: str) -> Dict[str, Any]:
+    async def add_patient_note(self, patient_id: str, content: str, author_id: str) -> Dict[str, Any]:
         """Add a note to patient record"""
         try:
-            note_data = {
-                'patientId': patient_id,
-                'content': content,
-                'authorId': author_id,
-                'authorName': author_name,
-                'authorRole': author_role,
-                'timestamp': datetime.utcnow().isoformat()
-            }
-
             query = """
-                INSERT INTO patientnotes ("patientId", content, "authorId", "authorName", "authorRole")
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING *
+                INSERT INTO patientnotes ("patientId", content, "createdBy")
+                VALUES ($1, $2, $3)
+                RETURNING id, "patientId", content, "createdBy", timestamp, "editedAt", "isEdited"
             """
 
             result = await self.execute_custom_query(query, [
-                patient_id, content, author_id, author_name, author_role
+                patient_id, content, author_id
             ])
 
-            return result[0] if result else None
+            if result:
+                note = result[0]
+                # Lookup staff info
+                staff_query = """
+                    SELECT "firstName", "lastName", role
+                    FROM staff
+                    WHERE id = $1
+                """
+                staff_result = await self.execute_custom_query(staff_query, [author_id])
+                if staff_result:
+                    staff = staff_result[0]
+                    note['authorName'] = f"{staff['firstName']} {staff['lastName']}"
+                    note['authorRole'] = staff['role']
+                else:
+                    note['authorName'] = 'Unknown'
+                    note['authorRole'] = 'Unknown'
+
+                return note
+
+            return None
 
         except Exception as e:
             self.logger.error(f"Error adding note to patient {patient_id}: {e}")
@@ -151,8 +160,8 @@ class PatientRepository(BaseRepository[Patient]):
         try:
             query = """
                 UPDATE patientnotes
-                SET content = $1, "editedAt" = $2, "isEdited" = true
-                WHERE id = $3 AND "patientId" = $4
+                SET content = $1, "editedAt" = $2, "editedBy" = $3, "isEdited" = true
+                WHERE id = $4 AND "patientId" = $5
                 RETURNING id
             """
 
@@ -165,7 +174,7 @@ class PatientRepository(BaseRepository[Patient]):
             else:
                 raise ValueError(f"Invalid note ID format: {note_id}")
 
-            result = await self.execute_custom_query(query, [content, now, numeric_id, patient_id])
+            result = await self.execute_custom_query(query, [content, now, editor_id, numeric_id, patient_id])
             return len(result) > 0
 
         except Exception as e:
@@ -232,8 +241,8 @@ class PatientRepository(BaseRepository[Patient]):
             query = """
                 UPDATE patient_alerts
                 SET
-                    acknowledgedBy = $1,
-                    acknowledgedAt = $2,
+                    performedBy = $1,
+                    performedAt = $2,
                     status = 'acknowledged',
                     "updatedAt" = $2
                 WHERE id = $3 AND "patientId" = $4 AND status = 'active'
@@ -311,11 +320,13 @@ class PatientRepository(BaseRepository[Patient]):
 
             # Get medications
             medications_query = """
-                SELECT id, name, dosage, frequency, route, status, "prescribedBy",
-                       "createdAt" as timestamp, 'medication' as entry_type
-                FROM medications
-                WHERE "patientId" = $1
-                ORDER BY "createdAt" DESC
+                SELECT m.id, m.name, m.dosage, m.frequency, m.route, m.status, m."prescribedBy",
+                       COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "prescribedByName",
+                       m."createdAt" as timestamp, 'medication' as entry_type
+                FROM medications m
+                LEFT JOIN staff s ON m."prescribedBy" = s.id
+                WHERE m."patientId" = $1
+                ORDER BY m."createdAt" DESC
             """
             medications = await self.execute_custom_query(medications_query, [patient_id])
             for med in medications:
@@ -325,17 +336,20 @@ class PatientRepository(BaseRepository[Patient]):
                     'type': 'medication',
                     'description': f"Medication prescribed: {med['name']} - {med['dosage']} {med['frequency']} via {med['route']}",
                     'performedBy': med['prescribedBy'],
+                    'performedByName': med.get('prescribedByName', 'Unknown'),
                     'canEdit': True,
                     'details': med
                 })
 
             # Get investigations
             investigations_query = """
-                SELECT id, name, type, status, results, "performedBy",
-                       "createdAt" as timestamp, 'investigation' as entry_type
-                FROM investigations
-                WHERE "patientId" = $1
-                ORDER BY "createdAt" DESC
+                SELECT i.id, i.name, i.type, i.status, i.results, i."prescribedBy",
+                       COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "prescribedByName",
+                       i."createdAt" as timestamp, 'investigation' as entry_type
+                FROM investigations i
+                LEFT JOIN staff s ON i."prescribedBy" = s.id
+                WHERE i."patientId" = $1
+                ORDER BY i."createdAt" DESC
             """
             investigations = await self.execute_custom_query(investigations_query, [patient_id])
             for inv in investigations:
@@ -344,18 +358,21 @@ class PatientRepository(BaseRepository[Patient]):
                     'timestamp': inv['timestamp'],
                     'type': 'investigation',
                     'description': f"Investigation ordered: {inv['name']} ({inv['type']}, {inv['status']})",
-                    'performedBy': inv['performedBy'],
+                    'performedBy': inv['prescribedBy'],
+                    'performedByName': inv.get('prescribedByName', 'Unknown'),
                     'canEdit': True,
                     'details': inv
                 })
 
             # Get therapy sessions
             therapy_query = """
-                SELECT id, "therapyType" as type, description, frequency, status, "createdBy" as "performedBy",
-                       "createdAt" as timestamp, 'therapy' as entry_type
-                FROM therapies
-                WHERE "patientId" = $1
-                ORDER BY "createdAt" DESC
+                SELECT t.id, t.type, t.description, t.frequency, t.status, t."prescribedBy",
+                       COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "prescribedByName",
+                       t."createdAt" as timestamp, 'therapy' as entry_type
+                FROM therapy t
+                LEFT JOIN staff s ON t."prescribedBy" = s.id
+                WHERE t."patientId" = $1
+                ORDER BY t."createdAt" DESC
             """
             therapies = await self.execute_custom_query(therapy_query, [patient_id])
             for therapy in therapies:
@@ -364,18 +381,22 @@ class PatientRepository(BaseRepository[Patient]):
                     'timestamp': therapy['timestamp'],
                     'type': 'therapy',
                     'description': f"Therapy prescribed: {therapy['type']} - {therapy['description']} ({therapy['frequency']})",
-                    'performedBy': therapy['performedBy'],
+                    'performedBy': therapy['prescribedBy'],
+                    'performedByName': therapy.get('prescribedByName', 'Unknown'),
                     'canEdit': True,
                     'details': therapy
                 })
 
             # Get patient notes
             notes_query = """
-                SELECT id, content, "authorId" as "performedBy", "authorName", "authorRole",
-                       timestamp, 'note' as entry_type
-                FROM patientnotes
-                WHERE "patientId" = $1
-                ORDER BY timestamp DESC
+                SELECT pn.id, pn.content, pn."createdBy" as "performedBy",
+                       COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "authorName",
+                       COALESCE(s.role, 'Unknown') as "authorRole",
+                       pn.timestamp, 'note' as entry_type
+                FROM patientnotes pn
+                LEFT JOIN staff s ON pn."createdBy" = s.id
+                WHERE pn."patientId" = $1
+                ORDER BY pn.timestamp DESC
             """
             notes = await self.execute_custom_query(notes_query, [patient_id])
             for note in notes:
@@ -393,11 +414,13 @@ class PatientRepository(BaseRepository[Patient]):
 
             # Get dedicated case entries
             case_entries_query = """
-                SELECT id, "entryType" as type, description, "createdBy" as "performedBy",
-                       timestamp, 'caseEntry' as entry_type
-                FROM "caseEntries"
-                WHERE "patientId" = $1 AND "deletedAt" IS NULL
-                ORDER BY timestamp DESC
+                SELECT c.id, c."entryType" as type, c.description, c."createdBy" as "performedBy",
+                       COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "performedByName",
+                       c.timestamp, 'caseEntry' as entry_type
+                FROM "caseEntries" c
+                LEFT JOIN staff s ON c."createdBy" = s.id
+                WHERE c."patientId" = $1 AND c."deletedAt" IS NULL
+                ORDER BY c.timestamp DESC
             """
             case_entries = await self.execute_custom_query(case_entries_query, [patient_id])
             for entry in case_entries:
@@ -407,6 +430,7 @@ class PatientRepository(BaseRepository[Patient]):
                     'type': entry['type'],
                     'description': entry['description'],
                     'performedBy': entry['performedBy'],
+                    'performedByName': entry.get('performedByName', 'Unknown'),
                     'canEdit': True,
                     'details': entry
                 })
@@ -414,7 +438,7 @@ class PatientRepository(BaseRepository[Patient]):
             # Get patient alerts and acknowledgments
             alerts_query = """
                 SELECT id, message, severity, "createdAt" as timestamp,
-                       'vitalAlert' as entry_type, status, "acknowledgedBy", "acknowledgedAt"
+                       'vitalAlert' as entry_type, status, "performedBy", "performedAt"
                 FROM patient_alerts
                 WHERE "patientId" = $1
                 ORDER BY "createdAt" DESC
@@ -433,13 +457,13 @@ class PatientRepository(BaseRepository[Patient]):
                 })
 
                 # Add alert acknowledgment entry if acknowledged
-                if alert['status'] == 'acknowledged' and alert['acknowledgedAt']:
+                if alert['status'] == 'acknowledged' and alert.get('performedAt'):
                     timeline_entries.append({
                         'id': f"alert_ack_{alert['id']}",
-                        'timestamp': alert['acknowledgedAt'],
+                        'timestamp': alert['performedAt'],
                         'type': 'alertAcknowledged',
                         'description': f"Alert acknowledged: {alert['message']}",
-                        'performedBy': alert['acknowledgedBy'],
+                        'performedBy': alert.get('performedBy'),
                         'canEdit': False,
                         'details': alert
                     })

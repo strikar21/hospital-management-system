@@ -21,7 +21,7 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
   const MIN_SWIPE_DISTANCE = 50;
   
   // Filter out medicationAdministration entries and sort by timestamp (newest first)
-  const sortedEntries = [...caseSheet]
+  const sortedEntries = [...(caseSheet || [])]
     .filter(entry => entry.type !== 'medicationAdministration')
     .sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()

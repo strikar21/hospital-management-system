@@ -19,41 +19,42 @@ from ...services.medical_action_service import (
     add_therapy_atomic,
     add_note_atomic
 )
+from ...validators.medical_validators import MedicationRequest
+from ...validators.investigation_validators import InvestigationRequest as InvestigationRequestValidated
+from ...validators.therapy_validators import TherapyRequest as TherapyRequestValidated
 
 router = APIRouter(prefix="/atomic", tags=["Atomic Medical Operations"])
 logger = logging.getLogger(__name__)
 
 
-# Request Models
-class MedicationRequest(BaseModel):
-    name: str
-    dosage: str
-    frequency: str
-    route: str
-    startDate: Optional[str] = None
-    endDate: Optional[str] = None
-    duration: Optional[str] = None
+# Use validated request models from validators module
+# MedicationRequest imported from validators
+# InvestigationRequest and TherapyRequest below are for backward compatibility
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+class InvestigationRequest(InvestigationRequestValidated):
+    """Investigation request with validation - extends validated base"""
+    # Map 'name' to 'testName' for backward compatibility
+    name: Optional[str] = None
 
-
-class InvestigationRequest(BaseModel):
-    name: str
-    type: str = "lab"
-    priority: str = "routine"
-    urgency: str = "Routine"
-    notes: Optional[str] = None
+    def dict(self, **kwargs):
+        d = super().dict(**kwargs)
+        # Handle name -> testName mapping
+        if 'name' in d and d['name']:
+            d['testName'] = d.pop('name')
+        return d
 
 
-class TherapyRequest(BaseModel):
-    type: str
-    description: Optional[str] = None
-    frequency: Optional[str] = None
-    duration: Optional[str] = None
-    notes: Optional[str] = None
+class TherapyRequest(TherapyRequestValidated):
+    """Therapy request with validation - extends validated base"""
+    # Map 'type' to 'therapyType' for backward compatibility
+    type: Optional[str] = None
+
+    def dict(self, **kwargs):
+        d = super().dict(**kwargs)
+        # Handle type -> therapyType mapping
+        if 'type' in d and d['type']:
+            d['therapyType'] = d.pop('type')
+        return d
 
 
 class NoteRequest(BaseModel):
@@ -119,9 +120,12 @@ async def add_medication_atomic_endpoint(
     """
     try:
         logger.info(f"Atomic medication request for patient {patient_id}")
+        logger.info(f"DEBUG: Raw medication object: {medication}")
+        logger.info(f"DEBUG: performed_by parameter: {performed_by}")
 
         # Convert to dict for service
         medication_data = medication.dict(exclude_none=True)
+        logger.info(f"DEBUG: medication_data after dict conversion: {medication_data}")
 
         # Execute atomic operation
         result = await add_medication_atomic(patient_id, medication_data, performed_by)
@@ -172,7 +176,7 @@ async def add_investigation_atomic_endpoint(
             case_entry=result['case_entry'],
             action_type=result['action_type'],
             transaction_id=result['transaction_id'],
-            message=f"Investigation '{investigation.name}' ordered successfully with case entry"
+            message=f"Investigation '{investigation.testName}' ordered successfully with case entry"
         )
 
     except Exception as e:
@@ -544,10 +548,10 @@ async def get_transaction_status(patient_id: str, transaction_id: str):
 
         async with getDbConnection() as conn:
             transaction = await conn.fetchrow("""
-                SELECT transaction_id, patient_id, operation_type, status,
-                       started_at, completed_at, error_message
+                SELECT "transactionId", "patientId", "operationType", status,
+                       "startedAt", "completedAt", "errorMessage"
                 FROM atomic_transactions
-                WHERE transaction_id = $1 AND patient_id = $2
+                WHERE "transactionId" = $1 AND "patientId" = $2
             """, transaction_id, patient_id)
 
             if not transaction:
@@ -587,7 +591,7 @@ async def acknowledge_alert_atomic_endpoint(
 
     This endpoint handles the critical medical action of alert acknowledgment:
     1. Updates alert status to 'acknowledged' in database
-    2. Sets acknowledgedBy and acknowledgedAt fields
+    2. Sets performedBy and performedAt fields
     3. Creates case entry with acknowledgment details
     4. Everything happens in one atomic transaction
     """

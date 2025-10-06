@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 import logging
 
 from ...services.service_factory import get_medication_service
+from ...validators.medical_validators import MedicationRequest, MedicationUpdate
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -45,23 +46,26 @@ async def get_patient_medications(patient_id: str):
 @router.post("/patient/{patient_id}")
 async def add_medication(
     patient_id: str,
-    medication_data: dict
+    medication: MedicationRequest
 ):
-    """Add medication to patient"""
+    """Add medication to patient with comprehensive validation"""
     try:
         medication_service = get_medication_service()
 
-        medication = await medication_service.add_medication(
+        # Convert validated Pydantic model to dict
+        medication_data = medication.dict(exclude_none=False)
+
+        result = await medication_service.add_medication(
             patient_id=patient_id,
             medication_data=medication_data,
-            created_by='system'
+            created_by=medication.prescribedBy
         )
 
-        if not medication:
+        if not result:
             raise HTTPException(status_code=400, detail="Failed to add medication")
 
-        logger.info(f"✅ Added medication to patient {patient_id}")
-        return medication
+        logger.info(f"✅ Added medication '{medication.name}' to patient {patient_id}")
+        return result
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -89,9 +93,9 @@ async def get_active_medications(patient_id: str):
 
 
 @router.post("/patient/{patient_id}/add")
-async def add_medication_simplified(patient_id: str, medication_data: dict):
-    """Add medication to patient (simplified path for frontend)"""
-    return await add_medication(patient_id, medication_data)
+async def add_medication_simplified(patient_id: str, medication: MedicationRequest):
+    """Add medication to patient (simplified path for frontend with validation)"""
+    return await add_medication(patient_id, medication)
 
 
 @router.get("/types")
@@ -156,7 +160,7 @@ async def complete_medication(medication_id: str, completion_data: dict):
             patient_id=None,
             medication_id=medication_id,
             status='administered',
-            updated_by=completion_data.get('administeredBy', 'system')
+            updated_by=completion_data.get('performedBy', 'system')
         )
 
         if not success:

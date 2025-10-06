@@ -116,8 +116,8 @@ export class PatientCaseService extends BaseService {
       await this.fetchFromBackend(`/mobile/acknowledge-alert/${patientId}/${alertId}`, {
         method: 'POST',
         body: JSON.stringify({
-          acknowledgedBy: userId
-          // Let backend handle acknowledgedAt timestamp to avoid datetime format issues
+          performedBy: userId
+          // Let backend handle performedAt timestamp to avoid datetime format issues
         })
       });
       return true;

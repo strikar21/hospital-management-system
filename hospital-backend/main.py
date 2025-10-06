@@ -91,8 +91,8 @@ from app.api.v1.device_management import router as deviceManagementRouter
 
 # Import v2 repository-based API endpoints
 from app.api.v2.patients import router as patientsV2Router
+from app.api.v2.medications import router as medicationsV2Router
 # COMMENTED OUT: Using atomic operations instead
-# from app.api.v2.medications import router as medicationsV2Router
 # from app.api.v2.investigations import router as investigationsV2Router
 # from app.api.v2.therapy import router as therapyV2Router
 from app.api.v2.atomic_medical import router as atomicMedicalRouter
@@ -193,6 +193,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =====================================================
+# GLOBAL EXCEPTION HANDLERS (Day 7)
+# =====================================================
+
+from app.core.error_handlers import (
+    base_app_exception_handler,
+    validation_exception_handler,
+    database_exception_handler,
+    generic_exception_handler,
+    http_exception_handler
+)
+from app.core.exceptions import BaseAppException
+from fastapi.exceptions import RequestValidationError, HTTPException
+import asyncpg
+
+# Register exception handlers in order (specific to general)
+logger.info("🔄 Registering global exception handlers...")
+
+# Custom app exceptions
+app.add_exception_handler(BaseAppException, base_app_exception_handler)
+logger.info("✅ BaseAppException handler registered")
+
+# Pydantic validation errors
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+logger.info("✅ RequestValidationError handler registered")
+
+# FastAPI HTTP exceptions
+app.add_exception_handler(HTTPException, http_exception_handler)
+logger.info("✅ HTTPException handler registered")
+
+# Database exceptions
+app.add_exception_handler(asyncpg.PostgresError, database_exception_handler)
+logger.info("✅ PostgresError handler registered")
+
+# Catch-all for unhandled exceptions
+app.add_exception_handler(Exception, generic_exception_handler)
+logger.info("✅ Generic exception handler registered (catch-all)")
+
+logger.info("✅ All global exception handlers registered successfully")
+
 # Include API routers - Use settings for consistent API versioning
 app.include_router(authRouter, prefix=f"{settings.apiV1Str}/auth", tags=["Authentication"])
 app.include_router(auditRouter, prefix=f"{settings.apiV1Str}/audit", tags=["Audit"])
@@ -218,12 +258,13 @@ logger.info(f"✅ Device management router registered successfully at {settings.
 # Register v2 repository-based API endpoints
 logger.info("🔄 Registering v2 repository-based API endpoints...")
 app.include_router(patientsV2Router, prefix="/api/v2/patients", tags=["Patients v2 (Repository)"])
+app.include_router(medicationsV2Router, prefix="/api/v2/medications", tags=["Medications v2 (Repository)"])
 # COMMENTED OUT: Using atomic operations instead
-# app.include_router(medicationsV2Router, prefix="/api/v2/medications", tags=["Medications v2 (Repository)"])
 # app.include_router(investigationsV2Router, prefix="/api/v2/investigations", tags=["Investigations v2 (Repository)"])
 # app.include_router(therapyV2Router, prefix="/api/v2/therapy", tags=["Therapy v2 (Repository)"])
 app.include_router(atomicMedicalRouter, prefix="/api/v2", tags=["Atomic Medical Operations"])
 logger.info("✅ Patient API registered successfully")
+logger.info("✅ Medications API registered successfully")
 logger.info("✅ Atomic medical operations API registered successfully (replacing individual APIs)")
 
 @app.on_event("startup")

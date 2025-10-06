@@ -73,53 +73,30 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
 
     setAddingNote(true);
     try {
-      await PatientService.addNoteComment(patient.id, newNoteContent.trim(), currentUser.id);
+      const result = await PatientService.addNoteComment(patient.id, newNoteContent.trim(), currentUser.id, currentUser.name, currentUser.role);
 
-      // Backend must provide complete note with proper timestamp and ID
-      // TODO: Replace with actual backend response data
-      const newNote: noteComment = {
-        id: 'pending_note', // Will be replaced with backend-provided ID
-        content: newNoteContent.trim(),
-        authorId: currentUser.id,
-        authorName: currentUser.name,
-        authorRole: currentUser.role,
-        timestamp: new Date().toISOString(), // Medical action timestamp from frontend
-        canEdit: true, // Backend will determine final value
-        isEdited: false
-      };
+      if (result && result.success) {
+        // Use note from atomic response (includes real ID from backend)
+        const newNote: noteComment = result.medical_record;
+        onNoteAdded(newNote);
 
-      onNoteAdded(newNote);
-      setNewNoteContent('');
-      setIsAddingNote(false);
-
-      // Add to case sheet with role-based typing
-      try {
-        const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            entryType: getRoleBasedNoteType(currentUser.role),
-            description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.staffId
-          })
-        });
-
-        if (caseResponse.ok) {
-          const caseResult = await caseResponse.json();
+        // Add case sheet entry from atomic response
+        if (result.case_entry) {
           const newCaseEntry: caseSheetEntry = {
-            id: caseResult.id, // Backend must provide ID
-            timestamp: caseResult.timestamp || new Date().toISOString(),
-            type: getRoleBasedNoteType(currentUser.role),
-            description: `Note: "${newNoteContent.trim()}"`,
-            performedBy: currentUser.staffId,
-            canEdit: PatientService.canEditItem(caseResult.timestamp || new Date().toISOString())
+            id: result.case_entry.id,
+            timestamp: result.case_entry.timestamp,
+            type: result.case_entry.entryType,
+            description: result.case_entry.description,
+            performedBy: result.case_entry.performedBy,
+            canEdit: true
           };
           addCaseSheetEntry(newCaseEntry);
         }
-      } catch (caseError) {
-        // Warning noted
+
+        setNewNoteContent('');
+        setIsAddingNote(false);
+      } else {
+        throw new Error('Atomic operation failed');
       }
 
     } catch (error) {

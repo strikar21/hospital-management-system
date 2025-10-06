@@ -6,9 +6,17 @@ Handles all patient-related business rules and data processing
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
+import asyncpg
 
 from .base_service import BaseService
 from ..repositories.patient_repository import PatientRepository
+from ..core.exceptions import (
+    ValidationException,
+    NotFoundException,
+    DatabaseException,
+    BusinessRuleException,
+    PermissionDeniedException
+)
 
 
 class PatientService(BaseService):
@@ -33,57 +41,78 @@ class PatientService(BaseService):
     async def get_complete_patient_data(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """Get patient with all associated medical records"""
         try:
+            # Validate input
+            if not patient_id or not patient_id.strip():
+                raise ValidationException("Patient ID is required", field="patient_id")
+
             result = await self.patient_repository.get_complete_patient_data(patient_id)
 
-            if result:
-                # Transform to camelCase and process medical records
-                camel_result = self.patient_repository.transform_to_camel_case(result)
+            # Check if patient exists
+            if not result:
+                raise NotFoundException("Patient", patient_id)
 
-                # Process nested medical records - handle JSON strings
-                import json
-                for field in ['notes', 'medications', 'investigations', 'therapies']:
-                    field_data = camel_result.get(field)
+            # Transform to camelCase and process medical records
+            camel_result = self.patient_repository.transform_to_camel_case(result)
 
-                    # Parse JSON strings to arrays
-                    if isinstance(field_data, str):
-                        try:
-                            field_data = json.loads(field_data)
-                        except (json.JSONDecodeError, TypeError):
-                            field_data = []
+            # Process nested medical records - handle JSON strings
+            import json
+            for field in ['notes', 'medications', 'investigations', 'therapies']:
+                field_data = camel_result.get(field)
 
-                    # Ensure it's a list
-                    if not isinstance(field_data, list):
+                # Parse JSON strings to arrays
+                if isinstance(field_data, str):
+                    try:
+                        field_data = json.loads(field_data)
+                    except (json.JSONDecodeError, TypeError):
                         field_data = []
 
-                    # Filter out null entries and transform to camelCase
-                    camel_result[field] = [
-                        self.patient_repository.transform_to_camel_case(item)
-                        for item in field_data
-                        if item is not None
-                    ]
+                # Ensure it's a list
+                if not isinstance(field_data, list):
+                    field_data = []
 
-                    # Add edit permissions for each item
-                    for item in camel_result[field]:
-                        item['canEdit'] = self.can_edit_item(item.get('createdAt', ''))
+                # Filter out null entries and transform to camelCase
+                camel_result[field] = [
+                    self.patient_repository.transform_to_camel_case(item)
+                    for item in field_data
+                    if item is not None
+                ]
 
-                # Calculate age if birthDate exists
-                if camel_result.get('dateOfBirth'):
-                    camel_result['age'] = self.patient_repository.calculate_age(camel_result['dateOfBirth'])
+                # Add edit permissions for each item
+                for item in camel_result[field]:
+                    item['canEdit'] = self.can_edit_item(item.get('createdAt', ''))
 
-                # Resolve staff IDs to names
-                self.logger.info(f"🔍 Resolving staff names for patient {patient_id}")
-                await self._resolve_staff_names(camel_result)
-                self.logger.info(f"✅ Staff names resolved: attendingPhysicianName = {camel_result.get('attendingPhysicianName')}")
+            # Calculate age if birthDate exists
+            if camel_result.get('dateOfBirth'):
+                camel_result['age'] = self.patient_repository.calculate_age(camel_result['dateOfBirth'])
 
-                # Resolve staff IDs in medical records
-                await self._resolve_medical_record_staff_names(camel_result)
+            # Resolve staff IDs to names
+            self.logger.info(f"🔍 Resolving staff names for patient {patient_id}")
+            await self._resolve_staff_names(camel_result)
+            self.logger.info(f"✅ Staff names resolved: attendingPhysicianName = {camel_result.get('attendingPhysicianName')}")
 
-                return camel_result
+            # Resolve staff IDs in medical records
+            await self._resolve_medical_record_staff_names(camel_result)
 
-            return None
+            return camel_result
+
+        except (ValidationException, NotFoundException):
+            # Re-raise custom exceptions
+            raise
+
+        except asyncpg.PostgresError as e:
+            # Database errors
+            self.logger.error(
+                f"Database error getting complete patient data for {patient_id}: {e}",
+                exc_info=True
+            )
+            raise DatabaseException("get patient data", str(e))
 
         except Exception as e:
-            self.logger.error(f"Service error getting complete patient data: {e}")
+            # Unexpected errors
+            self.logger.error(
+                f"Unexpected error getting complete patient data for {patient_id}: {e}",
+                exc_info=True
+            )
             raise
 
     async def _resolve_staff_names(self, patient_data: Dict[str, Any]) -> None:
@@ -156,12 +185,8 @@ class PatientService(BaseService):
             if patient_data.get('therapies'):
                 for therapy in patient_data['therapies']:
                     if isinstance(therapy, dict):
-                        if therapy.get('conductedBy'):
-                            staff_ids.add(therapy['conductedBy'])
-                        if therapy.get('authorId'):
-                            staff_ids.add(therapy['authorId'])
-                        if therapy.get('createdBy'):
-                            staff_ids.add(therapy['createdBy'])
+                        if therapy.get('prescribedBy'):
+                            staff_ids.add(therapy['prescribedBy'])
 
             # Get staff IDs from notes
             if patient_data.get('notes'):
@@ -234,9 +259,19 @@ class PatientService(BaseService):
     async def search_patients(self, search_query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Search patients with business logic"""
         try:
-            # Basic validation
+            # Validate search query
             if not search_query or len(search_query.strip()) < 1:
-                return []
+                raise ValidationException(
+                    "Search query must be at least 1 character",
+                    field="search_query"
+                )
+
+            # Validate limit
+            if limit < 1 or limit > 1000:
+                raise ValidationException(
+                    "Limit must be between 1 and 1000",
+                    field="limit"
+                )
 
             results = await self.patient_repository.search_patients(search_query.strip(), limit)
 
@@ -256,8 +291,24 @@ class PatientService(BaseService):
 
             return enhanced_results
 
+        except ValidationException:
+            # Re-raise validation exceptions
+            raise
+
+        except asyncpg.PostgresError as e:
+            # Database errors
+            self.logger.error(
+                f"Database error searching patients with query '{search_query}': {e}",
+                exc_info=True
+            )
+            raise DatabaseException("search patients", str(e))
+
         except Exception as e:
-            self.logger.error(f"Service error searching patients: {e}")
+            # Unexpected errors
+            self.logger.error(
+                f"Unexpected error searching patients with query '{search_query}': {e}",
+                exc_info=True
+            )
             raise
 
     async def get_patients_by_status(self, status: str) -> List[Dict[str, Any]]:
@@ -290,25 +341,26 @@ class PatientService(BaseService):
     # PATIENT NOTES OPERATIONS
     # ================================
 
-    async def add_note_comment(self, patient_id: str, content: str, author_id: str,
-                              author_name: str = None, author_role: str = None) -> Dict[str, Any]:
+    async def add_note_comment(self, patient_id: str, content: str, author_id: str) -> Dict[str, Any]:
         """Add note with validation and business logic"""
         try:
-            # Validation
+            # Validate inputs
+            if not patient_id or not patient_id.strip():
+                raise ValidationException("Patient ID is required", field="patient_id")
+
             if not content or not content.strip():
-                raise ValueError("Note content cannot be empty")
+                raise ValidationException("Note content cannot be empty", field="content")
 
+            if not author_id or not author_id.strip():
+                raise ValidationException("Author ID is required", field="author_id")
+
+            # Check if patient exists
             if not await self.patient_repository.exists(patient_id):
-                raise ValueError(f"Patient {patient_id} not found")
+                raise NotFoundException("Patient", patient_id)
 
-            # Default values
-            if not author_name:
-                author_name = "Unknown"
-            if not author_role:
-                author_role = "Staff"
-
+            # Add note
             result = await self.patient_repository.add_patient_note(
-                patient_id, content.strip(), author_id, author_name, author_role
+                patient_id, content.strip(), author_id
             )
 
             if result:
@@ -316,10 +368,27 @@ class PatientService(BaseService):
                 camel_result['canEdit'] = True  # Newly created notes can always be edited
                 return camel_result
 
-            return None
+            # If result is None, something went wrong
+            raise DatabaseException("add note", "Failed to create note record")
+
+        except (ValidationException, NotFoundException):
+            # Re-raise custom exceptions
+            raise
+
+        except asyncpg.PostgresError as e:
+            # Database errors
+            self.logger.error(
+                f"Database error adding note for patient {patient_id}: {e}",
+                exc_info=True
+            )
+            raise DatabaseException("add note", str(e))
 
         except Exception as e:
-            self.logger.error(f"Service error adding note: {e}")
+            # Unexpected errors
+            self.logger.error(
+                f"Unexpected error adding note for patient {patient_id}: {e}",
+                exc_info=True
+            )
             raise
 
     async def edit_note_comment(self, patient_id: str, note_id: str, content: str, editor_id: str) -> bool:
@@ -359,7 +428,8 @@ class PatientService(BaseService):
     def can_edit_note(self, note: Dict[str, Any], user_id: str) -> bool:
         """Check if user can edit note"""
         # User can edit if they authored it and it's within edit window
-        return (note.get('authorId') == user_id and
+        # Check both createdBy (new) and authorId (legacy) for backwards compatibility
+        return ((note.get('createdBy') == user_id or note.get('authorId') == user_id) and
                 self.can_edit_item(note.get('timestamp', '')))
 
     # ================================
@@ -369,26 +439,58 @@ class PatientService(BaseService):
     async def discharge_patient(self, patient_id: str, discharged_by: str) -> bool:
         """Discharge patient with business logic validation"""
         try:
-            # Check if patient exists and is eligible for discharge
+            # Validate inputs
+            if not patient_id or not patient_id.strip():
+                raise ValidationException("Patient ID is required", field="patient_id")
+
+            if not discharged_by or not discharged_by.strip():
+                raise ValidationException("Discharged by staff ID is required", field="discharged_by")
+
+            # Check if patient exists
             patient = await self.patient_repository.get_by_id(patient_id)
             if not patient:
-                raise ValueError(f"Patient {patient_id} not found")
+                raise NotFoundException("Patient", patient_id)
 
+            # Business rule: Cannot discharge already discharged patient
             if patient.get('status') == 'discharged':
-                raise ValueError(f"Patient {patient_id} is already discharged")
+                raise BusinessRuleException(
+                    f"Patient {patient_id} is already discharged",
+                    rule="no_duplicate_discharge"
+                )
+
+            # Business rule: Cannot discharge critical patients without special authorization
+            # (This is a simplified example - real systems would have more complex rules)
+            if patient.get('status') == 'critical':
+                self.logger.warning(f"Discharging critical patient {patient_id} - requires authorization")
+                # In production, check authorization here
 
             # Perform discharge
             success = await self.patient_repository.discharge_patient(patient_id, discharged_by)
 
-            # Post-discharge processing would go here
-            # (e.g., device unassignment, alert cleanup, etc.)
+            # Post-discharge processing
             if success:
                 await self.post_discharge_processing(patient_id, discharged_by)
 
             return success
 
+        except (ValidationException, NotFoundException, BusinessRuleException):
+            # Re-raise custom exceptions
+            raise
+
+        except asyncpg.PostgresError as e:
+            # Database errors
+            self.logger.error(
+                f"Database error discharging patient {patient_id}: {e}",
+                exc_info=True
+            )
+            raise DatabaseException("discharge patient", str(e))
+
         except Exception as e:
-            self.logger.error(f"Service error discharging patient: {e}")
+            # Unexpected errors
+            self.logger.error(
+                f"Unexpected error discharging patient {patient_id}: {e}",
+                exc_info=True
+            )
             raise
 
     async def post_discharge_processing(self, patient_id: str, discharged_by: str) -> None:

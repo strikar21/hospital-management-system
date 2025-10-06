@@ -203,7 +203,7 @@ async def getTherapySchedule(
 @router.post("/medication-administration/{administrationId}/administer")
 async def administerMedication(
     administrationId: str,
-    administeredBy: str,
+    performedBy: str,
     notes: Optional[str] = None
 ):
     """
@@ -220,38 +220,38 @@ async def administerMedication(
                 WHERE ma.id = $1
             """
             administration = await conn.fetchrow(checkQuery, administrationId)
-            
+
             if not administration:
                 raise HTTPException(status_code=404, detail="Medication administration not found")
-            
+
             # Update administration status
             updateQuery = """
-                UPDATE medicationadministrations 
-                SET status = 'administered', 
-                    "administeredAt" = NOW(),
-                    "administeredBy" = $1,
+                UPDATE medicationadministrations
+                SET status = 'administered',
+                    "performedAt" = NOW(),
+                    "performedBy" = $1,
                     notes = $2,
                     "updatedAt" = NOW()
                 WHERE id = $3
             """
-            await conn.execute(updateQuery, administeredBy, notes, administrationId)
-            
+            await conn.execute(updateQuery, performedBy, notes, administrationId)
+
             # Log audit event
             await logAuditEvent(
-                userId=administeredBy,
+                userId=performedBy,
                 action="MEDICATION_ADMINISTERED",
                 resourceType="MEDICATION_ADMINISTRATION",
                 resourceId=administrationId,
                 details=f"Administered {administration['medicationname']} to {administration.get('firstName', '')} {administration.get('lastName', '')}"
             )
-            
-            logger.info(f"✅ Medication administered: {administrationId} by {administeredBy}")
-            
+
+            logger.info(f"✅ Medication administered: {administrationId} by {performedBy}")
+
             return {
                 "message": "Medication administered successfully",
                 "administrationid": administrationId,
-                "administeredBy": administeredBy,
-                "administeredAt": datetime.now().isoformat()
+                "performedBy": performedBy,
+                "performedAt": datetime.now().isoformat()
             }
             
     except HTTPException:

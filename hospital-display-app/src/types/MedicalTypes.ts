@@ -4,7 +4,17 @@
  * Medication, investigation, therapy, and allergy management types
  */
 
-export interface medication {
+/**
+ * MedicalRecordAudit - Base interface for medical record audit fields
+ */
+interface MedicalRecordAudit {
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface medication extends MedicalRecordAudit {
   id: string;
   name: string;
   dosage: string;
@@ -16,11 +26,23 @@ export interface medication {
   duration?: string;
   prescribedBy: string;
   prescribedByName?: string;
-  createdAt: string;
   modifiedBy?: string;
-  updatedAt?: string;
   canEdit?: boolean;
   history?: medicationHistoryEntry[];
+}
+
+export interface medicationAdministration extends MedicalRecordAudit {
+  id: string;
+  medicationId: string;
+  patientId: string;
+  scheduledTime: string;
+  performedAt: string;
+  performedBy: string;
+  performedByName?: string;
+  dosageGiven: string;
+  route: string;
+  status: 'scheduled' | 'completed' | 'missed' | 'refused';
+  notes?: string;
 }
 
 export interface medicationHistoryEntry {
@@ -33,11 +55,10 @@ export interface medicationHistoryEntry {
   newState?: any;
 }
 
-export interface investigation {
+export interface investigation extends MedicalRecordAudit {
   id: string;
   type: 'lab' | 'imaging' | 'biopsy' | 'culture';
   name: string;
-  createdAt: string;
   orderedAt?: string; // Add missing orderedAt field
   scheduledAt?: string;
   completedAt?: string;
@@ -46,13 +67,15 @@ export interface investigation {
   labResults?: labresult[]; // Detailed lab results
   prescribedBy: string;
   prescribedByName?: string;
+  performedBy?: string;
+  performedByName?: string;
   priority: 'routine' | 'urgent' | 'stat';
   urgency: 'STAT' | 'Emergency' | 'Urgent' | 'Routine'; // Added urgency field
   notes?: string;
   canEdit: boolean;
 }
 
-export interface therapy {
+export interface therapy extends MedicalRecordAudit {
   id: string;
   type: 'physiotherapy' | 'occupational' | 'speech' | 'respiratory';
   name: string; // Added name field
@@ -68,15 +91,22 @@ export interface therapy {
   notes?: string;
   sessions: therapySession[];
   canEdit: boolean;
+  // Inherits: createdBy, createdByName, createdAt, updatedAt
 }
 
-export interface therapySession {
+export interface therapySession extends MedicalRecordAudit {
   id: string;
-  date: string;
-  duration: number; // minutes
-  notes: string;
-  therapist: string;
-  patientResponse: string;
+  therapyId: string;
+  patientId: string;
+  sessionNumber: number;
+  scheduledDate?: string;
+  completedAt?: string;
+  performedBy?: string;
+  performedByName?: string;
+  sessionNotes?: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  duration?: string;
+  // Inherits: createdBy, createdByName, createdAt, updatedAt
 }
 
 // Allergy System

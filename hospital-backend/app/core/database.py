@@ -276,6 +276,7 @@ async def createTables():
             "endDate" TIMESTAMPTZ,
             duration TEXT,
             "prescribedBy" TEXT NOT NULL,
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -286,12 +287,13 @@ async def createTables():
             "medicationId" TEXT NOT NULL,
             "patientId" TEXT NOT NULL,
             "scheduledTime" TIMESTAMPTZ NOT NULL,
-            "administeredAt" TIMESTAMPTZ,
-            "administeredBy" TEXT,
+            "performedAt" TIMESTAMPTZ,
+            "performedBy" TEXT,
             "dosageGiven" TEXT,
             route TEXT,
             status TEXT DEFAULT 'scheduled',
             notes TEXT,
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -306,11 +308,13 @@ async def createTables():
             "completedAt" TIMESTAMPTZ,
             priority TEXT DEFAULT 'routine',
             status TEXT DEFAULT 'ordered',
+            "prescribedBy" TEXT,
             "performedBy" TEXT,
             results TEXT,
             notes TEXT,
             "canEdit" BOOLEAN DEFAULT true,
             urgency TEXT DEFAULT 'routine',
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -326,8 +330,9 @@ async def createTables():
             frequency TEXT,
             duration TEXT,
             status TEXT DEFAULT 'active',
-            "performedBy" TEXT,
+            "prescribedBy" TEXT,
             notes TEXT,
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -344,6 +349,7 @@ async def createTables():
             "sessionNotes" TEXT,
             status TEXT DEFAULT 'scheduled',
             duration TEXT,
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -353,10 +359,9 @@ async def createTables():
             id SERIAL PRIMARY KEY,
             "patientId" TEXT NOT NULL,
             content TEXT NOT NULL,
-            "authorId" TEXT NOT NULL,
-            "authorName" TEXT NOT NULL,
-            "authorRole" TEXT NOT NULL,
+            "createdBy" TEXT NOT NULL,
             timestamp TIMESTAMPTZ DEFAULT NOW(),
+            "editedBy" TEXT,
             "editedAt" TIMESTAMPTZ,
             "isEdited" BOOLEAN DEFAULT FALSE
         );
@@ -369,6 +374,7 @@ async def createTables():
             description TEXT NOT NULL,
             "performedBy" TEXT NOT NULL,
             timestamp TIMESTAMPTZ DEFAULT NOW(),
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
@@ -382,11 +388,34 @@ async def createTables():
             message TEXT NOT NULL,
             timestamp TIMESTAMPTZ DEFAULT NOW(),
             status TEXT DEFAULT 'active',
-            "acknowledgedBy" TEXT,
-            "acknowledgedAt" TIMESTAMPTZ,
+            "performedBy" TEXT,
+            "performedAt" TIMESTAMPTZ,
+            "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
+
+        -- Discharge Workflow table
+        CREATE TABLE IF NOT EXISTS discharge_requests (
+            id SERIAL PRIMARY KEY,
+            "patientId" TEXT NOT NULL,
+            status TEXT DEFAULT 'requested',
+            reason TEXT,
+            notes TEXT,
+            "requestedBy" TEXT NOT NULL,
+            "requestedAt" TIMESTAMPTZ DEFAULT NOW(),
+            "approvedBy" TEXT,
+            "approvedAt" TIMESTAMPTZ,
+            "approvalNotes" TEXT,
+            "performedBy" TEXT,
+            "performedAt" TIMESTAMPTZ,
+            "dischargeNotes" TEXT,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_discharge_requests_patient ON discharge_requests("patientId");
+        CREATE INDEX IF NOT EXISTS idx_discharge_requests_status ON discharge_requests(status);
 
         -- Admission Recommendations table
         CREATE TABLE IF NOT EXISTS admissionrecommendations (

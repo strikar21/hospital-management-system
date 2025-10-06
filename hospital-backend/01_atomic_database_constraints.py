@@ -264,10 +264,10 @@ async def enhance_database_constraints():
             DECLARE
                 entry_id UUID;
             BEGIN
-                INSERT INTO casesheetentries (
-                    "patientId", "entryType", description, "performedBy", timestamp
+                INSERT INTO "caseEntries" (
+                    "patientId", "entryType", description, "createdBy", timestamp, "createdAt", "updatedAt"
                 ) VALUES (
-                    p_patient_id, p_entry_type, p_description, p_performed_by, NOW()
+                    p_patient_id, p_entry_type, p_description, p_performed_by, NOW(), NOW(), NOW()
                 ) RETURNING id INTO entry_id;
 
                 RETURN entry_id;

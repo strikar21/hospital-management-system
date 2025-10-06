@@ -191,16 +191,9 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
 
                   const result = await response.json();
                   if (result.success) {
-                    // Refetch fresh data from backend (single source of truth)
-                    try {
-                      const medicationsResponse = await fetch(getApiUrl(`/patients/${patient.id}/medications`));
-                      if (medicationsResponse.ok) {
-                        const data = await medicationsResponse.json();
-                        setMedications(data.medications || data);
-                      }
-                    } catch (refreshError) {
-                      // Failed to refresh medications after adding - handle silently
-                    }
+                    // Use medication from atomic response
+                    const newMedication = result.medical_record;
+                    setMedications(prev => [...prev, newMedication]);
                   } else {
                     // Failed to add medication - no backend response
                     alert('Failed to add medication. Please try again.');
@@ -215,7 +208,7 @@ const PatientMedications: React.FC<PatientMedicationsProps> = ({
                     const newCaseEntry: caseSheetEntry = {
                       id: result.case_entry.id,
                       timestamp: result.case_entry.timestamp,
-                      type: 'pharmacistNote',
+                      type: result.case_entry.entryType,
                       description: result.case_entry.description,
                       performedBy: result.case_entry.performedBy,
                       canEdit: true

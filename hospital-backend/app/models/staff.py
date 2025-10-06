@@ -98,6 +98,8 @@ class StaffLoginResponse(BaseModel):
     department: Optional[str] = None
     lastSeen: Optional[datetime] = None
     accessToken: Optional[str] = None
+    refreshToken: Optional[str] = None
+    tokenType: str = "bearer"
 
     @property
     def name(self) -> str:

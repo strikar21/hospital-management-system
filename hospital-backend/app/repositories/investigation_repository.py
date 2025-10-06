@@ -20,6 +20,7 @@ class InvestigationRepository(BaseRepository):
         """Add investigation to patient"""
         investigation_data['patientId'] = patient_id
         investigation_data['status'] = 'pending'
+        investigation_data['createdBy'] = created_by  # Audit trail - who created this record
         return await self.create(investigation_data, created_by)
 
     async def update_investigation_status(self, patient_id: str, investigation_id: str, status: str, updated_by: str) -> bool:

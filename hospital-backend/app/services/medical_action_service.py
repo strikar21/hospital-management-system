@@ -15,6 +15,13 @@ from contextlib import asynccontextmanager
 import logging
 from ..core.database import getDbConnection
 from ..services.audit import logAuditEvent
+from ..core.exceptions import (
+    ValidationException,
+    NotFoundException,
+    DatabaseException,
+    BusinessRuleException,
+    ConflictException
+)
 
 
 class MedicalActionService:
@@ -78,6 +85,32 @@ class MedicalActionService:
             Complete result with medical record and case entry
         """
 
+        # Validate inputs
+        if not action_type or not action_type.strip():
+            raise ValidationException("Action type is required", field="action_type")
+
+        if not patient_id or not patient_id.strip():
+            raise ValidationException("Patient ID is required", field="patient_id")
+
+        if not performed_by or not performed_by.strip():
+            raise ValidationException("Performed by staff ID is required", field="performed_by")
+
+        if not action_data or not isinstance(action_data, dict):
+            raise ValidationException("Action data must be a non-empty dictionary", field="action_data")
+
+        # Validate action_type
+        valid_action_types = [
+            'medication', 'investigation', 'therapy', 'note',
+            'medication_administration', 'therapy_session',
+            'alert_acknowledgment', 'investigation_completion',
+            'medication_status_change'
+        ]
+        if action_type not in valid_action_types:
+            raise ValidationException(
+                f"Invalid action type: {action_type}. Must be one of: {', '.join(valid_action_types)}",
+                field="action_type"
+            )
+
         # Generate idempotency key if not provided
         if not idempotency_key:
             idempotency_key = f"{action_type}_{patient_id}_{uuid.uuid4()}"
@@ -135,13 +168,57 @@ class MedicalActionService:
                     self.logger.info(f"Atomic {action_type} completed successfully for patient {patient_id}")
                     return result
 
+                except ValidationException:
+                    # Mark transaction as failed and re-raise
+                    await self._fail_transaction_tracking(conn, transaction_id, "Validation error")
+                    raise
+
+                except asyncpg.UniqueViolationError as e:
+                    # Duplicate record
+                    await self._fail_transaction_tracking(conn, transaction_id, str(e))
+                    raise ConflictException(
+                        f"A {action_type} record with this identifier already exists"
+                    )
+
+                except asyncpg.ForeignKeyViolationError as e:
+                    # Referenced record doesn't exist
+                    await self._fail_transaction_tracking(conn, transaction_id, str(e))
+                    raise ValidationException(
+                        f"Referenced {action_type} record does not exist"
+                    )
+
+                except asyncpg.PostgresError as e:
+                    # Other database errors
+                    await self._fail_transaction_tracking(conn, transaction_id, str(e))
+                    self.logger.error(
+                        f"Database error in atomic {action_type}: {e}",
+                        exc_info=True
+                    )
+                    raise DatabaseException(f"execute {action_type}", str(e))
+
                 except Exception as e:
                     # Mark transaction as failed
                     await self._fail_transaction_tracking(conn, transaction_id, str(e))
                     raise
 
+        except (ValidationException, NotFoundException, ConflictException, DatabaseException):
+            # Re-raise custom exceptions
+            raise
+
+        except asyncpg.PostgresError as e:
+            # Database errors at transaction level
+            self.logger.error(
+                f"Database error in atomic medical action {action_type}: {e}",
+                exc_info=True
+            )
+            raise DatabaseException(f"atomic {action_type}", str(e))
+
         except Exception as e:
-            self.logger.error(f"Atomic medical action failed: {e}")
+            # Unexpected errors
+            self.logger.error(
+                f"Unexpected error in atomic medical action {action_type}: {e}",
+                exc_info=True
+            )
             raise
 
     async def _execute_action(
@@ -184,6 +261,9 @@ class MedicalActionService:
     ) -> Dict[str, Any]:
         """Create medication record atomically"""
 
+        self.logger.info(f"DEBUG: _create_medication called with medication_data: {medication_data}")
+        self.logger.info(f"DEBUG: performed_by: {performed_by}")
+
         med_data = {
             'patientId': patient_id,
             'name': medication_data.get('name') or medication_data.get('medication_name'),
@@ -193,9 +273,11 @@ class MedicalActionService:
             'startDate': medication_data.get('startDate', datetime.now()),
             'endDate': medication_data.get('endDate'),
             'duration': medication_data.get('duration'),
-            'prescribedBy': performed_by,
-            'status': 'active'
+            'prescribedBy': medication_data.get('prescribedBy', performed_by),
+            'status': medication_data.get('status', 'active')
         }
+
+        self.logger.info(f"DEBUG: med_data prepared for INSERT: {med_data}")
 
         # Insert with RETURNING to get complete record
         columns = list(med_data.keys())
@@ -209,8 +291,18 @@ class MedicalActionService:
             RETURNING *
         """
 
-        result = await conn.fetchrow(query, *values)
-        return dict(result)
+        self.logger.info(f"DEBUG: SQL Query: {query}")
+        self.logger.info(f"DEBUG: SQL Values: {values}")
+
+        try:
+            result = await conn.fetchrow(query, *values)
+            self.logger.info(f"DEBUG: INSERT successful, result: {dict(result)}")
+            return dict(result)
+        except Exception as e:
+            self.logger.error(f"ERROR: SQL INSERT failed: {e}")
+            self.logger.error(f"ERROR: Query was: {query}")
+            self.logger.error(f"ERROR: Values were: {values}")
+            raise
 
     async def _create_investigation(
         self,
@@ -223,12 +315,12 @@ class MedicalActionService:
 
         inv_data = {
             'patientId': patient_id,
-            'type': investigation_data.get('type', 'lab'),
-            'name': investigation_data.get('name'),
+            'type': investigation_data.get('testType', 'Lab'),
+            'name': investigation_data.get('testName'),
             'status': 'pending',
-            'priority': investigation_data.get('priority', 'routine'),
+            'priority': investigation_data.get('priority', 'Routine'),
             'urgency': investigation_data.get('urgency', 'Routine'),
-            'performedBy': performed_by,
+            'prescribedBy': investigation_data.get('prescribedBy', performed_by),
             'notes': investigation_data.get('notes'),
             'createdAt': datetime.now()
         }
@@ -258,11 +350,13 @@ class MedicalActionService:
 
         ther_data = {
             'patientId': patient_id,
-            'type': therapy_data.get('type') or therapy_data.get('therapy_type'),
+            'type': therapy_data.get('therapyType') or therapy_data.get('type') or therapy_data.get('therapy_type'),
             'description': therapy_data.get('description'),
+            'startDate': therapy_data.get('startDate'),
+            'endDate': therapy_data.get('endDate'),
             'frequency': therapy_data.get('frequency'),
             'duration': therapy_data.get('duration'),
-            'performedBy': performed_by,
+            'prescribedBy': therapy_data.get('prescribedBy', performed_by),
             'notes': therapy_data.get('notes'),
             'status': 'active'
         }
@@ -296,9 +390,9 @@ class MedicalActionService:
         note_record = {
             'patientId': patient_id,
             'content': content,
-            'authorId': performed_by,
-            'authorName': note_data.get('commentedBy') or note_data.get('authorName', 'Staff'),
-            'createdAt': datetime.now()
+            'createdBy': performed_by
+            # timestamp is auto-generated by database DEFAULT NOW()
+            # authorName is resolved via JOIN when fetching notes
         }
 
         columns = list(note_record.keys())
@@ -338,8 +432,9 @@ class MedicalActionService:
             'medicationId': administration_data.get('medication_id'),
             'patientId': patient_id,
             'scheduledTime': administered_at,  # Required field - use current time
-            'administeredAt': administered_at,
-            'administeredBy': performed_by,
+            'performedAt': administered_at,
+            'performedBy': performed_by,
+            'createdBy': performed_by,  # Audit trail - who created this administration record
             'dosageGiven': medication_details['dosage'] if medication_details else 'Unknown',
             'route': medication_details['route'] if medication_details else 'Unknown',
             'status': 'completed',
@@ -386,7 +481,7 @@ class MedicalActionService:
 
         # Get therapy details to fill in proper therapy information
         therapy_details = await conn.fetchrow(
-            'SELECT description, type FROM therapies WHERE id = $1',
+            'SELECT description, type FROM therapy WHERE id = $1',
             session_data.get('therapy_id')
         )
 
@@ -469,8 +564,8 @@ class MedicalActionService:
         await conn.execute('''
             UPDATE patient_alerts
             SET status = 'acknowledged',
-                "acknowledgedBy" = $1,
-                "acknowledgedAt" = $2
+                "performedBy" = $1,
+                "performedAt" = $2
             WHERE id = $3 AND "patientId" = $4
         ''', performed_by, acknowledged_at, alert_id, patient_id)
 
@@ -479,8 +574,8 @@ class MedicalActionService:
             'id': alert_id,
             'alertId': alert_id,
             'patientId': patient_id,
-            'acknowledgedBy': performed_by,
-            'acknowledgedAt': acknowledged_at,
+            'performedBy': performed_by,
+            'performedAt': acknowledged_at,
             'alertType': alert_details['type'],
             'alertMessage': alert_details['message'],
             'alertSeverity': alert_details['severity'],
@@ -624,7 +719,10 @@ class MedicalActionService:
             result['id']
         )
 
-        return dict(case_entry)
+        # Convert UUID to string for JSON serialization
+        entry_dict = dict(case_entry)
+        entry_dict['id'] = str(entry_dict['id'])
+        return entry_dict
 
     def _build_case_entry_description(self, action_type: str, medical_record: Dict[str, Any]) -> str:
         """Build descriptive case entry description"""
@@ -655,7 +753,7 @@ class MedicalActionService:
             dosage = medical_record.get('dosageGiven', '')
             route = medical_record.get('route', '')
             notes = medical_record.get('notes', '')
-            timestamp = medical_record.get('administeredAt', '')
+            timestamp = medical_record.get('performedAt', '')
             return f"Medication administered: {medication_id} {dosage} via {route}".strip()
 
         elif action_type == 'therapy_session':
@@ -669,8 +767,8 @@ class MedicalActionService:
             alert_type = medical_record.get('alertType', 'Unknown alert')
             alert_message = medical_record.get('alertMessage', '')
             alert_severity = medical_record.get('alertSeverity', '')
-            acknowledged_by = medical_record.get('acknowledgedBy', 'Unknown staff')
-            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''} by {acknowledged_by}".strip()
+            performed_by_staff = medical_record.get('performedBy', 'Unknown staff')
+            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''} by {performed_by_staff}".strip()
 
         elif action_type == 'investigation_completion':
             investigation_name = medical_record.get('investigationName', 'Unknown investigation')
@@ -696,7 +794,7 @@ class MedicalActionService:
         """Check if operation already completed (idempotency)"""
         async with getDbConnection() as conn:
             result = await conn.fetchrow(
-                "SELECT result FROM medical_operations WHERE idempotency_key = $1 AND status = 'completed'",
+                'SELECT result FROM medical_operations WHERE "idempotencyKey" = $1 AND status = \'completed\'',
                 idempotency_key
             )
 
@@ -713,7 +811,7 @@ class MedicalActionService:
         """Store operation result for idempotency"""
         await conn.execute("""
             INSERT INTO medical_operations (
-                idempotency_key, operation_type, patient_id, result, status, completed_at
+                "idempotencyKey", "operationType", "patientId", result, status, "completedAt"
             ) VALUES ($1, $2, $3, $4, 'completed', NOW())
         """, idempotency_key, result['action_type'],
              result['medical_record']['patientId'], json.dumps(result))
@@ -727,11 +825,17 @@ class MedicalActionService:
         operation_data: Dict[str, Any]
     ):
         """Start transaction tracking"""
+        # Convert datetime objects to ISO strings for JSON serialization
+        def datetime_serializer(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
         await conn.execute("""
             INSERT INTO atomic_transactions (
-                transaction_id, patient_id, operation_type, operation_data, status
+                "transactionId", "patientId", "operationType", "operationData", status
             ) VALUES ($1, $2, $3, $4, 'in_progress')
-        """, transaction_id, patient_id, operation_type, json.dumps(operation_data))
+        """, transaction_id, patient_id, operation_type, json.dumps(operation_data, default=datetime_serializer))
 
     async def _complete_transaction_tracking(
         self,
@@ -742,8 +846,8 @@ class MedicalActionService:
         """Complete transaction tracking"""
         await conn.execute("""
             UPDATE atomic_transactions
-            SET status = 'completed', completed_at = NOW()
-            WHERE transaction_id = $1
+            SET status = 'completed', "completedAt" = NOW()
+            WHERE "transactionId" = $1
         """, transaction_id)
 
     async def _fail_transaction_tracking(
@@ -755,8 +859,8 @@ class MedicalActionService:
         """Mark transaction as failed"""
         await conn.execute("""
             UPDATE atomic_transactions
-            SET status = 'failed', error_message = $2, completed_at = NOW()
-            WHERE transaction_id = $1
+            SET status = 'failed', "errorMessage" = $2, "completedAt" = NOW()
+            WHERE "transactionId" = $1
         """, transaction_id, error_message)
 
     def _transform_to_camel_case(self, record: Dict[str, Any]) -> Dict[str, Any]:

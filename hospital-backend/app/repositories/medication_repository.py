@@ -36,6 +36,7 @@ class MedicationRepository(BaseRepository):
                 'endDate': medication_data.get('end_date') or medication_data.get('endDate'),
                 'duration': medication_data.get('duration'),
                 'prescribedBy': medication_data.get('prescribed_by'),  # transformed from prescribedBy
+                'createdBy': created_by,  # Audit trail - who created this record
                 'status': 'active'
             }
 

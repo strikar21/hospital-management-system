@@ -13,7 +13,7 @@ class TherapyRepository(BaseRepository):
     """Therapy repository for all therapy-related database operations"""
 
     def __init__(self):
-        super().__init__("therapies", None)
+        super().__init__("therapy", None)
 
     async def get_by_patient_id(self, patient_id: str) -> List[Dict[str, Any]]:
         """Get therapies by patient ID"""
@@ -43,6 +43,7 @@ class TherapyRepository(BaseRepository):
                 'frequency': therapy_data.get('frequency'),
                 'duration': therapy_data.get('duration'),
                 'prescribedBy': therapy_data.get('prescribed_by') or therapy_data.get('prescribedBy'),
+                'createdBy': created_by,  # Audit trail - who created this record
                 'notes': therapy_data.get('notes'),
                 'status': 'active'
             }
@@ -93,8 +94,8 @@ class TherapyRepository(BaseRepository):
             session_data['patientId'] = patient_id
 
             query = """
-                INSERT INTO therapysessions (id, "therapyId", "patientId", duration, "sessionNotes", "performedBy", status, "sessionNumber", "scheduledDate", "createdAt", "updatedAt")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+                INSERT INTO therapysessions (id, "therapyId", "patientId", duration, "sessionNotes", "performedBy", "createdBy", status, "sessionNumber", "scheduledDate", "createdAt", "updatedAt")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
                 RETURNING *
             """
 
@@ -110,6 +111,7 @@ class TherapyRepository(BaseRepository):
                 str(session_data.get('duration', '')),
                 session_data.get('sessionNotes') or session_data.get('notes'),
                 session_data.get('therapist') or session_data.get('performedBy'),
+                created_by,  # Audit trail - who created this session record
                 'completed',
                 1,  # Default session number
                 now,  # Use datetime object for scheduledDate

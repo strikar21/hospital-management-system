@@ -44,24 +44,23 @@ export class MedicationService extends BaseService {
     }
   }
 
-  static async addMedication(patientId: string, medication: Omit<medication, 'id' | 'history'>, userId: string): Promise<medication | null> {
+  static async addMedication(patientId: string, medication: Omit<medication, 'id' | 'history'>, userId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/medications/patient/${patientId}/add`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/medications`, {
         method: 'POST',
         body: JSON.stringify({
-          medicationName: medication.name, // Map 'name' to 'medicationName' for backend
+          name: medication.name,
           dosage: medication.dosage,
           frequency: medication.frequency,
           route: medication.route,
           duration: medication.duration,
           prescribedBy: medication.prescribedBy || userId,
-          createdAt: new Date().toISOString(),
           status: 'active'
         })
       });
 
-      // Removed console.log for production
-      return response; // Return the actual medication object from backend
+      // Atomic response includes {success: true, medical_record: {...}, case_entry: {...}}
+      return response;
     } catch (error) {
       // Error adding medication - handle silently
       return null;
@@ -123,8 +122,8 @@ export class MedicationService extends BaseService {
       await this.fetchFromBackend(`/medications/${medicationId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
-          administeredBy: userId,
-          administeredAt: new Date().toISOString(),
+          performedBy: userId,
+          performedAt: new Date().toISOString(),
           notes: 'Medication administered as prescribed'
         })
       });
@@ -221,108 +220,4 @@ export class MedicationService extends BaseService {
     }
   }
 
-  // ================================
-  // MEDICATION VALIDATION (UNCHANGED)
-  // ================================
-
-  static validateMedicationDosage(medication: any): boolean {
-    if (!medication.dosage || !medication.frequency) {
-      return false;
-    }
-
-    // Basic validation for common dosage formats
-    const dosagePattern = /^\d+(\.\d+)?\s?(mg|g|ml|units?|mcg|μg)/i;
-    const frequencyPattern = /^(once|twice|three times?|four times?|\d+\s?times?)\s?(daily|per day|a day|qd|bid|tid|qid)/i;
-
-    return dosagePattern.test(medication.dosage) && frequencyPattern.test(medication.frequency);
-  }
-
-  static calculateNextDose(medication: any): Date | null {
-    try {
-      if (!medication.lastAdministered || !medication.frequency) {
-        return null;
-      }
-
-      const lastDose = new Date(medication.lastAdministered);
-      const frequency = medication.frequency.toLowerCase();
-
-      let hoursInterval = 24; // Default to once daily
-
-      if (frequency.includes('bid') || frequency.includes('twice')) {
-        hoursInterval = 12;
-      } else if (frequency.includes('tid') || frequency.includes('three')) {
-        hoursInterval = 8;
-      } else if (frequency.includes('qid') || frequency.includes('four')) {
-        hoursInterval = 6;
-      } else if (frequency.includes('q6h')) {
-        hoursInterval = 6;
-      } else if (frequency.includes('q8h')) {
-        hoursInterval = 8;
-      } else if (frequency.includes('q12h')) {
-        hoursInterval = 12;
-      }
-
-      const nextDose = new Date(lastDose.getTime() + (hoursInterval * 60 * 60 * 1000));
-      return nextDose;
-    } catch (error) {
-      // Error calculating next dose - handle silently
-      return null;
-    }
-  }
-
-  // ================================
-  // MEDICATION ALERTS (LEGACY SUPPORT - V1 FALLBACK)
-  // ================================
-
-  static async getMedicationAlerts(patientId: string): Promise<any[]> {
-    try {
-      // V2 doesn't have dedicated medication alerts endpoint yet
-      // Fall back to v1 for now
-      const response = await this.fetchFromBackend(`/patients/${patientId}/medications/alerts`);
-      return Array.isArray(response) ? response : [];
-    } catch (error) {
-      // Warning: Medication alerts not available in v2, falling back to empty array
-      return [];
-    }
-  }
-
-  static async acknowledgeMedicationAlert(patientId: string, alertId: string, userId: string): Promise<boolean> {
-    try {
-      // V2 doesn't have dedicated medication alerts endpoint yet
-      // Fall back to v1 for now
-      await this.fetchFromBackend(`/patients/${patientId}/medications/alerts/${alertId}/acknowledge`, {
-        method: 'POST',
-        body: JSON.stringify({
-          acknowledgedBy: userId,
-          acknowledgedAt: new Date().toISOString()
-        })
-      });
-
-      // Removed console.log for production
-      return true;
-    } catch (error) {
-      // Warning: Medication alert acknowledgment not available in v2
-      return false;
-    }
-  }
-
-  // ================================
-  // MEDICATION INTERACTIONS (LEGACY SUPPORT - V1 FALLBACK)
-  // ================================
-
-  static async checkMedicationInteractions(patientId: string, newMedication: any): Promise<any[]> {
-    try {
-      // V2 doesn't have medication interactions endpoint yet
-      // Fall back to v1 for now
-      const response = await this.fetchFromBackend(`/patients/${patientId}/medications/check-interactions`, {
-        method: 'POST',
-        body: JSON.stringify(newMedication)
-      });
-
-      return Array.isArray(response) ? response : [];
-    } catch (error) {
-      // Warning: Medication interactions not available in v2, falling back to empty array
-      return [];
-    }
-  }
 }

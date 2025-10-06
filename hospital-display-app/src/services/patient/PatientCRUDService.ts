@@ -92,7 +92,7 @@ export class PatientCRUDService extends BaseService {
    */
   static async searchPatients(query: string): Promise<patient[]> {
     try {
-      const response = await this.fetchFromBackend(`/patients/search?q=${encodeURIComponent(query)}`);
+      const response = await this.fetchFromBackend(`/patients/search/${encodeURIComponent(query)}`);
       const patients = Array.isArray(response) ? response : [];
       return PatientTransformer.transformPatientArray(patients);
     } catch (error) {
@@ -130,7 +130,7 @@ export class PatientCRUDService extends BaseService {
   static async dischargePatient(patientId: string, staffId: string): Promise<boolean> {
     try {
       // Step 1: Initiate discharge workflow
-      const initResponse = await this.fetchFromBackend('/discharge-workflow/initiate', {
+      const initResponse = await this.fetchFromBackend('/discharge-workflow/doctor-request', {
         method: 'POST',
         body: JSON.stringify({
           patientId,
@@ -159,7 +159,7 @@ export class PatientCRUDService extends BaseService {
       }
 
       // Step 3: Complete discharge
-      const completeResponse = await this.fetchFromBackend('/discharge-workflow/complete', {
+      const completeResponse = await this.fetchFromBackend('/discharge-workflow/nurse-discharge', {
         method: 'POST',
         body: JSON.stringify({
           patientId,

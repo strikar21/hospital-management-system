@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TestTube, XCircle, Play, Save, X
 } from 'lucide-react';
@@ -6,6 +6,7 @@ import { patient, user, investigation, caseSheetEntry } from '../types';
 import { formatTimeOnly } from '../utils';
 import { PermissionUtils } from '../utils/permissionUtils';
 import { usePatientInvestigations } from '../hooks/usePatientInvestigations';
+import { InvestigationDetailModal } from './modals/InvestigationDetailModal';
 
 interface PatientInvestigationsProps {
   patient: patient;
@@ -31,10 +32,6 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
     setNewInvestigation,
     addingInvestigation,
     loadingLabResults,
-    imagingStudies,
-    loadingImaging,
-    selectedImage,
-    setSelectedImage,
     handleAddInvestigation,
     handleStartInvestigation,
     handleCompleteInvestigation,
@@ -48,6 +45,8 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
     addCaseSheetEntry,
     setCaseEntries
   });
+
+  const [selectedInvestigation, setSelectedInvestigation] = useState<investigation | null>(null);
 
   return (
     <div className="p-4 h-full flex flex-col">
@@ -134,7 +133,11 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
       {/* Investigations List */}
       <div className="flex-1 overflow-y-auto space-y-2">
         {investigations.map((inv) => (
-          <div key={inv.id} className="bg-white border rounded-lg p-3">
+          <div
+            key={inv.id}
+            className="bg-white border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => setSelectedInvestigation(inv)}
+          >
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center space-x-3 mb-1">
@@ -256,184 +259,13 @@ const PatientInvestigations: React.FC<PatientInvestigationsProps> = ({
         )}
       </div>
 
-      {/* Imaging Studies Section */}
-      <div className="mt-6 border-t pt-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-bold flex items-center space-x-2">
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              📸
-            </div>
-            <span>Imaging Studies ({imagingStudies.length})</span>
-            {loadingImaging && (
-              <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin ml-2"></div>
-            )}
-          </h3>
-        </div>
-
-        {/* Imaging Studies List */}
-        <div className="space-y-3 max-h-80 overflow-y-auto">
-          {imagingStudies.map((study) => (
-            <div key={study.id} className="bg-white border rounded-lg p-4 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h4 className="font-medium text-md">{study.studyType}</h4>
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium border ${"bg-blue-50 text-blue-700 border-blue-200"}`}>
-                      {study.studyType.toUpperCase()}
-                    </div>
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${"bg-yellow-50 text-yellow-700"}`}>
-                      {study.urgency.toUpperCase()}
-                    </div>
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      study.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      study.status === 'inProgress' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-blue-100 text-blue-800'
-                    }`}>
-                      {study.status.toUpperCase().replace('_', ' ')}
-                    </div>
-                  </div>
-
-                  <div className="text-sm text-gray-600 mb-3">
-                    <p><span className="font-medium">Study Date:</span> {new Date(study.createdAt).toLocaleString()}</p>
-                    <p><span className="font-medium">Ordered by:</span> {study.performedBy}</p>
-                    {study.technologist && <p><span className="font-medium">Technologist:</span> {study.technologist}</p>}
-                    {study.radiologist && <p><span className="font-medium">Radiologist:</span> {study.radiologist}</p>}
-                  </div>
-
-                  {/* Image Thumbnails */}
-                  {study.images && study.images.length > 0 && (
-                    <div className="mb-3">
-                      <p className="font-medium text-sm mb-2">📷 Images ({study.images.length}):</p>
-                      <div className="flex space-x-2 overflow-x-auto">
-                        {study.images.map((image) => (
-                          <div key={image.id} className="flex-shrink-0">
-                            <img
-                              src={image.thumbnail}
-                              alt={`${study.studyType} - ${image.viewPosition || `Instance ${image.instanceNumber}`}`}
-                              className="w-20 h-20 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
-                              onClick={() => setSelectedImage(image.url)}
-                              title={`Click to view full image - ${image.viewPosition || `Instance ${image.instanceNumber}`}`}
-                            />
-                            <p className="text-xs text-gray-500 text-center mt-1 truncate w-20">
-                              {image.viewPosition || `#${image.instanceNumber}`}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Imaging Report */}
-                  {study.report && (
-                    <div className="bg-gray-50 rounded p-3 text-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <h5 className="font-medium text-gray-900">📋 Radiology Report</h5>
-                        <div className={`px-2 py-1 rounded text-xs font-medium ${
-                          study.report.status === 'final' ? 'bg-green-100 text-green-800' :
-                          study.report.status === 'preliminary' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {study.report.status.toUpperCase()}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div>
-                          <span className="font-medium text-gray-700">Findings:</span>
-                          <p className="text-gray-600 mt-1">{study.report.findings}</p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Impression:</span>
-                          <p className="text-gray-600 mt-1">{study.report.impression}</p>
-                        </div>
-                        {study.report.recommendations && (
-                          <div>
-                            <span className="font-medium text-gray-700">Recommendations:</span>
-                            <p className="text-gray-600 mt-1">{study.report.recommendations}</p>
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-500 pt-2 border-t">
-                          Reported by {study.report.performedBy} • {new Date(study.report.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-
-                      {/* Abnormal findings alert */}
-                      {false && (
-                        <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded">
-                          <p className="text-orange-700 text-xs font-medium">
-                            ⚠️ ABNORMAL FINDINGS - Requires physician review
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* No report available */}
-                  {!study.report && study.status === 'completed' && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-                      <p className="text-yellow-700 text-sm">📝 Report pending - Awaiting radiologist interpretation</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* No imaging studies */}
-          {imagingStudies.length === 0 && !loadingImaging && (
-            <div className="text-center py-8 text-gray-500">
-              <div className="w-16 h-16 mx-auto mb-4 opacity-50">📸</div>
-              <p>No imaging studies available</p>
-            </div>
-          )}
-
-          {/* Loading imaging */}
-          {loadingImaging && (
-            <div className="text-center py-8 text-gray-500">
-              <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p>Loading imaging studies from PACS...</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Image Viewer Modal */}
-      {selectedImage && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-          onClick={() => setSelectedImage(null)}
-        >
-          <div className="max-w-4xl max-h-4xl p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-white text-lg font-medium">Medical Image Viewer</h3>
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="text-white hover:text-gray-300 text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-            <img
-              src={selectedImage}
-              alt="Medical imaging study"
-              className="max-w-full max-h-full object-contain rounded"
-            />
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => {/* DICOM viewer feature disabled */}}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 mr-2"
-              >
-                Open in DICOM Viewer
-              </button>
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Investigation Detail Modal */}
+      {selectedInvestigation && (
+        <InvestigationDetailModal
+          isOpen={selectedInvestigation !== null}
+          onClose={() => setSelectedInvestigation(null)}
+          investigation={selectedInvestigation}
+        />
       )}
     </div>
   );

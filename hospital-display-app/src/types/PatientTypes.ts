@@ -90,9 +90,11 @@ export interface noteComment {
   id: string;
   content: string;
   authorId: string;
-  authorName: string;  // Backend provides lowercase version with resolved name
-  authorRole: string;
+  authorName?: string;  // Backend provides via LEFT JOIN staff lookup
+  authorRole?: string;  // Backend provides via LEFT JOIN staff lookup
   timestamp: string;
+  editedBy?: string;
+  editedByName?: string;
   editedAt?: string;
   canEdit: boolean;
   isEdited: boolean;
@@ -232,6 +234,28 @@ export interface patientoutcome {
   riskAdjusted: boolean;
   dischargeDate?: string;
   followUpDate?: string;
+}
+
+export interface dischargeRequest {
+  id: number;
+  patientId: string;
+  status: 'requested' | 'approved' | 'completed' | 'cancelled';
+  reason: string;
+  notes?: string;
+
+  requestedBy: string;
+  requestedByName?: string;
+  requestedAt: string;
+
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  approvalNotes?: string;
+
+  performedBy?: string;
+  performedByName?: string;
+  performedAt?: string;
+  dischargeNotes?: string;
 }
 
 // Type aliases for patient-related types

@@ -5,10 +5,12 @@
  */
 
 import React, { useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Clock } from 'lucide-react';
 import { patient, user, noteComment, caseSheetEntry } from '../types';
 import { PermissionUtils } from '../utils/permissionUtils';
 import { NotesEditor, NotesViewer, HandoffNotes } from './PatientNotes/';
+import { HandoffNotesModal } from './modals/HandoffNotesModal';
+import { getApiUrl } from '../config/apiConfig';
 
 interface PatientNotesProps {
   patient: patient;
@@ -31,26 +33,20 @@ const PatientNotes: React.FC<PatientNotesProps> = ({
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [isHandoffModalOpen, setIsHandoffModalOpen] = useState(false);
 
   // Handle note added from editor
   const handleNoteAdded = async (newNote: noteComment) => {
-    // Refetch fresh data from backend (single source of truth)
-    try {
-      const notesResponse = await fetch(`/api/v2/patients/${patient.id}/notes`);
-      if (notesResponse.ok) {
-        const data = await notesResponse.json();
-        setNotes(data.notes || data);
-      }
-    } catch (refreshError) {
-      // Failed to refresh notes after adding - handle silently
-    }
+    // Notes come with patient data - just update local state
+    // Backend refresh happens via parent component
+    setNotes(prev => [newNote, ...prev]);
   };
 
   // Handle note edited from editor
   const handleNoteEdited = async (noteId: string, content: string, editedAt: string) => {
     // Refetch fresh data from backend (single source of truth)
     try {
-      const notesResponse = await fetch(`/api/v2/patients/${patient.id}/notes`);
+      const notesResponse = await fetch(getApiUrl(`/patients/${patient.id}/notes`));
       if (notesResponse.ok) {
         const data = await notesResponse.json();
         setNotes(data.notes || data);
@@ -73,9 +69,16 @@ const PatientNotes: React.FC<PatientNotesProps> = ({
 
   return (
     <div className="p-3 h-full flex flex-col">
-      {/* Add Note Button */}
+      {/* Add Note and Handoff Notes Buttons */}
       {PermissionUtils.canEditNotes(currentUser.role) && (
-        <div className="flex justify-end mb-2">
+        <div className="flex justify-end gap-2 mb-2">
+          <button
+            onClick={() => setIsHandoffModalOpen(true)}
+            className="flex items-center space-x-2 px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+          >
+            <Clock className="w-4 h-4" />
+            <span>View Handoff Notes</span>
+          </button>
           <button
             onClick={() => setIsAddingNote(true)}
             className="flex items-center space-x-2 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -109,8 +112,10 @@ const PatientNotes: React.FC<PatientNotesProps> = ({
         onAddFirstNote={handleAddFirstNote}
       />
 
-      {/* Handoff Notes Section */}
-      <HandoffNotes
+      {/* Handoff Notes Modal */}
+      <HandoffNotesModal
+        isOpen={isHandoffModalOpen}
+        onClose={() => setIsHandoffModalOpen(false)}
         currentUser={currentUser}
         caseSheet={caseSheet}
         addCaseSheetEntry={addCaseSheetEntry}

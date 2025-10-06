@@ -25,6 +25,7 @@ const SERVICE_VERSIONS: Record<string, 'v1' | 'v2'> = {
   '/medications': 'v2',
   '/investigations': 'v2',
   '/therapy': 'v2',
+  '/atomic': 'v2',
 
   // v1 services (not yet migrated)
   '/auth': 'v1',

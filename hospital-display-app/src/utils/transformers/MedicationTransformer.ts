@@ -117,65 +117,12 @@ export class MedicationTransformer extends BaseTransformer {
 
     const withTracking = { ...data };
 
-    // Add administration status
-    withTracking.administrationStatus = this.calculateAdministrationStatus(withTracking);
-
-    // Add next dose information
-    withTracking.nextDoseTime = this.calculateNextDoseTime(withTracking);
-
     // Add adherence tracking
     withTracking.adherenceRate = this.calculateAdherenceRate(withTracking);
 
     return withTracking;
   }
 
-  /**
-   * Calculate medication administration status
-   */
-  private static calculateAdministrationStatus(medication: any): string {
-    if (!medication.startDate) return 'not-started';
-    if (medication.discontinuedAt) return 'discontinued';
-    if (medication.endDate && new Date(medication.endDate) < new Date()) return 'completed';
-
-    const now = new Date();
-    const startDate = new Date(medication.startDate);
-
-    if (startDate > now) return 'scheduled';
-    if (medication.status === 'active') return 'active';
-
-    return 'unknown';
-  }
-
-  /**
-   * Calculate next dose time based on frequency
-   */
-  private static calculateNextDoseTime(medication: any): string | null {
-    if (medication.administrationStatus !== 'active') return null;
-    if (!medication.frequency) return null;
-
-    // Simple frequency parsing - could be enhanced with more sophisticated logic
-    const frequencyMap: { [key: string]: number } = {
-      'once daily': 24,
-      'twice daily': 12,
-      'three times daily': 8,
-      'four times daily': 6,
-      'every 4 hours': 4,
-      'every 6 hours': 6,
-      'every 8 hours': 8,
-      'every 12 hours': 12,
-      'as needed': 0
-    };
-
-    const intervalHours = frequencyMap[medication.frequency.toLowerCase()] || 0;
-    if (intervalHours === 0) return null;
-
-    const lastAdministered = medication.lastAdministeredAt ?
-      new Date(medication.lastAdministeredAt) : new Date(medication.startDate);
-
-    const nextDose = new Date(lastAdministered.getTime() + (intervalHours * 60 * 60 * 1000));
-
-    return nextDose.toISOString();
-  }
 
   /**
    * Calculate medication adherence rate
@@ -236,9 +183,9 @@ export class MedicationTransformer extends BaseTransformer {
 
     return {
       ...medication,
-      administeredAt: administrationData.administeredAt || new Date().toISOString(),
-      administeredBy: administrationData.administeredBy,
-      administeredByName: administrationData.administeredByName,
+      performedAt: administrationData.performedAt || new Date().toISOString(),
+      performedBy: administrationData.performedBy,
+      performedByName: administrationData.performedByName,
       administrationNotes: administrationData.notes || '',
       actualDosage: administrationData.dosage || medication.dosage,
       administrationRoute: administrationData.route || medication.route,
@@ -272,21 +219,4 @@ export class MedicationTransformer extends BaseTransformer {
     };
   }
 
-  /**
-   * Validate medication interaction potential
-   */
-  static validateMedicationInteractions(medications: any[]): any {
-    // Placeholder for drug interaction checking
-    // In a real system, this would check against a drug interaction database
-    const warnings: string[] = [];
-    const interactions: any[] = [];
-
-    // Basic interaction detection logic would go here
-    return {
-      hasInteractions: interactions.length > 0,
-      interactions,
-      warnings,
-      safeToAdminister: interactions.length === 0
-    };
-  }
 }

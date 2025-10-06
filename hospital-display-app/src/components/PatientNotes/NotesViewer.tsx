@@ -25,8 +25,8 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({
 }) => {
 
   // Get role-based styling for author badges
-  const getRoleBadgeStyles = (authorRole: string) => {
-    const role = authorRole.toLowerCase();
+  const getRoleBadgeStyles = (authorRole?: string) => {
+    const role = authorRole?.toLowerCase() || '';
     if (role === 'doctor' || role === 'physician') {
       return {
         avatar: 'bg-blue-600',

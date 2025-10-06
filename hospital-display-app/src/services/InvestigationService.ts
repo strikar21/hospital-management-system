@@ -44,19 +44,19 @@ export class InvestigationService extends BaseService {
     }
   }
 
-  static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id'>, userId: string): Promise<investigation | null> {
+  // Exclude backend-generated audit fields from creation payload
+  static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>, userId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}/add`, {
+      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/investigations`, {
         method: 'POST',
         body: JSON.stringify({
           ...investigation,
-          performedBy: userId,
-          orderedAt: new Date().toISOString(),
+          prescribedBy: userId,
           status: 'ordered'
         })
       });
 
-      // Removed console.log for production
+      // Atomic response includes {success: true, medical_record: {...}, case_entry: {...}}
       return response;
     } catch (error) {
       // Error adding investigation - handle silently

@@ -10,6 +10,7 @@ from .patient_service import PatientService
 from .medication_service import MedicationService
 from .investigation_service import InvestigationService
 from .therapy_service import TherapyService
+from .discharge_service import DischargeService
 
 
 class ServiceFactory:
@@ -54,13 +55,22 @@ class ServiceFactory:
         return cls._instances['therapy_service']
 
     @classmethod
+    def get_discharge_service(cls) -> DischargeService:
+        """Get DischargeService singleton instance"""
+        if 'discharge_service' not in cls._instances:
+            cls._instances['discharge_service'] = DischargeService()
+            cls._logger.info("DischargeService instance created")
+        return cls._instances['discharge_service']
+
+    @classmethod
     def get_all_services(cls) -> Dict[str, Any]:
         """Get all service instances"""
         return {
             'patient': cls.get_patient_service(),
             'medication': cls.get_medication_service(),
             'investigation': cls.get_investigation_service(),
-            'therapy': cls.get_therapy_service()
+            'therapy': cls.get_therapy_service(),
+            'discharge': cls.get_discharge_service()
         }
 
     @classmethod
@@ -89,3 +99,8 @@ def get_investigation_service() -> InvestigationService:
 def get_therapy_service() -> TherapyService:
     """Convenience function to get TherapyService"""
     return ServiceFactory.get_therapy_service()
+
+
+def get_discharge_service() -> DischargeService:
+    """Convenience function to get DischargeService"""
+    return ServiceFactory.get_discharge_service()
