@@ -64,8 +64,8 @@ export class PatientNotesService extends BaseService {
         method: 'PUT',
         body: JSON.stringify({
           content: newContent,
-          modifiedBy: userId,
-          modifiedAt: new Date().toISOString()
+          editedBy: userId,
+          editedAt: new Date().toISOString()
         })
       });
       return true;

@@ -191,7 +191,7 @@ async def edit_patient_note(
             patient_id=patient_id,
             note_id=note_id,
             content=note_data.get('comment') or note_data.get('content'),  # Support both field names
-            editor_id=note_data.get('modifiedBy', 'system')
+            editor_id=note_data.get('editedBy', 'system')
         )
 
         if not success:

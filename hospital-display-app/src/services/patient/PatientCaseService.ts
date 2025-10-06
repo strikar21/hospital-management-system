@@ -113,11 +113,12 @@ export class PatientCaseService extends BaseService {
    */
   static async acknowledgeAlert(patientId: string, alertId: string, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/mobile/acknowledge-alert/${patientId}/${alertId}`, {
+      await this.fetchFromBackend(`/atomic/patients/${patientId}/alerts/${alertId}/acknowledge`, {
         method: 'POST',
         body: JSON.stringify({
-          performedBy: userId
-          // Let backend handle performedAt timestamp to avoid datetime format issues
+          acknowledgedBy: userId,
+          alertId: alertId
+          // Let backend handle acknowledgedAt timestamp to avoid datetime format issues
         })
       });
       return true;

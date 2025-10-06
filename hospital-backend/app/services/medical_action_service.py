@@ -564,8 +564,8 @@ class MedicalActionService:
         await conn.execute('''
             UPDATE patient_alerts
             SET status = 'acknowledged',
-                "performedBy" = $1,
-                "performedAt" = $2
+                "acknowledgedBy" = $1,
+                "acknowledgedAt" = $2
             WHERE id = $3 AND "patientId" = $4
         ''', performedBy, acknowledged_at, alert_id, patient_id)
 

@@ -241,8 +241,8 @@ class PatientRepository(BaseRepository[Patient]):
             query = """
                 UPDATE patient_alerts
                 SET
-                    performedBy = $1,
-                    performedAt = $2,
+                    "acknowledgedBy" = $1,
+                    "acknowledgedAt" = $2,
                     status = 'acknowledged',
                     "updatedAt" = $2
                 WHERE id = $3 AND "patientId" = $4 AND status = 'active'

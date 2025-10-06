@@ -77,8 +77,8 @@ class TherapySessionRequest(BaseModel):
 
 
 class AlertAcknowledgmentRequest(BaseModel):
-    alert_id: str
-    acknowledged_by: str
+    alertId: str
+    acknowledgedBy: str
 
 
 class InvestigationCompletionRequest(BaseModel):
@@ -599,14 +599,14 @@ async def acknowledge_alert_atomic_endpoint(
         logger.info(f"Atomic alert acknowledgment for alert {alert_id}, patient {patient_id}")
 
         acknowledgment_data = {
-            'alert_id': alert_id
+            'alertId': alert_id
         }
 
         result = await medical_action_service.execute_medical_action(
             'alert_acknowledgment',
             patient_id,
             acknowledgment_data,
-            request.acknowledged_by
+            request.acknowledgedBy
         )
 
         return AtomicResponse(
@@ -615,7 +615,7 @@ async def acknowledge_alert_atomic_endpoint(
             case_entry=result['case_entry'],
             action_type=result['action_type'],
             transaction_id=result['transaction_id'],
-            message=f"Alert acknowledged successfully by {request.acknowledged_by}"
+            message=f"Alert acknowledged successfully by {request.acknowledgedBy}"
         )
 
     except HTTPException:
