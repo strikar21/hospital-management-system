@@ -176,14 +176,24 @@ npm start
 - Device assignment and management
 - Real-time WebSocket communication
 - Authentication and staff management
-- Investigation ordering and tracking
+- **Complete medication management** (prescribing, administration, tracking)
+- **Investigation ordering and tracking** with modular components
+- **Therapy management** with full CRUD operations
+- **Medical notes** with create, read, update, delete
 - Discharge workflow automation
 - Audit logging and compliance
+- **Staff resolution middleware** (automatic staff name resolution)
+- **Arrhythmia detection service** (backend-only alert generation)
+- **Vital alert service** (real-time clinical decision support)
 
-### 🔧 In Development
-- Medications endpoint (database query optimization)
-- Notes endpoint (PostgreSQL compatibility)
-- Therapy management (endpoint validation)
+### 🏗️ Architecture Improvements (Phase 1-7 Refactoring)
+- **Strict camelCase standardization** across database, backend, and frontend
+- **Modular component architecture** for all medical records
+- **Base service patterns** for consistent API communication
+- **Transformer utilities** for consistent data transformation
+- **Base hook patterns** for state management
+- **Staff resolution caching** for performance optimization
+- **Comprehensive TypeScript types** for all medical entities
 
 ## 🛠️ Technical Stack
 
@@ -194,6 +204,49 @@ npm start
 - **Hardware**: ESP32 with WiFi/BLE
 - **Security**: Role-based access, Audit logging
 - **Deployment**: Docker containers
+
+## 📚 Documentation
+
+### Phase 1-7 Refactoring Documentation
+Comprehensive refactoring documentation available:
+- `PHASE1_CASE_ENTRY_TRANSFORMER_COMPLETE.md` - Case entry standardization
+- `PHASE2_SERVICE_LAYER_REFACTORING_COMPLETE.md` - Service layer improvements
+- `PHASE3_HOOK_LAYER_REFACTORING_COMPLETE.md` - React hooks refactoring
+- `PHASE4_CONTAINER_REFACTORING_COMPLETE.md` - Component modularization
+- `PHASE5_NOTES_REFACTORING_COMPLETE.md` - Notes alignment
+- `PHASE6_CASESHEET_STANDARDIZATION_COMPLETE.md` - CaseSheet standardization
+- `PHASE7_COMPREHENSIVE_TESTING_PLAN.md` - End-to-end testing
+- `PHASE8_PROPOSAL.md` - Next steps and future enhancements
+
+### Technical Audits & Analysis
+- `COMPREHENSIVE_FRONTEND_DEEP_AUDIT_2025.md` - Frontend architecture audit
+- `ENDPOINT_ALIGNMENT_AUDIT.md` - Backend/frontend API alignment
+- `NOTES_INCONSISTENCY_ANALYSIS.md` - Notes field naming analysis
+- `THERAPIES_DIAGNOSTIC_QUESTIONS.md` - Therapy implementation analysis
+- `GIT_CLEANUP_PLAN.md` - Repository cleanup strategy
+
+### Database Migrations
+- `hospital-backend/migrations/005_fix_medication_admin_type.sql`
+- `hospital-backend/migrations/006_fix_caseentries_performedby.sql`
+- `hospital-backend/migrations/007_remove_medadmin_createdby.sql`
+
+## 🧑‍💻 Development Guidelines
+
+### Coding Standards
+- **camelCase ONLY** - All database columns, API fields, and frontend properties
+- **Backend-only medical logic** - Frontend is display layer only
+- **Modular architecture** - Small, focused components and services
+- **Indian compliance first** - DPDP 2023, IMC guidelines, Clinical Establishments Act
+- **HIPAA secondary** - Used as reference, not primary requirement
+
+### Key Architecture Principles
+1. **Staff Resolution Middleware** - Automatic staff name resolution from staff IDs
+2. **Case Entry Pattern** - All medical operations create case entries
+3. **Transformer Pattern** - Consistent data transformation between layers
+4. **Base Service Pattern** - Reusable service logic for all medical records
+5. **Base Hook Pattern** - Consistent state management across components
+
+See `CLAUDE.md` for complete development guidelines and workflow.
 
 ---
 
