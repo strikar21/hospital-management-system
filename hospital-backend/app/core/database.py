@@ -32,7 +32,7 @@ async def getConnectionPool():
 
     if _connectionPool is None:
         try:
-            logger.info(f"🔍 DEBUG: Creating connection pool with URL: {settings.databaseUrl}")
+            logger.debug(f"Creating connection pool with URL: {settings.databaseUrl}")
             _connectionPool = await asyncpg.create_pool(
                 settings.databaseUrl,
                 min_size=2,  # Keep more connections ready
@@ -46,7 +46,7 @@ async def getConnectionPool():
             logger.info("✅ PostgreSQL connection pool created")
         except Exception as e:
             logger.error(f"❌ Failed to create PostgreSQL pool: {e}")
-            logger.error(f"🔍 DEBUG: Failed with URL: {settings.databaseUrl}")
+            logger.error(f"Failed with URL: {settings.databaseUrl}")
             raise
 
     return _connectionPool
@@ -284,7 +284,7 @@ async def createTables():
         -- Medication Administrations table
         CREATE TABLE IF NOT EXISTS medicationadministrations (
             id TEXT PRIMARY KEY,
-            "medicationId" TEXT NOT NULL,
+            "medicationId" INTEGER NOT NULL,
             "patientId" TEXT NOT NULL,
             "scheduledTime" TIMESTAMPTZ NOT NULL,
             "performedAt" TIMESTAMPTZ,
@@ -295,7 +295,8 @@ async def createTables():
             notes TEXT,
             "createdBy" TEXT,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT fk_medicationadmin_medication FOREIGN KEY ("medicationId") REFERENCES medications(id) ON DELETE CASCADE
         );
         
         -- Investigations table
@@ -365,34 +366,25 @@ async def createTables():
             "editedAt" TIMESTAMPTZ,
             "isEdited" BOOLEAN DEFAULT FALSE
         );
-        
-        -- Case Sheet Entries table
-        CREATE TABLE IF NOT EXISTS casesheetentries (
-            id SERIAL PRIMARY KEY,
-            "patientId" TEXT NOT NULL,
-            "entryType" TEXT NOT NULL,
-            description TEXT NOT NULL,
-            "performedBy" TEXT NOT NULL,
-            timestamp TIMESTAMPTZ DEFAULT NOW(),
-            "createdBy" TEXT,
-            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
-        );
 
         -- Patient Alerts table
         CREATE TABLE IF NOT EXISTS patient_alerts (
-            id TEXT PRIMARY KEY,
+            id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
             "patientId" TEXT NOT NULL,
-            type TEXT NOT NULL,
-            severity TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'vital',
             message TEXT NOT NULL,
-            timestamp TIMESTAMPTZ DEFAULT NOW(),
-            status TEXT DEFAULT 'active',
-            "performedBy" TEXT,
-            "performedAt" TIMESTAMPTZ,
-            "createdBy" TEXT,
-            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+            severity TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            "vitalType" TEXT,
+            "vitalValue" NUMERIC(10,2),
+            "thresholdValue" NUMERIC(10,2),
+            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "acknowledgedBy" TEXT,
+            "acknowledgedAt" TIMESTAMPTZ,
+            "resolvedBy" TEXT,
+            "resolvedAt" TIMESTAMPTZ,
+            "deletedAt" TIMESTAMPTZ,
+            "createdBy" TEXT
         );
 
         -- Discharge Workflow table
@@ -493,11 +485,38 @@ async def createTables():
                 # Apply medications table migrations for medication status tracking
                 await migrateMedicationsTable(conn)
 
+                # Create database indexes for performance optimization
+                logger.info("🔄 Creating database indexes for performance optimization...")
+
+                # Medication indexes (for patient medication history queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_medications_patient ON medications("patientId")')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_medications_prescriber ON medications("prescribedBy")')
+
+                # Investigation indexes (for patient investigation history queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_investigations_patient ON investigations("patientId")')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_investigations_prescriber ON investigations("prescribedBy")')
+
+                # Therapy indexes (for patient therapy history queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_therapy_patient ON therapy("patientId")')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_therapy_prescribed ON therapy("prescribedBy")')
+
+                # Patient notes indexes (for patient note history queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_patientnotes_patient ON patientnotes("patientId")')
+
+                # Patient alerts indexes (for alert dashboard queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_alerts_patient ON patient_alerts("patientId")')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_alerts_status ON patient_alerts(status)')
+
+                # Device assignment indexes (for watch management queries)
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_deviceassignments_patient ON deviceassignments("patientId")')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_deviceassignments_device ON deviceassignments("deviceId")')
+
+                logger.info("✅ Database indexes created successfully (10 indexes)")
 
             except Exception as migrationError:
                 logger.warning(f"⚠️ Migration warning (may be expected): {migrationError}")
-        
-        logger.info("✅ Database tables created successfully")
+
+        logger.info("✅ Database tables and indexes created successfully")
         
     except Exception as e:
         logger.error(f"❌ Failed to create tables: {e}")

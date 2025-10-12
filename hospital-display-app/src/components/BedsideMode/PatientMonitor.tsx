@@ -44,7 +44,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
     generateData();
     const interval = setInterval(generateData, 1000);
     return () => clearInterval(interval);
-  }, [patient.vitals.heartRate, patient.vitals.ecgReading, patient.vitals.eegReading]);
+  }, [patient.vitals]); // Watch vitals object to prevent crash if vitals undefined
 
   const pathData = ecgData.map((point, index) =>
     `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
@@ -52,26 +52,27 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
 
   const unacknowledgedAlerts = patient.alerts.filter(alert => !alert.isAcknowledged);
   const hasCriticalAlert = unacknowledgedAlerts.some(alert => alert.severity === 'critical');
-  const arrhythmiaDetected = MedicalUtils.detectArrhythmia(patient.vitals.heartRate, patient.vitals.ecgReading);
+  // REMOVED: Frontend arrhythmia detection - ALL medical diagnosis comes from backend
+  // Backend provides arrhythmia alerts via patient.alerts if detected
 
   // MEDICAL SAFETY: Validate vital signs are within displayable ranges
   const safeVitals = {
-    heartRate: Math.max(0, Math.min(300, patient.vitals.heartRate || 0)),
-    systolicPressure: Math.max(60, Math.min(300, patient.vitals.systolicPressure || 0)),
-    diastolicPressure: Math.max(30, Math.min(150, patient.vitals.diastolicPressure || 0)),
-    oxygenSaturation: Math.max(0, Math.min(100, patient.vitals.oxygenSaturation || 0)),
-    skinTemperature: Math.max(90.0, Math.min(115.0, patient.vitals.skinTemperature || 0)),
-    ecgReading: Math.max(-50, Math.min(50, patient.vitals.ecgReading || 0)),
-    eegReading: Math.max(0, Math.min(200, patient.vitals.eegReading || 0))
+    heartRate: Math.max(0, Math.min(300, patient.vitals?.heartRate ?? 0)),
+    systolicPressure: Math.max(60, Math.min(300, patient.vitals?.systolicPressure ?? 0)),
+    diastolicPressure: Math.max(30, Math.min(150, patient.vitals?.diastolicPressure ?? 0)),
+    oxygenSaturation: Math.max(0, Math.min(100, patient.vitals?.oxygenSaturation ?? 0)),
+    skinTemperature: Math.max(90.0, Math.min(115.0, patient.vitals?.skinTemperature ?? 0)),
+    ecgReading: Math.max(-50, Math.min(50, patient.vitals?.ecgReading ?? 0)),
+    eegReading: Math.max(0, Math.min(200, patient.vitals?.eegReading ?? 0))
   };
 
   return (
     <div className={`h-full ${displayCount === 2 ? 'w-1/2' : 'w-full'} bg-black text-white flex flex-col border-r border-gray-800`}>
-      {(hasCriticalAlert || arrhythmiaDetected) && (
+      {hasCriticalAlert && (
         <div className="bg-red-900 text-red-100 py-2 px-4 flex items-center justify-center border-b-2 border-red-600">
           <AlertTriangle className="w-5 h-5 mr-2 animate-pulse" />
           <span className={`${displayCount === 2 ? 'text-sm' : 'text-xl'} font-bold tracking-wide`}>
-            {arrhythmiaDetected ? '⚠ ARRHYTHMIA' : '⚠ CRITICAL'}
+            ⚠ CRITICAL
           </span>
         </div>
       )}
@@ -191,11 +192,6 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                   <span className="text-green-300 text-base font-bold tracking-wider">
                     {isECGMode ? 'ECG' : 'EEG'} MONITOR
                   </span>
-                  {arrhythmiaDetected && (
-                    <span className="bg-yellow-800 text-yellow-100 px-3 py-1 rounded border border-yellow-500 text-xs font-bold">
-                      ⚠ ARRHYTHMIA
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="text-right">
@@ -206,7 +202,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                       {isECGMode ? 'Amplitude' : 'Brain Activity'}
                     </div>
                   </div>
-                  <div className={`w-4 h-4 rounded-full ${arrhythmiaDetected ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`}></div>
+                  <div className="w-4 h-4 rounded-full bg-green-400 animate-pulse"></div>
                 </div>
               </div>
 
@@ -231,7 +227,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                   <path
                     d={pathData}
                     fill="none"
-                    stroke={arrhythmiaDetected ? "#F59E0B" : isECGMode ? "#10B981" : "#EAB308"}
+                    stroke={isECGMode ? "#10B981" : "#EAB308"}
                     strokeWidth="2.5"
                     className="filter drop-shadow-lg"
                   />
@@ -253,11 +249,6 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                   <span className="text-gray-400 font-medium">Lead II</span>
                   <span className="text-blue-300 font-medium">Filter: 0.5-40Hz</span>
                 </div>
-                {arrhythmiaDetected && (
-                  <span className="text-yellow-400 font-bold animate-pulse">
-                    ⚠ IRREGULAR RHYTHM
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -337,7 +328,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                     return `${index === 0 ? 'M' : 'L'} ${point.x} ${scaledY}`;
                   }).join(' ')}
                   fill="none"
-                  stroke={arrhythmiaDetected ? "#F59E0B" : isECGMode ? "#10B981" : "#EAB308"}
+                  stroke={isECGMode ? "#10B981" : "#EAB308"}
                   strokeWidth="1.5"
                 />
                 <line x1="360" y1="0" x2="360" y2="120" stroke="#DC2626" strokeWidth="1" opacity="0.7" />

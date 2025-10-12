@@ -115,8 +115,7 @@ export const BedsideModeContainer: React.FC<BedsideModeContainerProps> = ({
       </div>
 
       {patients.some(p =>
-        p.alerts.some(a => !a.isAcknowledged && a.severity === 'critical') ||
-        MedicalUtils.detectArrhythmia(p.vitals.heartRate, p.vitals.ecgReading)
+        p.alerts.some(a => !a.isAcknowledged && a.severity === 'critical')
       ) && (
         <div className="bg-red-900 text-red-100 py-3 px-6 text-center border-t-2 border-red-600">
           <div className="flex items-center justify-center space-x-3">

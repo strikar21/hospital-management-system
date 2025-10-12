@@ -1,208 +1,181 @@
+/**
+ * usePatientMedications - Medication-specific hook (Refactored)
+ * STRICT CAMELCASE ONLY - No snake_case, no PascalCase for data
+ *
+ * Extends generic usePatientMedicalRecords hook with medication-specific operations.
+ *
+ * @module usePatientMedications
+ * @since 2.0.0
+ */
+
 import { useState, useCallback } from 'react';
 import { medication, patient, user, caseSheetEntry } from '../types';
-import { MedicationService, PatientService } from '../services';
-import { useDataRefresh } from './useDataRefresh';
-import { getApiUrl } from '../config/apiConfig';
+import { MedicationService } from '../services';
+import {
+  usePatientMedicalRecords,
+  UsePatientMedicalRecordsProps
+} from './base/usePatientMedicalRecords';
 
-interface UsePatientMedicationsProps {
-  patient: patient;
-  currentUser: user;
-  medications: medication[];
-  setMedications: React.Dispatch<React.SetStateAction<medication[]>>;
-  addCaseSheetEntry: (entry: caseSheetEntry) => void;
-  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
+/** Medication form state type */
+interface MedicationFormState {
+  name: string;
+  dosage: string;
+  frequency: string;
+  route: string;
+  duration: string;
 }
 
-export const usePatientMedications = ({
-  patient,
-  currentUser,
-  medications,
-  setMedications,
-  addCaseSheetEntry,
-  setCaseEntries
-}: UsePatientMedicationsProps) => {
-  // Initialize data refresh hook for single source of truth
-  const { refreshMedications, refreshCaseEntries } = useDataRefresh(patient.id);
-  const [isAddingMedication, setIsAddingMedication] = useState(false);
-  const [newMedication, setNewMedication] = useState({
-    name: '', dosage: '', frequency: '', route: 'PO', duration: ''
-  });
+/** Props interface for medication hook */
+interface UsePatientMedicationsProps extends Omit<UsePatientMedicalRecordsProps<medication>, 'records' | 'setRecords'> {
+  medications: medication[];
+  setMedications: React.Dispatch<React.SetStateAction<medication[]>>;
+}
 
-  // Debounce utility
-  const debounce = useCallback((func: (...args: any[]) => void, wait: number) => {
-    let timeout: NodeJS.Timeout;
-    return (...args: any[]) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  }, []);
+/**
+ * Medication-specific hook
+ * Provides generic CRUD operations + medication-specific features
+ */
+export const usePatientMedications = (props: UsePatientMedicationsProps) => {
+  const {
+    medications,
+    setMedications,
+    ...baseProps
+  } = props;
 
-  // Handle medication status changes using atomic operation
-  const handleMedicationStatusChange = useCallback(async (
-    medicationId: string,
-    status: 'active' | 'stopped' | 'held'
-  ) => {
-    try {
+  // ================================
+  // USE GENERIC HOOK
+  // ================================
 
-      // Use atomic endpoint - updates medication and creates case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${medicationId}/status`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          medication_id: medicationId,
-          status: status,
-          changed_by: currentUser.staffId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to change medication status: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Update medication in state with response data
-        setMedications(prev => prev.map(med =>
-          med.id === medicationId ? result.medical_record : med
-        ));
-
-        // Add case sheet entry from atomic response
-        if (result.case_entry) {
-          const newCaseEntry: caseSheetEntry = {
-            id: result.case_entry.id,
-            timestamp: result.case_entry.timestamp,
-            type: result.case_entry.entryType,
-            description: result.case_entry.description,
-            performedBy: result.case_entry.performedBy,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
-        }
-      } else {
-        throw new Error('Atomic operation failed');
-      }
-    } catch (error) {
-      // Error changing medication status - handle silently
-      alert(`❌ Failed to change medication status: ${(error as Error).message}`);
-    }
-  }, [patient.id, currentUser, setMedications, addCaseSheetEntry]);
-
-  // Add new medication using atomic operation
-  const handleAddMedication = useCallback(async () => {
-    if (isAddingMedication) return;
-    if (!newMedication.name || !newMedication.dosage || !newMedication.frequency || !newMedication.duration) return;
-
-    setIsAddingMedication(true);
-    try {
-      const medicationData: Omit<medication, 'id' | 'history'> = {
-        name: newMedication.name,
-        dosage: newMedication.dosage,
-        frequency: newMedication.frequency,
-        route: newMedication.route,
-        duration: newMedication.duration,
+  const {
+    isAdding,
+    setIsAdding,
+    formState,
+    setFormState,
+    adding,
+    handleAdd,
+    handleCancel,
+    performAtomicOperation
+  } = usePatientMedicalRecords<medication, MedicationFormState>(
+    {
+      ...baseProps,
+      records: medications,
+      setRecords: setMedications
+    },
+    {
+      recordType: 'medications',
+      recordTypePlural: 'medications',
+      service: {
+        add: MedicationService.addMedication
+      },
+      defaultFormState: {
+        name: '',
+        dosage: '',
+        frequency: '',
+        route: 'PO',
+        duration: ''
+      },
+      validateForm: (form) => !!(form.name && form.dosage && form.frequency && form.duration),
+      buildRecordData: (form, user) => ({
+        name: form.name,
+        dosage: form.dosage,
+        frequency: form.frequency,
+        route: form.route,
+        duration: form.duration,
         status: 'active',
         startDate: new Date().toISOString(),
-        prescribedBy: currentUser.staffId,
+        prescribedBy: user.staffId,
         createdAt: new Date().toISOString(),
         canEdit: true
-      };
+      } as Omit<medication, 'id'>),
+      resetFormState: {
+        name: '',
+        dosage: '',
+        frequency: '',
+        route: 'PO',
+        duration: ''
+      },
+      // Custom error handler for medication-specific FK violation messages
+      handleAddError: (error: any, formState, currentUser) => {
+        console.error('Add medication error:', error);
 
-      // Use Service layer for API call
-      const result = await MedicationService.addMedication(patient.id, medicationData, currentUser.staffId);
+        const errorMessage = error?.response?.data?.detail ||
+                            error?.response?.data?.message ||
+                            error?.message ||
+                            'Unknown error occurred';
 
-      if (result && result.success) {
-        // Add medication to state from atomic response
-        setMedications(prev => [...prev, result.medical_record]);
-
-        // Add case sheet entry from atomic response
-        if (result.case_entry) {
-          const newCaseEntry: caseSheetEntry = {
-            id: result.case_entry.id,
-            timestamp: result.case_entry.timestamp,
-            type: result.case_entry.entryType,
-            description: result.case_entry.description,
-            performedBy: result.case_entry.performedBy,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
+        // Display user-friendly error messages based on backend FK violations
+        if (errorMessage.includes('Patient') && errorMessage.includes('not found')) {
+          alert('❌ Error: Patient not found.\n\nThe patient may have been discharged or the patient ID is invalid. Please refresh the page and try again.');
+        } else if (errorMessage.includes('Prescriber') && errorMessage.includes('not found')) {
+          alert(`❌ Error: Prescriber not found in staff directory.\n\nThe prescriber ID "${currentUser.staffId}" is not in the system. Please verify your staff credentials.`);
+        } else if (errorMessage.includes('Creator') && errorMessage.includes('not found')) {
+          alert('❌ Error: User account not found.\n\nYour user account may have been deactivated. Please contact an administrator.');
+        } else if (errorMessage.includes('Duplicate medication')) {
+          alert('❌ Error: Duplicate medication.\n\nThis medication may already be prescribed for this patient. Please check the medications list.');
+        } else {
+          alert(`❌ Failed to add medication.\n\nError: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
         }
-
-        setNewMedication({ name: '', dosage: '', frequency: '', route: 'PO', duration: '' });
-      } else {
-        throw new Error('Atomic operation failed');
       }
-    } catch (error: any) {
-      // Parse specific error messages from backend
-      console.error('Add medication error:', error);
-
-      const errorMessage = error?.response?.data?.detail ||
-                          error?.response?.data?.message ||
-                          error?.message ||
-                          'Unknown error occurred';
-
-      // Display user-friendly error messages based on backend FK violations
-      if (errorMessage.includes('Patient') && errorMessage.includes('not found')) {
-        alert('❌ Error: Patient not found.\n\nThe patient may have been discharged or the patient ID is invalid. Please refresh the page and try again.');
-      } else if (errorMessage.includes('Prescriber') && errorMessage.includes('not found')) {
-        alert(`❌ Error: Prescriber not found in staff directory.\n\nThe prescriber ID "${currentUser.staffId}" is not in the system. Please verify your staff credentials.`);
-      } else if (errorMessage.includes('Creator') && errorMessage.includes('not found')) {
-        alert('❌ Error: User account not found.\n\nYour user account may have been deactivated. Please contact an administrator.');
-      } else if (errorMessage.includes('Duplicate medication')) {
-        alert('❌ Error: Duplicate medication.\n\nThis medication may already be prescribed for this patient. Please check the medications list.');
-      } else {
-        alert(`❌ Failed to add medication.\n\nError: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
-      }
-    } finally {
-      setIsAddingMedication(false);
     }
-  }, [isAddingMedication, newMedication, patient.id, currentUser, setMedications, addCaseSheetEntry]);
+  );
 
-  // Handle medication administration atomically with backend persistence
+  // ================================
+  // MEDICATION-SPECIFIC OPERATIONS
+  // ================================
+
+  /**
+   * Handle medication status change (active, discontinued, held)
+   * Uses generic atomic operation wrapper
+   */
+  const handleMedicationStatusChange = useCallback(async (
+    medicationId: string,
+    status: 'active' | 'discontinued' | 'held'
+  ) => {
+    await performAtomicOperation(
+      () => MedicationService.changeMedicationStatusAtomic(
+        props.patient.id,
+        medicationId,
+        status,
+        props.currentUser.id
+      ),
+      (prev, result) => prev.map(med =>
+        med.id === medicationId ? result.medicalRecord : med
+      ),
+      `Failed to change medication status`
+    );
+  }, [performAtomicOperation, props.patient.id, props.currentUser.id]);
+
+  /**
+   * Handle medication administration
+   * Uses generic atomic operation wrapper
+   */
   const handleMedicationAdministration = useCallback(async (med: medication) => {
     try {
+      await performAtomicOperation(
+        () => MedicationService.administerMedicationAtomic(
+          props.patient.id,
+          med.id,
+          props.currentUser.id,
+          `Administered ${med.name} ${med.dosage} via ${med.route} route`
+        ),
+        (prev) => prev,  // No state change needed, just case entry
+        `Failed to administer medication`
+      );
 
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/medications/${med.id}/administer`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          administered_by: currentUser.staffId,
-          notes: `Administered ${med.name} ${med.dosage} via ${med.route} route`
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to administer medication: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      // Add case sheet entry from atomic response
-      if (result.success && result.case_entry) {
-        const adminEntry: caseSheetEntry = {
-          id: result.case_entry.id,
-          timestamp: result.case_entry.timestamp,
-          type: result.case_entry.entryType,
-          description: result.case_entry.description,
-          performedBy: result.case_entry.performedBy,
-          canEdit: true
-        };
-        addCaseSheetEntry(adminEntry);
-      }
-
-      alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${currentUser.staffId}\n\nAdministration recorded in database and case sheet.`);
-
+      alert(`✅ ${med.name} ${med.dosage} administered successfully!\n\nTime: ${new Date().toLocaleTimeString()}\nAdministered by: ${props.currentUser.staffId}\n\nAdministration recorded in database and case sheet.`);
     } catch (error) {
-      // Error administering medication - handle silently
-      alert(`❌ Failed to administer medication: ${(error as Error).message}`);
+      // Error already handled by performAtomicOperation
     }
-  }, [patient.id, currentUser, addCaseSheetEntry]);
+  }, [performAtomicOperation, props.patient.id, props.currentUser]);
 
-  // Generate medication schedule times
+  // ================================
+  // MEDICATION-SPECIFIC UTILITIES
+  // ================================
+
+  /**
+   * Generate medication schedule times based on frequency
+   * Medication-specific utility function
+   */
   const generateScheduleTimes = useCallback((frequency: string) => {
     const freq = frequency.toLowerCase();
     let nextTimes: string[] = [];
@@ -224,14 +197,37 @@ export const usePatientMedications = ({
     return { nextTimes, nextTime };
   }, []);
 
+  /**
+   * Debounce utility for medication operations
+   * Medication-specific utility function
+   */
+  const debounce = useCallback((func: (...args: any[]) => void, wait: number) => {
+    let timeout: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  }, []);
+
+  // ================================
+  // RETURN INTERFACE (Backward Compatible)
+  // ================================
+
   return {
-    isAddingMedication,
-    setIsAddingMedication,
-    newMedication,
-    setNewMedication,
+    // Generic state (aliased for backward compatibility)
+    isAddingMedication: isAdding,
+    setIsAddingMedication: setIsAdding,
+    newMedication: formState,
+    setNewMedication: setFormState,
+
+    // Generic handlers (aliased for backward compatibility)
+    handleAddMedication: handleAdd,
+
+    // Medication-specific handlers
     handleMedicationStatusChange,
-    handleAddMedication,
     handleMedicationAdministration,
+
+    // Medication-specific utilities
     generateScheduleTimes,
     debounce
   };

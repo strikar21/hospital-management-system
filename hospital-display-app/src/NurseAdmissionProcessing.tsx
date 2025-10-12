@@ -4,7 +4,7 @@ import {
   Heart, MapPin, Calendar, Phone
 } from 'lucide-react';
 import { user as UserType } from './types';
-import { getApiUrl } from './config/apiConfig';
+import { AdmissionService } from './services/AdmissionService';
 
 interface AdmissionRecommendation {
   id: string;
@@ -70,12 +70,11 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       // Load pending recommendations
-      const recResponse = await fetch(getApiUrl('/admission/recommendations?status=pending'));
-      const recData = await recResponse.json();
+      const recommendations = await AdmissionService.getRecommendations('pending');
       // Transform name fields from lowercase to camelCase for admission recommendations
-      const transformedRecommendations = (recData.recommendations || []).map((rec: any) => ({
+      const transformedRecommendations = (recommendations || []).map((rec: any) => ({
         ...rec,
         firstname: rec.firstname || rec.firstname,
         lastname: rec.lastname || rec.lastname
@@ -85,9 +84,8 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
       // Skip loading beds - manual entry only
 
       // Load available devices
-      const devicesResponse = await fetch(getApiUrl('/admission/available-devices?devicetype=watch'));
-      const devicesData = await devicesResponse.json();
-      setAvailableDevices(devicesData.availableDevices || []);
+      const devices = await AdmissionService.getAvailableDevices('watch');
+      setAvailableDevices(devices || []);
 
     } catch (err) {
       setError('Failed to load admission data');
@@ -105,24 +103,16 @@ export const NurseAdmissionProcessing: React.FC<NurseAdmissionProps> = ({
 
     try {
       setProcessing(true);
-      
-      const response = await fetch(getApiUrl('/admission/process-admission'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recommendationId: selectedRecommendation.id,
-          bedNumber: bedNumber,
-          roomNumber: roomNumber,
-          wardtype: wardtype,
-          selectedDevice: selectedDevice || null,
-          processingNotes: processingNotes,
-          processedBy: currentUser.name || 'Nursing Staff'
-        })
-      });
 
-      const data = await response.json();
+      const data = await AdmissionService.processAdmission({
+        recommendationId: selectedRecommendation.id,
+        bedNumber: bedNumber,
+        roomNumber: roomNumber,
+        wardtype: wardtype,
+        selectedDevice: selectedDevice || null,
+        processingNotes: processingNotes,
+        processedBy: currentUser.name || 'Nursing Staff'
+      });
 
       if (data.success) {
         setSuccess(`Patient ${(() => {

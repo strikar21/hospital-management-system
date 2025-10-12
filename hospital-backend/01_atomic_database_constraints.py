@@ -133,7 +133,12 @@ async def enhance_database_constraints():
                 CHECK (status IN ('pending', 'completed', 'failed')),
 
                 CONSTRAINT chk_medical_operation_type
-                CHECK (operation_type IN ('medication', 'investigation', 'therapy', 'note'))
+                CHECK (operation_type IN (
+                    'medication', 'investigation', 'therapy', 'note',
+                    'medication_administration', 'therapy_session',
+                    'alert_acknowledgment', 'investigation_completion',
+                    'medication_status_change'
+                ))
             );
         """)
 

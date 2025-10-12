@@ -20,7 +20,7 @@ export interface medication extends MedicalRecordAudit {
   dosage: string;
   frequency: string;
   route: string;
-  status: 'active' | 'stopped' | 'held' | 'administered';
+  status: 'active' | 'stopped' | 'held' | 'discontinued' | 'administered';
   startDate: string;
   endDate?: string;
   duration?: string;
@@ -223,9 +223,41 @@ export interface medicationbarcode {
 }
 
 // Type aliases for medical types
-export type medicationstatus = 'active' | 'stopped' | 'held';
+export type medicationstatus = 'active' | 'stopped' | 'held' | 'discontinued';
 export type investigationstatus = 'pending' | 'ordered' | 'scheduled' | 'inProgress' | 'completed' | 'cancelled';
 export type therapystatus = 'active' | 'completed' | 'cancelled';
+
+// Vital Signs and Chart Types
+export interface vitalDataPoint {
+  timestamp: string;
+  heartRate?: number;
+  skinTemperature?: number;
+  oxygenSaturation?: number;
+  respiratoryRate?: number;
+  systolicPressure?: number;
+  diastolicPressure?: number;
+  ecgReading?: number;
+  eegReading?: number;
+  bioelectricalImpedance?: number;
+  tremorIntensity?: number;
+}
+
+export interface medicationEvent {
+  timestamp: string;
+  medicationName: string;
+  dose: string;
+  route: string;
+}
+
+export type timeframeOption = '1h' | '6h' | '24h' | '7d';
+
+export interface chartConfig {
+  vitalType: string;
+  color: string;
+  unit: string;
+  normalRange: { min: number; max: number };
+  criticalRange: { min: number; max: number };
+}
 
 // Type aliases for backward compatibility
 export type labResult = labresult;

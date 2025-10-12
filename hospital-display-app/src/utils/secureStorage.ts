@@ -227,6 +227,49 @@ class SecureStorage {
   }
 
   /**
+   * Generic secure storage - store any data with encryption
+   */
+  static async set(key: string, value: string): Promise<void> {
+    try {
+      const encrypted = await this.encrypt(value);
+      localStorage.setItem(key, encrypted);
+    } catch (error) {
+      throw new Error(`Failed to store ${key} securely`);
+    }
+  }
+
+  /**
+   * Generic secure retrieval - get any encrypted data
+   */
+  static async get(key: string): Promise<string | null> {
+    try {
+      const encrypted = localStorage.getItem(key);
+      if (!encrypted) {
+        return null;
+      }
+      return await this.decrypt(encrypted);
+    } catch (error) {
+      localStorage.removeItem(key);
+      return null;
+    }
+  }
+
+  /**
+   * Generic secure removal
+   */
+  static remove(key: string): void {
+    localStorage.removeItem(key);
+  }
+
+  /**
+   * Remove user from storage
+   */
+  static removeUser(): void {
+    localStorage.removeItem(this.USER_KEY);
+    localStorage.removeItem('currentUser');
+  }
+
+  /**
    * Clear all secure storage (for logout) - HIPAA compliant data destruction
    */
   static clearAll(): void {

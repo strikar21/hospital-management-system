@@ -57,7 +57,7 @@ export const usePatientCaseSheet = (
   const {
     entriesPerPage = 6,
     autoGoToLastPage = true,
-    excludeTypes = ['medicationAdministration'],
+    excludeTypes = [],  // Show all entry types including medication administrations
     includeOnlyTypes = []
   } = options;
 
@@ -185,7 +185,10 @@ export const usePatientCaseSheet = (
       'pharmacistNote': 'PHARMACY NOTES',
       'clinicalNote': 'OTHER NOTES',
       'handoffNote': 'HANDOFF NOTE',
-      'medicationAdministration': 'MEDICATION ADMIN'
+      'medicationAdministration': 'MEDICATION ADMIN',
+      'medication_administration': 'MEDICATION ADMIN',  // Backend snake_case
+      'medication_status_change': 'MEDICATION STATUS',   // Backend snake_case
+      'note': 'NOTE'
     };
 
     return typeLabels[type] || 'UNKNOWN';
@@ -208,7 +211,10 @@ export const usePatientCaseSheet = (
       'pharmacistNote': 'bg-orange-100 text-orange-800',
       'clinicalNote': 'bg-gray-100 text-gray-800',
       'handoffNote': 'bg-pink-100 text-pink-800',
-      'medicationAdministration': 'bg-teal-100 text-teal-800'
+      'medicationAdministration': 'bg-teal-100 text-teal-800',
+      'medication_administration': 'bg-teal-100 text-teal-800',  // Backend snake_case
+      'medication_status_change': 'bg-orange-100 text-orange-800',  // Backend snake_case
+      'note': 'bg-gray-100 text-gray-800'
     };
 
     return typeStyles[type] || 'bg-red-100 text-red-800';

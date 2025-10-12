@@ -8,6 +8,7 @@ import React from 'react';
 import { ChevronLeft, Shield, X } from 'lucide-react';
 import { patient, user } from '../../types';
 import { getStatusColor, formatTimeOnly } from '../../utils';
+import { DischargeService } from '../../services/DischargeService';
 
 interface PatientHeaderProps {
   patient: patient;
@@ -27,19 +28,13 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
   const handleDoctorRequestDischarge = async () => {
     if (window.confirm(`Request discharge for ${patient.name}?\n\nThis will:\n• Send request to Hospital Administration for approval\n• Patient will remain active until fully processed\n\nConfirm discharge request?`)) {
       try {
-        const response = await fetch(`/api/v2/patients/${patient.id}/discharge-request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            doctorId: currentUser.id,
-            reason: 'Medical discharge - patient condition stable'
-          })
-        });
-        if (response.ok) {
-          // Success - no second popup needed, user will see status change
-        } else {
-          throw new Error('Request failed');
-        }
+        await DischargeService.requestDischarge(
+          patient.id,
+          currentUser.id,
+          'Medical discharge - patient condition stable',
+          'Discharge requested by doctor'
+        );
+        // Success - no second popup needed, user will see status change
       } catch (error) {
         alert('Failed to submit discharge request. Please try again.');
       }
@@ -49,19 +44,12 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
   const handleAdminApproveDischarge = async () => {
     if (window.confirm(`Approve discharge for ${patient.name}?\n\nThis confirms:\n• Insurance/billing clearance\n• Administrative approval\n• Ready for nurse to complete discharge\n\nApprove discharge?`)) {
       try {
-        const response = await fetch(`/api/v2/patients/${patient.id}/discharge-approve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            adminId: currentUser.id,
-            approvalNote: 'Insurance cleared, billing completed, discharge approved'
-          })
-        });
-        if (response.ok) {
-          // Success - no second popup needed, user will see status change
-        } else {
-          throw new Error('Approval failed');
-        }
+        await DischargeService.approveDischarge(
+          0, // requestId - backend finds by status, not by ID
+          currentUser.id,
+          'Insurance cleared, billing completed, discharge approved'
+        );
+        // Success - no second popup needed, user will see status change
       } catch (error) {
         alert('Failed to approve discharge. Please try again.');
       }
@@ -71,21 +59,14 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
   const handleNurseCompleteDischarge = async () => {
     if (window.confirm(`Complete discharge for ${patient.name}?\n\nThis will:\n• Remove patient from active list\n• Free up bed and equipment\n• Generate discharge summary\n• Complete the discharge process\n\nComplete discharge?`)) {
       try {
-        const response = await fetch(`/api/v2/patients/${patient.id}/discharge-complete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nurseId: currentUser.id,
-            completionNote: 'Patient discharge completed successfully'
-          })
-        });
-        if (response.ok) {
-          // Success - trigger parent callback if provided
-          if (onPatientDischarge) {
-            onPatientDischarge(patient.id);
-          }
-        } else {
-          throw new Error('Completion failed');
+        await DischargeService.completeDischarge(
+          0, // requestId - backend finds by status, not by ID
+          currentUser.id,
+          'Patient discharge completed successfully'
+        );
+        // Success - trigger parent callback if provided
+        if (onPatientDischarge) {
+          onPatientDischarge(patient.id);
         }
       } catch (error) {
         alert('Failed to complete discharge. Please try again.');

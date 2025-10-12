@@ -12,9 +12,10 @@ import uuid
 from dateutil import parser as dateParser
 
 from ...core.database import getDbConnection
+from ...core.auth_dependencies import require_medical_staff
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_medical_staff)])
 
 @router.post("/recommendations")
 async def createAdmissionRecommendation(admissionData: dict):

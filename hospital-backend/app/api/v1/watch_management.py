@@ -13,9 +13,10 @@ import uuid
 from ...core.database import getDbConnection
 # Utils for date serialization
 from ...services.websocket_manager import connectionManager
+from ...core.auth_dependencies import require_medical_staff, require_admin, get_current_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_medical_staff)])
 
 @router.get("/available")
 async def getAvailableWatches():
@@ -24,12 +25,12 @@ async def getAvailableWatches():
         async with getDbConnection() as conn:
             query = """
             SELECT d.*,
-                   CASE WHEN d.lastseen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                        WHEN d.lastseen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                   CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                        WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                         ELSE 'offline' END as connectionStatus
             FROM devices d
             WHERE d."deviceType" = 'watch' AND d.status = 'available'
-            ORDER BY d.lastseen DESC, d.serialnumber
+            ORDER BY d."lastSeen" DESC, d."serialNumber"
             """
 
             rows = await conn.fetch(query)
@@ -110,8 +111,15 @@ async def getAssignedWatches():
         raise HTTPException(status_code=500, detail=f"Failed to get assigned watches: {str(e)}")
 
 @router.post("/assign")
-async def assignWatchToPatient(assignmentData: dict):
-    """Assign an ESP32 watch to a patient"""
+async def assignWatchToPatient(
+    assignmentData: dict,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can assign
+):
+    """
+    Assign an ESP32 watch to a patient
+
+    RBAC: Requires medical staff (doctor or nurse).
+    """
     try:
         patientId = assignmentData.get('patientId')
         deviceId = assignmentData.get('deviceId')
@@ -176,8 +184,15 @@ async def assignWatchToPatient(assignmentData: dict):
         raise HTTPException(status_code=500, detail=f"Failed to assign watch: {str(e)}")
 
 @router.post("/unassign")
-async def unassignWatchFromPatient(unassignmentData: dict):
-    """Unassign an ESP32 watch from a patient"""
+async def unassignWatchFromPatient(
+    unassignmentData: dict,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can unassign
+):
+    """
+    Unassign an ESP32 watch from a patient
+
+    RBAC: Requires medical staff (doctor or nurse).
+    """
     try:
         patientId = unassignmentData.get('patientId')
         deviceId = unassignmentData.get('deviceId')
@@ -202,7 +217,7 @@ async def unassignWatchFromPatient(unassignmentData: dict):
                 # Update assignment status
                 await conn.execute("""
                     UPDATE deviceassignments
-                    SET status = 'inactive', unassignedat = $1, unassignedby = $2, unassignmentreason = $3
+                    SET status = 'inactive', "unassignedAt" = $1, "unassignedBy" = $2, "unassignmentReason" = $3
                     WHERE \"patientId\" = $4 AND \"deviceId\" = $5 AND status = 'active'
                 """, now, unassignedBy, reason, patientId, deviceId)
 
@@ -238,15 +253,15 @@ async def getWatchConnectionStatus():
         async with getDbConnection() as conn:
             query = """
             SELECT d.*, da."patientId", p."firstName", p."lastName",
-                   CASE WHEN d.lastseen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                        WHEN d.lastseen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                   CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                        WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                         ELSE 'offline' END as connectionStatus,
-                   EXTRACT(EPOCH FROM (NOW() - d.lastseen))/60 as minutesSinceLastSeen
+                   EXTRACT(EPOCH FROM (NOW() - d."lastSeen"))/60 as minutesSinceLastSeen
             FROM devices d
             LEFT JOIN deviceassignments da ON d.id = da."deviceId" AND da.status = 'active'
             LEFT JOIN patients p ON da."patientId" = p.id
             WHERE d."deviceType" = 'watch'
-            ORDER BY d.status, d.lastseen DESC
+            ORDER BY d.status, d."lastSeen" DESC
             """
 
             rows = await conn.fetch(query)

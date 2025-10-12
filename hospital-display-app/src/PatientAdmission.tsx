@@ -3,8 +3,7 @@ import {
   Save, X, AlertCircle, CheckCircle, UserPlus
 } from 'lucide-react';
 import { user as UserType } from './types';
-import { getApiUrl } from './config/apiConfig';
-// Removed unused HospitalAPI import
+import { AdmissionService } from './services/AdmissionService';
 
 interface PatientAdmissionProps {
   currentUser: UserType;
@@ -65,56 +64,43 @@ export const PatientAdmission: React.FC<PatientAdmissionProps> = ({
     setLoading(true);
     try {
       // Create admission recommendation directly from formData
-
-      const response = await fetch(getApiUrl('/admission/recommendations'), {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          patientName: formData.name,
-          age: parseInt(formData.age),
-          gender: formData.gender,
-          diagnosis: formData.diagnosis,
-          priority: formData.priority.toLowerCase(), 
-          recommendedWard: formData.admissionType,
-          department: formData.department,
-          estimatedLengthOfStay: formData.priority === 'Emergency' ? 1 : 3,
-          specialRequirements: formData.allergies ? `Allergies: ${formData.allergies}` : null,
-          insuranceType: formData.insuranceType,
-          emergencyContact: formData.emergencyContact,
-          weight: formData.weight ? parseFloat(formData.weight) : null,
-          performedBy: currentUser.staffId // Pass the actual doctor's staff ID
-        })
+      const result = await AdmissionService.createRecommendation({
+        patientName: formData.name,
+        age: parseInt(formData.age),
+        gender: formData.gender,
+        diagnosis: formData.diagnosis,
+        priority: formData.priority.toLowerCase(),
+        recommendedWard: formData.admissionType,
+        department: formData.department,
+        estimatedLengthOfStay: formData.priority === 'Emergency' ? 1 : 3,
+        specialRequirements: formData.allergies ? `Allergies: ${formData.allergies}` : null,
+        insuranceType: formData.insuranceType,
+        emergencyContact: formData.emergencyContact,
+        weight: formData.weight ? parseFloat(formData.weight) : null,
+        performedBy: currentUser.staffId // Pass the actual doctor's staff ID
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        showMessage(`✅ Admission recommendation created for ${formData.name}! Recommendation ID: ${result.recommendationId}. Nursing staff will process bed assignment and complete admission.`);
-        // Reset form
-        setFormData({
-          id: '',
-          name: '',
-          age: '',
-          gender: 'Male',
-          admissionType: 'General Ward',
-          priority: 'Routine',
-          department: currentUser.department || 'Cardiology',
-          assignedDoctor: currentUser.name,
-          diagnosis: '',
-          weight: '',
-          admissionDate: new Date().toISOString().split('T')[0],
-          insuranceType: 'General',
-          emergencyContact: '',
-          allergies: ''
-        });
-      } else {
-        const errorData = await response.json();
-        showMessage(errorData.detail || 'Failed to admit patient', true);
-      }
+      showMessage(`✅ Admission recommendation created for ${formData.name}! Recommendation ID: ${result.recommendationId}. Nursing staff will process bed assignment and complete admission.`);
+      // Reset form
+      setFormData({
+        id: '',
+        name: '',
+        age: '',
+        gender: 'Male',
+        admissionType: 'General Ward',
+        priority: 'Routine',
+        department: currentUser.department || 'Cardiology',
+        assignedDoctor: currentUser.name,
+        diagnosis: '',
+        weight: '',
+        admissionDate: new Date().toISOString().split('T')[0],
+        insuranceType: 'General',
+        emergencyContact: '',
+        allergies: ''
+      });
     } catch (error: any) {
       // Error handled silently
-      showMessage('Failed to admit patient', true);
+      showMessage(error?.message || 'Failed to admit patient', true);
     }
     setLoading(false);
   };

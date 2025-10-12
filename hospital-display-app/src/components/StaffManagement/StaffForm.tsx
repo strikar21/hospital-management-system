@@ -1,41 +1,13 @@
 import React from 'react';
 import { X } from 'lucide-react';
-
-interface Staff {
-  id: string;
-  staffId: string;
-  name: string;
-  role: string;
-  department: string;
-  nfcId?: string;
-  phone?: string;
-  email?: string;
-  isActive: boolean;
-  createdAt: string;
-}
-
-interface NewStaff {
-  staffId: string;
-  name: string;
-  role: string;
-  department: string;
-  nfcId: string;
-  phone: string;
-  email: string;
-  password: string;
-}
-
-interface CreatedStaff extends Staff {
-  temppin?: string;
-  temppassword?: string;
-}
+import { staff, newStaff, createdStaff } from '../../types';
 
 interface StaffFormProps {
   showAddForm: boolean;
-  editingStaff: Staff | null;
-  newStaff: NewStaff;
-  setNewStaff: (staff: NewStaff) => void;
-  setEditingStaff: (staff: Staff | null) => void;
+  editingStaff: staff | null;
+  newStaff: newStaff;
+  setNewStaff: (staff: newStaff) => void;
+  setEditingStaff: (staff: staff | null) => void;
   roles: string[];
   departments: string[];
   loading: boolean;

@@ -79,7 +79,9 @@ class PatientService(BaseService):
 
                 # Add edit permissions for each item
                 for item in camel_result[field]:
-                    item['canEdit'] = self.can_edit_item(item.get('createdAt', ''))
+                    # Notes use 'timestamp', others use 'createdAt'
+                    time_field = item.get('timestamp') or item.get('createdAt', '')
+                    item['canEdit'] = self.can_edit_item(time_field)
 
             # Calculate age if birthDate exists
             if camel_result.get('dateOfBirth'):
@@ -141,13 +143,13 @@ class PatientService(BaseService):
 
             # Update patient data with resolved names
             if attending_physician_id and attending_physician_id in staff_names:
-                patient_data['attendingPhysicianName'] = staff_names[attending_physician_id]
-                patient_data['assignedDoctor'] = staff_names[attending_physician_id]
-                self.logger.info(f"✅ Set attending physician name: {staff_names[attending_physician_id]}")
+                patient_data['attendingPhysicianName'] = staff_names[attending_physician_id]['name']
+                patient_data['assignedDoctor'] = staff_names[attending_physician_id]['name']
+                self.logger.info(f"✅ Set attending physician name: {staff_names[attending_physician_id]['name']}")
 
             if nurse_in_charge_id and nurse_in_charge_id in staff_names:
-                patient_data['nurseInChargeName'] = staff_names[nurse_in_charge_id]
-                self.logger.info(f"✅ Set nurse name: {staff_names[nurse_in_charge_id]}")
+                patient_data['nurseInChargeName'] = staff_names[nurse_in_charge_id]['name']
+                self.logger.info(f"✅ Set nurse name: {staff_names[nurse_in_charge_id]['name']}")
 
         except Exception as e:
             self.logger.error(f"❌ Error resolving staff names: {e}", exc_info=True)
@@ -213,44 +215,54 @@ class PatientService(BaseService):
                 for med in patient_data['medications']:
                     if isinstance(med, dict):
                         if med.get('prescribedBy') and med['prescribedBy'] in staff_names:
-                            med['prescribedByName'] = staff_names[med['prescribedBy']]
+                            med['prescribedByName'] = staff_names[med['prescribedBy']]['name']
                         if med.get('authorId') and med['authorId'] in staff_names:
-                            med['authorName'] = staff_names[med['authorId']]
+                            med['authorName'] = staff_names[med['authorId']]['name']
                         if med.get('createdBy') and med['createdBy'] in staff_names:
-                            med['createdByName'] = staff_names[med['createdBy']]
+                            med['createdByName'] = staff_names[med['createdBy']]['name']
 
             # Update investigations with resolved names
             if patient_data.get('investigations'):
                 for inv in patient_data['investigations']:
                     if isinstance(inv, dict):
                         if inv.get('prescribedBy') and inv['prescribedBy'] in staff_names:
-                            inv['prescribedByName'] = staff_names[inv['prescribedBy']]
+                            inv['prescribedByName'] = staff_names[inv['prescribedBy']]['name']
                         if inv.get('authorId') and inv['authorId'] in staff_names:
-                            inv['authorName'] = staff_names[inv['authorId']]
+                            inv['authorName'] = staff_names[inv['authorId']]['name']
                         if inv.get('createdBy') and inv['createdBy'] in staff_names:
-                            inv['createdByName'] = staff_names[inv['createdBy']]
+                            inv['createdByName'] = staff_names[inv['createdBy']]['name']
 
             # Update therapies with resolved names
             if patient_data.get('therapies'):
                 for therapy in patient_data['therapies']:
                     if isinstance(therapy, dict):
                         if therapy.get('prescribedBy') and therapy['prescribedBy'] in staff_names:
-                            therapy['prescribedByName'] = staff_names[therapy['prescribedBy']]
+                            therapy['prescribedByName'] = staff_names[therapy['prescribedBy']]['name']
                         if therapy.get('authorId') and therapy['authorId'] in staff_names:
-                            therapy['authorName'] = staff_names[therapy['authorId']]
+                            therapy['authorName'] = staff_names[therapy['authorId']]['name']
                         if therapy.get('createdBy') and therapy['createdBy'] in staff_names:
-                            therapy['createdByName'] = staff_names[therapy['createdBy']]
+                            therapy['createdByName'] = staff_names[therapy['createdBy']]['name']
 
             # Update notes with resolved names
             if patient_data.get('notes'):
                 for note in patient_data['notes']:
                     if isinstance(note, dict):
-                        if note.get('authorId') and note['authorId'] in staff_names:
-                            note['authorName'] = staff_names[note['authorId']]
-                        if note.get('createdBy') and note['createdBy'] in staff_names:
-                            note['createdByName'] = staff_names[note['createdBy']]
+                        # Map createdBy to authorId for frontend compatibility
+                        if note.get('createdBy'):
+                            note['authorId'] = note['createdBy']
+
+                            # Set authorName and authorRole (frontend expected fields)
+                            if note['createdBy'] in staff_names:
+                                note['authorName'] = staff_names[note['createdBy']]['name']
+                                note['createdByName'] = staff_names[note['createdBy']]['name']  # Keep for backwards compat
+                                note['authorRole'] = staff_names[note['createdBy']]['role']
+                            else:
+                                # Fallback for missing staff records
+                                note['authorName'] = 'Unknown Staff'
+                                note['authorRole'] = 'Staff'
+
                         if note.get('editedBy') and note['editedBy'] in staff_names:
-                            note['editedByName'] = staff_names[note['editedBy']]
+                            note['editedByName'] = staff_names[note['editedBy']]['name']
 
         except Exception as e:
             self.logger.error(f"Error resolving medical record staff names: {e}")
@@ -577,7 +589,8 @@ class PatientService(BaseService):
                     for entry in camel_results:
                         created_by = entry.get('createdBy')
                         if created_by and created_by in staff_names:
-                            entry['createdByName'] = staff_names[created_by]
+                            entry['createdByName'] = staff_names[created_by]['name']
+                            entry['createdByRole'] = staff_names[created_by]['role']
 
             return camel_results
 
@@ -586,7 +599,12 @@ class PatientService(BaseService):
             raise
 
     async def get_aggregated_timeline(self, patient_id: str) -> List[Dict[str, Any]]:
-        """Get aggregated timeline of all medical activities with staff name resolution"""
+        """
+        Get aggregated timeline of all medical activities.
+
+        NOTE: Staff name resolution is handled by middleware at the API layer.
+        This keeps the service layer clean and ensures consistent resolution across all endpoints.
+        """
         try:
             if not await self.patient_repository.exists(patient_id):
                 raise ValueError(f"Patient {patient_id} not found")
@@ -594,23 +612,8 @@ class PatientService(BaseService):
             timeline_entries = await self.patient_repository.get_aggregated_timeline(patient_id)
             camel_results = [self.repository.transform_to_camel_case(item) for item in timeline_entries]
 
-            # Resolve staff names for all entries
-            if camel_results:
-                staff_ids = set()
-                for entry in camel_results:
-                    if entry.get('performedBy'):
-                        staff_ids.add(entry['performedBy'])
-
-                # Get staff names from database
-                staff_ids_list = list(staff_ids)
-                if staff_ids_list:
-                    staff_names = await self.patient_repository.get_staff_names(staff_ids_list)
-
-                    # Update timeline entries with resolved names
-                    for entry in camel_results:
-                        performedBy = entry.get('performedBy')
-                        if performedBy and performedBy in staff_names:
-                            entry['performedByName'] = staff_names[performedBy]
+            # Staff name resolution removed - now handled by middleware
+            # This ensures ALL staff fields are resolved consistently, not just performedBy
 
             return camel_results
 

@@ -412,33 +412,36 @@ class PatientRepository(BaseRepository[Patient]):
                     'details': note
                 })
 
-            # Get dedicated case entries
+            # Get case entries (medication_administration, medication_status_change, and other action entries)
+            # These are UNIQUE entries not duplicated in source tables - they record ACTIONS not prescriptions
             case_entries_query = """
-                SELECT c.id, c."entryType" as type, c.description, c."createdBy" as "performedBy",
+                SELECT ce.id, ce."entryType", ce.description, ce."performedBy",
                        COALESCE(s."firstName" || ' ' || s."lastName", 'Unknown') as "performedByName",
-                       c.timestamp, 'caseEntry' as entry_type
-                FROM "caseEntries" c
-                LEFT JOIN staff s ON c."createdBy" = s.id
-                WHERE c."patientId" = $1 AND c."deletedAt" IS NULL
-                ORDER BY c.timestamp DESC
+                       COALESCE(s.role, 'Unknown') as "performedByRole",
+                       ce.timestamp
+                FROM "caseEntries" ce
+                LEFT JOIN staff s ON ce."performedBy" = s.id
+                WHERE ce."patientId" = $1 AND ce."deletedAt" IS NULL
+                ORDER BY ce.timestamp DESC
             """
             case_entries = await self.execute_custom_query(case_entries_query, [patient_id])
             for entry in case_entries:
                 timeline_entries.append({
                     'id': f"case_{entry['id']}",
                     'timestamp': entry['timestamp'],
-                    'type': entry['type'],
+                    'type': entry['entryType'],  # medication_administration, medication_status_change, etc.
                     'description': entry['description'],
                     'performedBy': entry['performedBy'],
                     'performedByName': entry.get('performedByName', 'Unknown'),
-                    'canEdit': True,
+                    'performedByRole': entry.get('performedByRole', 'Unknown'),
+                    'canEdit': entry.get('canEdit', False),
                     'details': entry
                 })
 
             # Get patient alerts and acknowledgments
             alerts_query = """
                 SELECT id, message, severity, "createdAt" as timestamp,
-                       'vitalAlert' as entry_type, status, "performedBy", "performedAt"
+                       'vitalAlert' as entry_type, status, "acknowledgedBy", "acknowledgedAt"
                 FROM patient_alerts
                 WHERE "patientId" = $1
                 ORDER BY "createdAt" DESC
@@ -457,31 +460,20 @@ class PatientRepository(BaseRepository[Patient]):
                 })
 
                 # Add alert acknowledgment entry if acknowledged
-                if alert['status'] == 'acknowledged' and alert.get('performedAt'):
+                if alert['status'] == 'acknowledged' and alert.get('acknowledgedAt'):
                     timeline_entries.append({
                         'id': f"alert_ack_{alert['id']}",
-                        'timestamp': alert['performedAt'],
+                        'timestamp': alert['acknowledgedAt'],
                         'type': 'alertAcknowledged',
                         'description': f"Alert acknowledged: {alert['message']}",
-                        'performedBy': alert.get('performedBy'),
+                        'performedBy': alert.get('acknowledgedBy'),
                         'canEdit': False,
                         'details': alert
                     })
 
-            # Resolve staff names for all entries
-            staff_ids = set()
-            for entry in timeline_entries:
-                if entry.get('performedBy') and entry['performedBy'] not in ['SYSTEM', 'System']:
-                    staff_ids.add(entry['performedBy'])
-
-            if staff_ids:
-                staff_names = await self.get_staff_names(list(staff_ids))
-
-                # Add performedByName to entries that don't have it
-                for entry in timeline_entries:
-                    performedBy = entry.get('performedBy')
-                    if performedBy and performedBy in staff_names and not entry.get('performedByName'):
-                        entry['performedByName'] = staff_names[performedBy]
+            # Staff name resolution is handled by middleware at the API layer
+            # Middleware is the single source of truth for ALL staff ID resolution
+            # This ensures consistent resolution across all endpoints
 
             # Sort all entries by timestamp (newest first)
             timeline_entries.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -520,8 +512,8 @@ class PatientRepository(BaseRepository[Patient]):
             self.logger.error(f"Error calculating age: {e}")
             return 0
 
-    async def get_staff_names(self, staff_ids: List[str]) -> Dict[str, str]:
-        """Get staff names by IDs"""
+    async def get_staff_names(self, staff_ids: List[str]) -> Dict[str, Dict[str, str]]:
+        """Get staff names AND roles by IDs"""
         try:
             if not staff_ids:
                 return {}
@@ -530,27 +522,34 @@ class PatientRepository(BaseRepository[Patient]):
             placeholders = ','.join([f'${i+1}' for i in range(len(staff_ids))])
 
             query = f"""
-                SELECT id, "firstName", "lastName"
+                SELECT id, "firstName", "lastName", role
                 FROM staff
                 WHERE id IN ({placeholders})
             """
 
             rows = await self.execute_custom_query(query, staff_ids)
 
-            # Build staff name mapping
-            staff_names = {}
+            # Build staff info mapping with BOTH name and role
+            staff_info = {}
             for row in rows:
                 staff_id = row['id']
                 first_name = row['firstName'] or ''
                 last_name = row['lastName'] or ''
+                role = row['role'] or 'Staff'
 
                 # Format name based on role prefix
                 if staff_id.startswith('DOC'):
-                    staff_names[staff_id] = f"Dr. {first_name} {last_name}".strip()
+                    name = f"Dr. {first_name} {last_name}".strip()
                 else:
-                    staff_names[staff_id] = f"{first_name} {last_name}".strip()
+                    name = f"{first_name} {last_name}".strip()
 
-            return staff_names
+                # Return dict with both name and role
+                staff_info[staff_id] = {
+                    'name': name,
+                    'role': role
+                }
+
+            return staff_info
 
         except Exception as e:
             self.logger.error(f"Error getting staff names: {e}")

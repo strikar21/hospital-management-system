@@ -14,8 +14,14 @@ from ...core.database import getDbConnection
 from ...core.db_utils import fetchOne
 from ...core.security import verify_pin, verify_password, validate_pin_format, validate_staff_id_format
 from ...core.jwt_handler import create_access_token, create_refresh_token, verify_token
+from ...core.auth_dependencies import get_current_user, require_medical_staff, require_admin
 from ...services.audit import logAuditEvent
 
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -30,49 +36,9 @@ class RefreshTokenResponse(BaseModel):
     accessToken: str
     tokenType: str = "bearer"
 
-@router.post("/simple-test")
-async def simpleTest(data: dict):
-    """Ultra simple test endpoint to verify POST requests work"""
-    print(f"SIMPLE TEST: Received data: {data}")
-    return {"message": "POST works", "received": data}
-
-@router.post("/debug-auth")
-async def debugAuth(request: Request):
-    """Debug auth endpoint - always succeeds"""
-    try:
-        body = await request.body()
-        requestData = json.loads(body.decode('utf-8'))
-        print(f"DEBUG AUTH: Received: {requestData}")
-
-        return {
-            "id": "DOC0001",
-            "name": "Dr. Sarah Johnson",
-            "role": "doctor",
-            "department": "Cardiology",
-            "lastSeen": datetime.now().isoformat()
-        }
-    except Exception as e:
-        print(f"DEBUG AUTH ERROR: {e}")
-        return {"error": str(e)}
-
-@router.get("/test")
-async def authTest():
-    """Test endpoint to verify auth router is working"""
-    logger.info("AUTH TEST: Endpoint reached successfully")
-    try:
-        async with getDbConnection() as conn:
-            result = await fetchOne(conn, "SELECT COUNT(*) as count FROM staff")
-            staffCount = dict(result)['count']
-            logger.info(f"AUTH TEST: Found {staffCount} staff members")
-            return {"message": "Auth router working", "status": "OK", "staffCount": staffCount}
-    except Exception as e:
-        logger.error(f"AUTH TEST: Database error: {e}")
-        import traceback
-        logger.error(f"AUTH TEST: Traceback: {traceback.format_exc()}")
-        return {"message": "Database error", "error": str(e), "status": "ERROR"}
-
 @router.post("/login", response_model=StaffLoginResponse)
-async def staffLogin(loginData: StaffLogin):
+@limiter.limit("5/minute")
+async def staffLogin(request: Request, loginData: StaffLogin):
     """
     Staff login endpoint - supports staff ID + PIN and NFC card authentication - Uses middleware transformation
     """
@@ -240,26 +206,46 @@ async def staffLogin(loginData: StaffLogin):
 
 
 @router.post("/logout")
-async def staffLogout(staffId: str):
+async def staffLogout(request: Request, current_user: dict = Depends(get_current_user)):
     """
-    Staff logout endpoint
+    Staff logout endpoint - blacklists the current token
     """
     try:
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="No valid authorization header")
+
+        token = auth_header.replace("Bearer ", "").strip()
+
+        # Calculate token expiry (30 minutes from now, matching ACCESS_TOKEN_EXPIRE_MINUTES)
+        from datetime import timedelta
+        expires_at = datetime.utcnow() + timedelta(minutes=30)
+
+        # Add token to blacklist
+        async with getDbConnection() as conn:
+            await conn.execute(
+                '''INSERT INTO token_blacklist (token, expires_at)
+                   VALUES ($1, $2)
+                   ON CONFLICT (token) DO NOTHING''',
+                token, expires_at
+            )
+
         # Log logout event
         await logAuditEvent(
-            userId=staffId,
+            userId=current_user["id"],
             action="LOGOUT",
             resourceType="AUTHENTICATION",
-            details="Staff logged out"
+            details="Staff logged out - token blacklisted"
         )
-        
-        logger.info(f"🔓 Staff logout: {staffId}")
-        
+
+        logger.info(f"🔓 Staff logout: {current_user['id']} - token blacklisted")
+
         return JSONResponse({
-            "message": "Logout successful",
+            "message": "Logout successful - token invalidated",
             "timestamp": datetime.utcnow().isoformat()
         })
-        
+
     except Exception as e:
         logger.error(f"❌ Logout error: {e}")
         raise HTTPException(status_code=500, detail="Logout failed")
@@ -410,7 +396,8 @@ async def authenticateNfc(nfcData: dict):
         raise HTTPException(status_code=500, detail="NFC authentication failed")
 
 @router.post("/nfc-tap")
-async def nfcTapLogin(nfcCardId: str):
+@limiter.limit("10/minute")
+async def nfcTapLogin(request: Request, nfcCardId: str):
     """
     NFC card tap authentication (legacy endpoint)
     """
@@ -479,7 +466,8 @@ async def nfcTapLogin(nfcCardId: str):
         raise HTTPException(status_code=500, detail="NFC authentication failed")
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
-async def refresh_access_token(request: RefreshTokenRequest):
+@limiter.limit("20/minute")
+async def refresh_access_token(http_request: Request, request: RefreshTokenRequest):
     """
     Refresh access token using refresh token
 
@@ -549,7 +537,6 @@ async def refresh_access_token(request: RefreshTokenRequest):
 
 
 # Example protected endpoint - demonstrates how to use authentication
-from ...core.auth_dependencies import get_current_user, require_medical_staff, require_admin
 
 @router.get("/protected/profile")
 async def get_protected_profile(current_user: dict = Depends(get_current_user)):

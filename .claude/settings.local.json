@@ -18,9 +18,11 @@
       "Bash(find:*)",
       "Bash(rm:*)",
       "Bash(del hospital-backend\\hospital_management.db)",
-      "Bash(del hospital-backend\\hospital_timeseries.db)"
+      "Bash(del hospital-backend\\hospital_timeseries.db)",
+      "Read(//c/Users/Srika/.claude/**)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "Research-First Medical Developer"
 }

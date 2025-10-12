@@ -2,7 +2,7 @@
 ESP32 Device API endpoints for hospital watches
 """
 
-from fastapi import APIRouter, HTTPException, Body, Header
+from fastapi import APIRouter, HTTPException, Body, Header, Depends, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
 import logging
@@ -10,8 +10,17 @@ from datetime import datetime
 import uuid
 
 from ...core.database import getDbConnection, getTimescaleConnection
+from ...core.auth_dependencies import verify_device_key
 from ...services.websocket_manager import connectionManager
 from ...services.audit import logAuditEvent
+from ...services.vital_alert_service import vital_alert_service
+from ...services.arrhythmia_detection_service import arrhythmia_detection_service
+
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -219,7 +228,7 @@ async def deviceHeartbeat(
             """, deviceId, batteryLevel, deviceStatus)
             
             # Check if device exists
-            device = await conn.fetchrow('SELECT id, assignedPatientId FROM devices WHERE id = $1', deviceId)
+            device = await conn.fetchrow('SELECT id, "assignedPatientId" FROM devices WHERE id = $1', deviceId)
             if not device:
                 raise HTTPException(status_code=404, detail="Device not found")
         
@@ -237,20 +246,35 @@ async def deviceHeartbeat(
         raise HTTPException(status_code=500, detail="Heartbeat processing failed")
 
 @router.post("/{deviceId}/vitals/{patientId}")
+@limiter.limit("100/minute")  # Allow 100 vitals updates per minute per device
 async def receiveVitalsData(
+    request: Request,
     deviceId: str,
     patientId: str,
-    vitalsData: Dict[str, Any]
+    vitalsData: Dict[str, Any],
+    device_key: str = Header(None, alias="X-Device-Key")
 ):
     """
     Receive vitals data from ESP32 device
     Stores in TimescaleDB and broadcasts to WebSocket subscribers
+
+    Security:
+    - Requires X-Device-Key header for device authentication
+    - Rate limited to 100 requests per minute per device
+    - Validates device is assigned to patient
     """
     try:
+        # Verify device authentication
+        device = await verify_device_key(device_key)
+
+        # Verify device ID matches authenticated device
+        if device["id"] != deviceId:
+            logger.warning(f"⚠️ Device {device['id']} attempted to send vitals as {deviceId}")
+            raise HTTPException(status_code=403, detail="Device ID mismatch")
         # Validate that device is assigned to this patient
         async with getDbConnection() as conn:
             patient = await conn.fetchrow(
-                'SELECT id, assignedDeviceId FROM patients WHERE id = $1',
+                'SELECT id, "assignedDeviceId" FROM patients WHERE id = $1',
                 patientId
             )
 
@@ -282,7 +306,7 @@ async def receiveVitalsData(
                 for vitalType, value in vitalTypes.items():
                     if value is not None:
                         await tsConn.execute("""
-                            INSERT INTO vitals_timeseries (patientId, deviceId, vitaltype, value, unit, time, quality)
+                            INSERT INTO vitals_timeseries ("patientId", "deviceId", vitaltype, value, unit, time, quality)
                             VALUES ($1, $2, $3, $4, $5, $6, $7)
                         """, patientId, deviceId, vitalType, float(value),
                              getUnitForVitalFix(vitalType), timestamp,
@@ -296,10 +320,51 @@ async def receiveVitalsData(
         # Update device last seen
         async with getDbConnection() as conn:
             await conn.execute(
-                "UPDATE devices SET lastSeen = NOW(), batteryLevel = $2 WHERE id = $1",
+                'UPDATE devices SET "lastSeen" = NOW(), "batteryLevel" = $2 WHERE id = $1',
                 deviceId, vitalsData.get('devicebattery', 100)
             )
-        
+
+        # ============================================
+        # PHASE 2: GENERATE ALERTS (BEST EFFORT)
+        # ============================================
+        alerts = []
+        try:
+            async with getDbConnection() as conn:
+                # Vital threshold alerts (existing)
+                alerts = await vital_alert_service.check_vitals_and_generate_alerts(
+                    patientId, deviceId, vitalsData, conn
+                )
+
+                # NEW: Arrhythmia detection
+                if vitalsData.get('heartrate'):
+                    logger.info(f"🔬 CALLING ARRHYTHMIA DETECTION for patient {patientId}, HR: {vitalsData.get('heartrate')}")
+                    arrhythmia_alert = await arrhythmia_detection_service.detect_arrhythmia(
+                        patientId, deviceId, int(vitalsData['heartrate']), conn
+                    )
+                    logger.info(f"🔬 ARRHYTHMIA DETECTION RETURNED: {arrhythmia_alert}")
+                    if arrhythmia_alert:
+                        alerts.append(arrhythmia_alert)
+                        logger.info(f"🔬 ARRHYTHMIA ALERT APPENDED TO LIST")
+                else:
+                    logger.warning(f"⚠️ NO HEARTRATE IN VITALS DATA - arrhythmia detection skipped")
+
+            if alerts:
+                logger.warning(f"🚨 Generated {len(alerts)} alert(s) for patient {patientId}")
+                # Broadcast alerts via WebSocket
+                for alert in alerts:
+                    alert_type = 'arrhythmia_alert' if alert.get('alertType') else 'vital_threshold_alert'
+                    await connectionManager.sendAlert(patientId, {
+                        'type': alert_type,
+                        'alert': alert
+                    })
+
+        except Exception as e:
+            logger.error(f"⚠️ Alert generation failed (vitals already stored): {e}")
+            # DON'T raise - vitals are already stored, alert failure is non-critical
+
+        # ============================================
+        # PHASE 3: BROADCAST VITALS (BEST EFFORT)
+        # ============================================
         # Broadcast to WebSocket subscribers with frontend-compatible format
         frontendVitals = {
             'heartrate': vitalsData.get('heartrate'),
@@ -319,10 +384,12 @@ async def receiveVitalsData(
         
         return JSONResponse({
             "success": True,
-            "message": "Vitals received and broadcasted",
+            "message": "Vitals received and processed",
             "patientId": patientId,
             "deviceId": deviceId,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "alertsGenerated": len(alerts),
+            "alerts": [{'severity': a['severity'], 'message': a['message']} for a in alerts]
         })
         
     except HTTPException:
@@ -435,9 +502,9 @@ async def doorScannerDetection(
                     
                     # Find patient assigned to this device
                     patient = await conn.fetchrow("""
-                        SELECT id, firstName, lastName
+                        SELECT id, "firstName", "lastName"
                         FROM patients
-                        WHERE assignedDeviceId = $1 AND status = 'active'
+                        WHERE "assignedDeviceId" = $1 AND status = 'active'
                     """, deviceId)
                     
                     if patient:
@@ -453,4 +520,4 @@ async def doorScannerDetection(
         
     except Exception as e:
         logger.error(f"❌ Door scanner error: {e}")
-        raise HTTPException(status_code=500, detail="Door scanner processing failed")
+        raise HTTPException(status_code=500, detail="Door scanner processing failed") 

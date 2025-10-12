@@ -286,9 +286,9 @@ export class PatientTransformer extends BaseTransformer {
         // Extract performedBy ID - prioritize details fields
         const performedBy = entry.details?.performedBy || entry.performedBy || '';
 
-        // Extract staff name from details (prioritize authorName over performedBy)
+        // Extract staff name from details (prioritize authorName over performedByName)
         let performedByName = entry.details?.authorName ||
-                              entry.details?.performedBy ||
+                              entry.details?.performedByName ||
                               entry.performedByName ||
                               'Unknown';
 

@@ -4,6 +4,7 @@
  */
 
 import { getApiUrl } from '../config/apiConfig';
+import SecureStorage from '../utils/secureStorage';
 
 interface AuditLogData {
   eventType: string;
@@ -32,16 +33,8 @@ class AuditService {
     // Generate a unique session ID for this browser session
     this.sessionId = this.generateSessionId();
     
-    // Get user ID from localStorage if available
-    const user = localStorage.getItem('user');
-    if (user) {
-      try {
-        const userData = JSON.parse(user);
-        this.userId = userData.id;
-      } catch (e) {
-        // Failed to parse user data from localStorage
-      }
-    }
+    // FIXED: User ID will be lazy-loaded from SecureStorage in logEvent
+    // (Constructor cannot be async, so we fetch it when needed)
     
     // Log session start
     this.logUserAction({
@@ -272,18 +265,27 @@ class AuditService {
   
   /**
    * Core method to send audit logs to backend
+   * FIXED: Uses SecureStorage for encrypted token and user data
    */
   private async logEvent(data: AuditLogData): Promise<void> {
     try {
-      const token = localStorage.getItem('hospitalAccessToken');
+      // Lazy-load userId from SecureStorage if not already loaded
+      if (!this.userId) {
+        const user = await SecureStorage.getUser();
+        if (user) {
+          this.userId = user.id;
+        }
+      }
+
+      const token = await SecureStorage.getToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      
+
       const response = await fetch(getApiUrl('/audit/log'), {
         method: 'POST',
         headers,

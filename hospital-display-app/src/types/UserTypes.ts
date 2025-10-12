@@ -46,6 +46,36 @@ export interface auditlog {
   deviceInfo: string;
 }
 
+// Staff Management
+export interface staff {
+  id: string;
+  staffId: string;
+  name: string;
+  role: string;
+  department: string;
+  nfcId?: string;
+  phone?: string;
+  email?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface newStaff {
+  staffId: string;
+  name: string;
+  role: string;
+  department: string;
+  nfcId: string;
+  phone: string;
+  email: string;
+  password: string;
+}
+
+export interface createdStaff extends staff {
+  temppin?: string;
+  temppassword?: string;
+}
+
 // Type aliases for user-related types
 export type authmethod = 'nfc' | 'credentials';
 export type userRole = 'doctor' | 'nurse' | 'administrator' | 'technician' | 'provisioner';

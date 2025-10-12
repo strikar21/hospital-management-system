@@ -228,7 +228,7 @@ export class VitalService extends BaseService {
 
   static async getMedicationTimeline(patientId: string, hoursBack: number = 24) {
     try {
-      const currentUser = this.getCurrentUser();
+      const currentUser = await this.getCurrentUser();
       if (!currentUser) {
         // No current user found for medication timeline request
         return [];

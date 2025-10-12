@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Send, X, Save } from 'lucide-react';
 import { patient, user, noteComment, caseSheetEntry } from '../../types';
 import { PatientService } from '../../services';
+import { PatientCaseService } from '../../services/patient';
 import { PermissionUtils } from '../../utils/permissionUtils';
 import { getApiUrl } from '../../config/apiConfig';
 
@@ -122,24 +123,21 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
       setEditingNoteId(null);
       setEditingNoteContent('');
 
-      // Add edit to case sheet for audit trail
+      // Add edit to case sheet for audit trail using authenticated service
       try {
-        const caseResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
+        const caseResult = await PatientCaseService.addCaseEntry(
+          patient.id,
+          {
             entryType: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,
-            performedBy: currentUser.staffId
-          })
-        });
+            performedBy: currentUser.id
+          },
+          currentUser.id
+        );
 
-        if (caseResponse.ok) {
-          const caseResult = await caseResponse.json();
+        if (caseResult) {
           const editCaseEntry: caseSheetEntry = {
-            id: caseResult.id, // Backend must provide ID
+            id: caseResult.id,
             timestamp: caseResult.timestamp || new Date().toISOString(),
             type: getRoleBasedNoteType(currentUser.role),
             description: `Note edited: "${editingNoteContent.trim()}"`,

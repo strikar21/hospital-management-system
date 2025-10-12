@@ -15,6 +15,8 @@ from contextlib import asynccontextmanager
 import logging
 from ..core.database import getDbConnection
 from ..services.audit import logAuditEvent
+from ..repositories.patient_repository import PatientRepository
+from ..middleware.staff_resolution_middleware import resolve_staff_in_response
 from ..core.exceptions import (
     ValidationException,
     NotFoundException,
@@ -33,6 +35,7 @@ class MedicalActionService:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self.patient_repository = PatientRepository()
 
     @asynccontextmanager
     async def atomic_transaction(self, patient_id: str):
@@ -261,8 +264,8 @@ class MedicalActionService:
     ) -> Dict[str, Any]:
         """Create medication record atomically"""
 
-        self.logger.info(f"DEBUG: _create_medication called with medication_data: {medication_data}")
-        self.logger.info(f"DEBUG: performedBy: {performedBy}")
+        self.logger.debug(f"_create_medication called with medication_data: {medication_data}")
+        self.logger.debug(f"performedBy: {performedBy}")
 
         med_data = {
             'patientId': patient_id,
@@ -274,10 +277,11 @@ class MedicalActionService:
             'endDate': medication_data.get('endDate'),
             'duration': medication_data.get('duration'),
             'prescribedBy': medication_data.get('prescribedBy', performedBy),
+            'createdBy': performedBy,  # FIXED: Add audit trail - who created this record
             'status': medication_data.get('status', 'active')
         }
 
-        self.logger.info(f"DEBUG: med_data prepared for INSERT: {med_data}")
+        self.logger.debug(f"med_data prepared for INSERT: {med_data}")
 
         # Insert with RETURNING to get complete record
         columns = list(med_data.keys())
@@ -291,12 +295,12 @@ class MedicalActionService:
             RETURNING *
         """
 
-        self.logger.info(f"DEBUG: SQL Query: {query}")
-        self.logger.info(f"DEBUG: SQL Values: {values}")
+        self.logger.debug(f"SQL Query: {query}")
+        self.logger.debug(f"SQL Values: {values}")
 
         try:
             result = await conn.fetchrow(query, *values)
-            self.logger.info(f"DEBUG: INSERT successful, result: {dict(result)}")
+            self.logger.debug(f"INSERT successful, result: {dict(result)}")
             return dict(result)
         except Exception as e:
             self.logger.error(f"ERROR: SQL INSERT failed: {e}")
@@ -419,22 +423,23 @@ class MedicalActionService:
         """Record medication administration atomically with database persistence"""
 
         # Create administration record in medicationadministrations table
-        # Get medication details to fill in proper dosage and route
+        # Get medication details to fill in proper name, dosage and route
+        medication_id_value = int(administration_data.get('medication_id'))  # INTEGER for INTEGER column
         medication_details = await conn.fetchrow(
-            'SELECT dosage, route FROM medications WHERE id = $1',
-            int(administration_data.get('medication_id'))
+            'SELECT name, dosage, route FROM medications WHERE id = $1',
+            medication_id_value  # medications.id is INTEGER
         )
 
         administered_at = datetime.now()
 
         administration_record = {
             'id': str(uuid.uuid4()),
-            'medicationId': administration_data.get('medication_id'),
+            'medicationId': medication_id_value,  # INTEGER to match INTEGER column
             'patientId': patient_id,
             'scheduledTime': administered_at,  # Required field - use current time
             'performedAt': administered_at,
-            'performedBy': performedBy,
-            'createdBy': performedBy,  # Audit trail - who created this administration record
+            'performedBy': performedBy,  # Medical staff who administered (required)
+            # Note: createdBy removed - redundant with performedBy in our immediate-recording system
             'dosageGiven': medication_details['dosage'] if medication_details else 'Unknown',
             'route': medication_details['route'] if medication_details else 'Unknown',
             'status': 'completed',
@@ -447,7 +452,15 @@ class MedicalActionService:
         columns = list(administration_record.keys())
         quoted_columns = [f'"{col}"' if any(c.isupper() for c in col) else col for col in columns]
         placeholders = [f'${i+1}' for i in range(len(columns))]
-        values = list(administration_record.values())
+
+        # Build values list with explicit type safety for INTEGER columns
+        values = []
+        for key, value in administration_record.items():
+            if key == 'medicationId':
+                # Ensure INTEGER type for database column (medicationId is INTEGER NOT NULL)
+                values.append(int(value))
+            else:
+                values.append(value)
 
         query = f"""
             INSERT INTO medicationadministrations ({', '.join(quoted_columns)})
@@ -705,7 +718,7 @@ class MedicalActionService:
     ) -> Dict[str, Any]:
         """Create case entry automatically for medical action"""
 
-        description = self._build_case_entry_description(action_type, medical_record)
+        description = await self._build_case_entry_description(conn, action_type, medical_record)
 
         # Use the database function for atomic case entry creation
         result = await conn.fetchrow(
@@ -722,9 +735,13 @@ class MedicalActionService:
         # Convert UUID to string for JSON serialization
         entry_dict = dict(case_entry)
         entry_dict['id'] = str(entry_dict['id'])
+
+        # Resolve staff names using middleware (uses transaction connection)
+        entry_dict = await resolve_staff_in_response(entry_dict, conn)
+
         return entry_dict
 
-    def _build_case_entry_description(self, action_type: str, medical_record: Dict[str, Any]) -> str:
+    async def _build_case_entry_description(self, conn: asyncpg.Connection, action_type: str, medical_record: Dict[str, Any]) -> str:
         """Build descriptive case entry description"""
 
         if action_type == 'medication':
@@ -749,12 +766,20 @@ class MedicalActionService:
             return f"Clinical note: {content[:100]}{'...' if len(content) > 100 else ''}"
 
         elif action_type == 'medication_administration':
-            medication_id = medical_record.get('medicationId', 'Unknown medication')
+            # Fetch medication name from database using medicationId
+            medication_id = medical_record.get('medicationId')
+            medication_name = 'Unknown medication'
+            if medication_id:
+                medication_details = await conn.fetchrow(
+                    'SELECT name FROM medications WHERE id = $1',
+                    int(medication_id)
+                )
+                if medication_details:
+                    medication_name = medication_details['name']
+
             dosage = medical_record.get('dosageGiven', '')
             route = medical_record.get('route', '')
-            notes = medical_record.get('notes', '')
-            timestamp = medical_record.get('performedAt', '')
-            return f"Medication administered: {medication_id} {dosage} via {route}".strip()
+            return f"Medication administered: {medication_name} {dosage} via {route}".strip()
 
         elif action_type == 'therapy_session':
             therapy_id = medical_record.get('therapyId', 'Unknown therapy')
@@ -767,23 +792,21 @@ class MedicalActionService:
             alert_type = medical_record.get('alertType', 'Unknown alert')
             alert_message = medical_record.get('alertMessage', '')
             alert_severity = medical_record.get('alertSeverity', '')
-            performedBy_staff = medical_record.get('performedBy', 'Unknown staff')
-            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''} by {performedBy_staff}".strip()
+            return f"Alert acknowledged: {alert_severity} {alert_type} - {alert_message[:50]}{'...' if len(alert_message) > 50 else ''}".strip()
 
         elif action_type == 'investigation_completion':
             investigation_name = medical_record.get('investigationName', 'Unknown investigation')
             investigation_type = medical_record.get('investigationType', '')
             results = medical_record.get('results', '')
-            completed_by = medical_record.get('completedBy', 'Unknown staff')
-            return f"Investigation completed: {investigation_type} {investigation_name} by {completed_by} - Results: {results[:50]}{'...' if len(results) > 50 else ''}".strip()
+            return f"Investigation completed: {investigation_type} {investigation_name} - Results: {results[:50]}{'...' if len(results) > 50 else ''}".strip()
 
         elif action_type == 'medication_status_change':
             medication_name = medical_record.get('medicationName', 'Unknown medication')
             medication_dosage = medical_record.get('medicationDosage', '')
             old_status = medical_record.get('oldStatus', '')
             new_status = medical_record.get('newStatus', '')
-            changed_by = medical_record.get('changedBy', 'Unknown staff')
-            return f"Medication status changed: {medication_name} {medication_dosage} from {old_status} to {new_status} by {changed_by}".strip()
+
+            return f"Medication status changed: {medication_name} {medication_dosage} from {old_status} to {new_status}".strip()
 
         else:
             return f"Medical action: {action_type}"

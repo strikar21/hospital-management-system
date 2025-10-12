@@ -92,7 +92,7 @@ export abstract class BaseService {
 
   protected static async fetchFromBackend(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = getApiUrl(endpoint);
-    const token = SecureStorage.getToken();
+    const token = await SecureStorage.getToken();  // FIXED: Added await to get actual token string
 
     try {
       const signedOptions = await this.addRequestSigning(url, {
@@ -122,11 +122,21 @@ export abstract class BaseService {
     }
   }
 
-  protected static createWebSocketConnection(endpoint: string): WebSocket | null {
+  protected static async createWebSocketConnection(endpoint: string): Promise<WebSocket | null> {
     try {
-      return new WebSocket(getWsUrl(endpoint));
+      // FIXED: Get token from SecureStorage for WebSocket authentication
+      const token = await SecureStorage.getToken();
+      if (!token) {
+        console.error('Cannot create WebSocket: No auth token available');
+        return null;
+      }
+
+      // Add token as query parameter
+      const wsUrl = `${getWsUrl(endpoint)}?token=${encodeURIComponent(token)}`;
+      return new WebSocket(wsUrl);
     } catch (error) {
       // WebSocket connection failed
+      console.error('WebSocket connection error:', error);
       return null;
     }
   }
@@ -157,16 +167,16 @@ export abstract class BaseService {
     }
   }
 
-  protected static getCurrentUser() {
+  protected static async getCurrentUser() {
     try {
-      const userStr = localStorage.getItem('currentUser');
-      if (!userStr) {
-        // No current user found in localStorage
+      const user = await SecureStorage.getUser();
+      if (!user) {
+        // No current user found in SecureStorage
         return null;
       }
-      return JSON.parse(userStr);
+      return user;
     } catch (error) {
-      // Error parsing current user from localStorage
+      // Error getting current user from SecureStorage
       return null;
     }
   }

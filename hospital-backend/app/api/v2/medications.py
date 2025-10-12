@@ -3,13 +3,14 @@ Repository-Based Medication API Endpoints
 Clean implementation using MedicationService
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import logging
 
 from ...services.service_factory import get_medication_service
 from ...validators.medical_validators import MedicationRequest, MedicationUpdate
+from ...core.auth_dependencies import require_medical_staff
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +35,17 @@ async def get_patient_medications(patient_id: str):
     try:
         medication_service = get_medication_service()
         medications = await medication_service.get_by_patient_id(patient_id)
+
+        # Resolve staff names for modifiedBy and prescribedBy using utility
+        from ...utils.staff_resolution import resolve_staff_names
+        from ...core.database import getDbConnection
+
+        async with getDbConnection() as conn:
+            medications = await resolve_staff_names(
+                conn=conn,
+                records=medications,
+                staff_fields=['prescribedBy', 'modifiedBy']
+            )
 
         logger.info(f"✅ Retrieved {len(medications)} medications for patient {patient_id}")
         return {"medications": medications, "count": len(medications)}

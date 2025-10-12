@@ -3,13 +3,14 @@ Audit API Endpoints
 Provides audit logging functionality for frontend
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import logging
 from typing import Dict, Any
 
 from ...services.audit import logAuditEvent
+from ...core.auth_dependencies import require_any_staff
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_any_staff)])
 logger = logging.getLogger(__name__)
 
 

@@ -110,7 +110,7 @@ class DischargeService(BaseService):
     async def get_pending_requests(self) -> list[Dict]:
         """Get all pending discharge requests"""
         query = """
-            SELECT dr.*, p.name as "patientName"
+            SELECT dr.*, CONCAT(p."firstName", ' ', p."lastName") as "patientName"
             FROM discharge_requests dr
             JOIN patients p ON dr."patientId" = p.id
             WHERE dr.status = 'requested'
@@ -121,7 +121,7 @@ class DischargeService(BaseService):
     async def get_approved_requests(self) -> list[Dict]:
         """Get approved but not completed discharge requests"""
         query = """
-            SELECT dr.*, p.name as "patientName"
+            SELECT dr.*, CONCAT(p."firstName", ' ', p."lastName") as "patientName"
             FROM discharge_requests dr
             JOIN patients p ON dr."patientId" = p.id
             WHERE dr.status = 'approved'

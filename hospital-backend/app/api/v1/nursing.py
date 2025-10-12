@@ -10,8 +10,10 @@ import logging
 from ...core.database import getDbConnection
 from ...core.db_utils import fetchOne, fetchAll
 from ...services.audit import logAuditEvent
+from ...core.auth_dependencies import require_medical_staff
+from fastapi import Depends
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
 
 @router.get("/ward/{wardName}/dashboard")
@@ -26,15 +28,15 @@ async def getWardDashboard(
         async with getDbConnection() as conn:
             # Get all active patients in the ward
             patientsQuery = """
-                SELECT 
-                    p.id, p.firstName, p.lastName, p.roomNumber, p.bedNumber,
-                    p.attendingPhysician, p.nurseInCharge, p.admissionDate,
-                    d.id as "deviceId", d.deviceType, d.status as devicestatus
+                SELECT
+                    p.id, p."firstName", p."lastName", p."roomNumber", p."bedNumber",
+                    p."attendingPhysician", p."nurseInCharge", p."admissionDate",
+                    d.id as "deviceId", d."deviceType", d.status as devicestatus
                 FROM patients p
-                LEFT JOIN devices d ON p.assignedDeviceId = d.id
-                WHERE p.status = 'active' 
-                AND (p.roomNumber LIKE $1 OR $1 IS NULL)
-                ORDER BY p.roomNumber, p.bedNumber
+                LEFT JOIN devices d ON p."assignedDeviceId" = d.id
+                WHERE p.status = 'active'
+                AND (p."roomNumber" LIKE $1 OR $1 IS NULL)
+                ORDER BY p."roomNumber", p."bedNumber"
             """
             
             wardFilter = f"{wardName}%" if wardName != "all" else None
@@ -47,67 +49,71 @@ async def getWardDashboard(
                 
                 # Get pending medication administrations
                 medQuery = """
-                    SELECT ma.id, ma.scheduledTime, ma.status, m.name, ma.dosageGiven
+                    SELECT ma.id, ma."scheduledTime", ma.status, m.name, ma."dosageGiven"
                     FROM medicationadministrations ma
-                    JOIN medications m ON ma.medicationId::text = m.id::text
-                    WHERE ma.patientId = $1 AND ma.status IN ('scheduled', 'due')
-                    AND ma.scheduledTime >= NOW() - INTERVAL '24 hours'
-                    AND ma.scheduledTime <= NOW() + INTERVAL '4 hours'
-                    ORDER BY ma.scheduledTime
+                    JOIN medications m ON ma."medicationId" = m.id
+                    WHERE ma."patientId" = $1 AND ma.status IN ('scheduled', 'due')
+                    AND ma."scheduledTime" >= NOW() - INTERVAL '24 hours'
+                    AND ma."scheduledTime" <= NOW() + INTERVAL '4 hours'
+                    ORDER BY ma."scheduledTime"
                 """
                 pendingMeds = await conn.fetch(medQuery, patientId)
                 
                 # Get pending therapy sessions
                 therapyQuery = """
-                    SELECT ts.id, ts.scheduleddate, ts.status, t.type, t.description
+                    SELECT ts.id, ts."scheduledDate", ts.status, t.type, t.description
                     FROM therapysessions ts
-                    JOIN therapy t ON ts.therapyid::text = t.id::text
-                    WHERE ts.patientId = $1 AND ts.status IN ('scheduled', 'inProgress')
-                    AND ts.scheduleddate >= NOW() - INTERVAL '24 hours'
-                    AND ts.scheduleddate <= NOW() + INTERVAL '4 hours'
-                    ORDER BY ts.scheduleddate
+                    JOIN therapy t ON ts."therapyId" = t.id
+                    WHERE ts."patientId" = $1 AND ts.status IN ('scheduled', 'inProgress')
+                    AND ts."scheduledDate" >= NOW() - INTERVAL '24 hours'
+                    AND ts."scheduledDate" <= NOW() + INTERVAL '4 hours'
+                    ORDER BY ts."scheduledDate"
                 """
                 pendingTherapies = await conn.fetch(therapyQuery, patientId)
                 
                 # Get pending investigations
                 investigationsQuery = """
-                    SELECT id, name, type, "scheduledTime", priority, status
+                    SELECT id, name, type, "scheduledAt", priority, status
                     FROM investigations
                     WHERE "patientId" = $1 AND status IN ('ordered', 'scheduled')
-                    AND "scheduledTime" >= NOW() - INTERVAL '24 hours'
-                    AND "scheduledTime" <= NOW() + INTERVAL '8 hours'
-                    ORDER BY priority DESC, "scheduledTime"
+                    AND "scheduledAt" >= NOW() - INTERVAL '24 hours'
+                    AND "scheduledAt" <= NOW() + INTERVAL '8 hours'
+                    ORDER BY priority DESC, "scheduledAt"
                 """
                 pendingInvestigations = await conn.fetch(investigationsQuery, patientId)
                 
                 # Get latest vitals (last 30 minutes)
-                vitalsQuery = """
-                    SELECT vitaltype, value, unit, time
-                    FROM vitals_timeseries 
-                    WHERE "patientId" = $1 
-                    AND time >= NOW() - INTERVAL '30 minutes'
-                    ORDER BY time DESC
-                    LIMIT 10
-                """
-                recentVitals = await conn.fetch(vitalsQuery, patientId)
+                # Skip if TimescaleDB not available
+                try:
+                    vitalsQuery = """
+                        SELECT "vitalType", value, unit, time
+                        FROM vitals_timeseries
+                        WHERE "patientId" = $1
+                        AND time >= NOW() - INTERVAL '30 minutes'
+                        ORDER BY time DESC
+                        LIMIT 10
+                    """
+                    recentVitals = await conn.fetch(vitalsQuery, patientId)
+                except:
+                    recentVitals = []  # TimescaleDB not available
                 
                 patientData = {
-                    patient: dict(patient),
-                    pendingmedications: [dict(med) for med in pendingMeds],
-                    pendingtherapies: [dict(therapy) for therapy in pendingTherapies],
-                    pendinginvestigations: [dict(inv) for inv in pendingInvestigations],
-                    recentvitals: [dict(vital) for vital in recentVitals],
-                    alertcount: len(pendingMeds) + len(pendingTherapies) + len(pendingInvestigations)
+                    "patient": dict(patient),
+                    "pendingmedications": [dict(med) for med in pendingMeds],
+                    "pendingtherapies": [dict(therapy) for therapy in pendingTherapies],
+                    "pendinginvestigations": [dict(inv) for inv in pendingInvestigations],
+                    "recentvitals": [dict(vital) for vital in recentVitals],
+                    "alertcount": len(pendingMeds) + len(pendingTherapies) + len(pendingInvestigations)
                 }
                 
                 wardData.append(patientData)
             
             return {
-                ward: wardName,
-                totalpatients: len(wardData),
-                shift: shift,
-                timestamp: datetime.now(),
-                patients: wardData
+                "ward": wardName,
+                "totalpatients": len(wardData),
+                "shift": shift,
+                "timestamp": datetime.now(),
+                "patients": wardData
             }
             
     except Exception as e:
@@ -124,35 +130,36 @@ async def getMedicationAlerts(
     """
     try:
         async with getDbConnection() as conn:
-            query = """
-                SELECT 
-                    ma.id, ma.patientId, ma.scheduledTime, ma.status,
-                    m.name as medicationname, ma.dosageGiven, m.route,
-                    p.firstName, p.lastName, p.roomNumber, p.bedNumber
-                FROM medicationadministrations ma
-                JOIN medications m ON ma.medicationId::text = m.id::text
-                JOIN patients p ON ma.patientId = p.id
-                WHERE ma.status IN ('scheduled', 'due', 'overdue')
-                AND ma.scheduledTime <= NOW() + INTERVAL '%s hours'
-                AND p.status = 'active'
-                AND ($1 IS NULL OR p.roomNumber LIKE $1)
-                ORDER BY 
-                    CASE 
-                        WHEN ma.scheduledTime < NOW() THEN 0 -- overdue first
-                        ELSE 1 
-                    END,
-                    ma.scheduledTime
-            """
-            
             wardFilter = f"{ward}%" if ward else None
-            alerts = await conn.fetch(query % hoursAhead, wardFilter)
+
+            query = f"""
+                SELECT
+                    ma.id, ma."patientId", ma."scheduledTime", ma.status,
+                    m.name as medicationname, ma."dosageGiven", m.route,
+                    p."firstName", p."lastName", p."roomNumber", p."bedNumber"
+                FROM medicationadministrations ma
+                JOIN medications m ON ma."medicationId" = m.id
+                JOIN patients p ON ma."patientId" = p.id
+                WHERE ma.status IN ('scheduled', 'due', 'overdue')
+                AND ma."scheduledTime" <= NOW() + INTERVAL '{hoursAhead} hours'
+                AND p.status = 'active'
+                AND ($1::TEXT IS NULL OR p."roomNumber" LIKE $1)
+                ORDER BY
+                    CASE
+                        WHEN ma."scheduledTime" < NOW() THEN 0 -- overdue first
+                        ELSE 1
+                    END,
+                    ma."scheduledTime"
+            """
+
+            alerts = await conn.fetch(query, wardFilter)
             
             return {
-                totalalerts: len(alerts),
-                ward: ward,
-                hoursahead: hoursAhead,
-                timestamp: datetime.now(),
-                alerts: [dict(alert) for alert in alerts]
+                "totalalerts": len(alerts),
+                "ward": ward,
+                "hoursahead": hoursAhead,
+                "timestamp": datetime.now(),
+                "alerts": [dict(alert) for alert in alerts]
             }
             
     except Exception as e:
@@ -171,29 +178,30 @@ async def getTherapySchedule(
         targetDate = datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.now().date()
         
         async with getDbConnection() as conn:
-            query = """
-                SELECT 
-                    ts.id, ts.patientId, ts.scheduleddate, ts.status, ts.sessionnumber,
-                    t.type as therapytype, t.description, ts.performedBy,
-                    p.firstName, p.lastName, p.roomNumber, p.bedNumber
-                FROM therapysessions ts
-                JOIN therapy t ON ts.therapyid::text = t.id::text
-                JOIN patients p ON ts.patientId = p.id
-                WHERE DATE(ts.scheduleddate) = $1
-                AND p.status = 'active'
-                AND ($2 IS NULL OR p.roomNumber LIKE $2)
-                ORDER BY ts.scheduleddate, p.roomNumber, p.bedNumber
-            """
-            
             wardFilter = f"{ward}%" if ward else None
+
+            query = """
+                SELECT
+                    ts.id, ts."patientId", ts."scheduledDate", ts.status, ts."sessionNumber",
+                    t.type as therapytype, t.description, ts."performedBy",
+                    p."firstName", p."lastName", p."roomNumber", p."bedNumber"
+                FROM therapysessions ts
+                JOIN therapy t ON ts."therapyId" = t.id
+                JOIN patients p ON ts."patientId" = p.id
+                WHERE DATE(ts."scheduledDate") = $1
+                AND p.status = 'active'
+                AND ($2::TEXT IS NULL OR p."roomNumber" LIKE $2)
+                ORDER BY ts."scheduledDate", p."roomNumber", p."bedNumber"
+            """
+
             sessions = await conn.fetch(query, targetDate, wardFilter)
             
             return {
-                date: targetDate.isoformat(),
-                ward: ward,
-                totalsessions: len(sessions),
-                timestamp: datetime.now(),
-                sessions: [dict(session) for session in sessions]
+                "date": targetDate.isoformat(),
+                "ward": ward,
+                "totalsessions": len(sessions),
+                "timestamp": datetime.now(),
+                "sessions": [dict(session) for session in sessions]
             }
             
     except Exception as e:
@@ -213,10 +221,10 @@ async def administerMedication(
         async with getDbConnection() as conn:
             # Check if administration exists
             checkQuery = """
-                SELECT ma.*, p.firstName, p.lastName, m.name as medicationname
+                SELECT ma.*, p."firstName", p."lastName", m.name as medicationname
                 FROM medicationadministrations ma
-                JOIN patients p ON ma.patientId = p.id
-                JOIN medications m ON ma.medicationId::text = m.id::text
+                JOIN patients p ON ma."patientId" = p.id
+                JOIN medications m ON ma."medicationId" = m.id
                 WHERE ma.id = $1
             """
             administration = await conn.fetchrow(checkQuery, administrationId)
@@ -274,10 +282,10 @@ async def completeTherapySession(
         async with getDbConnection() as conn:
             # Check if session exists
             checkQuery = """
-                SELECT ts.*, p.firstName, p.lastName, t.type, t.description
+                SELECT ts.*, p."firstName", p."lastName", t.type, t.description
                 FROM therapysessions ts
-                JOIN patients p ON ts.patientId = p.id
-                JOIN therapy t ON ts.therapyid::text = t.id::text
+                JOIN patients p ON ts."patientId" = p.id
+                JOIN therapy t ON ts."therapyId" = t.id
                 WHERE ts.id = $1
             """
             session = await conn.fetchrow(checkQuery, sessionId)
@@ -311,7 +319,7 @@ async def completeTherapySession(
             
             return {
                 "message": "Therapy session completed successfully",
-                sessionid: sessionId,
+                "sessionid": sessionId,
                 "performedBy": performedBy,
                 "completedAt": datetime.now()
             }

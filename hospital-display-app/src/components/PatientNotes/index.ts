@@ -4,6 +4,7 @@
  * Medical-grade notes components aggregation
  */
 
+export { PatientNotesContainer } from './PatientNotesContainer';
 export { NotesEditor } from './NotesEditor';
 export { NotesViewer } from './NotesViewer';
 export { HandoffNotes } from './HandoffNotes';

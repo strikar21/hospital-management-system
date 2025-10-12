@@ -357,13 +357,9 @@ class OfflineSync {
       });
       localStorage.setItem('hospital_pending_actions', encryptedActions);
     } catch (error) {
-      // Failed to save encrypted pending actions - handle silently
-      // Fallback to unencrypted if encryption fails
-      try {
-        localStorage.setItem('hospital_pending_actions', JSON.stringify(this.pendingActions));
-      } catch (fallbackError) {
-        // Failed to save pending actions (fallback) - handle silently
-      }
+      // FIXED: Removed unencrypted fallback for HIPAA compliance
+      // If encryption fails, we must NOT store PHI in plaintext
+      console.error('Failed to save encrypted pending actions - encryption is mandatory for PHI');
     }
   }
 

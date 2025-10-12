@@ -24,6 +24,10 @@ class MedicationRepository(BaseRepository):
     async def add_medication(self, patient_id: str, medication_data: Dict[str, Any], created_by: str) -> Dict[str, Any]:
         """Add medication to patient"""
         try:
+            # DEBUG: Log what we're receiving
+            self.logger.info(f"DEBUG add_medication: patient_id={patient_id}, created_by={created_by}")
+            self.logger.info(f"DEBUG medication_data keys: {list(medication_data.keys())}")
+
             # Prepare medication record (no id, createdAt, updatedAt - database handles these)
             # Note: medication_data comes from service layer already transformed to snake_case
             med_data = {
@@ -40,6 +44,9 @@ class MedicationRepository(BaseRepository):
                 'status': 'active'
             }
 
+            # DEBUG: Log the prepared data
+            self.logger.info(f"DEBUG med_data prepared: prescribedBy={med_data.get('prescribedBy')}, createdBy={med_data.get('createdBy')}")
+
             # Custom insert for medications table (SERIAL ID, auto timestamps)
             columns = list(med_data.keys())
             quoted_columns = [f'"{col}"' if any(c.isupper() for c in col) else col for col in columns]
@@ -53,9 +60,15 @@ class MedicationRepository(BaseRepository):
             """
 
             async with getDbConnection() as conn:
+                self.logger.info(f"DEBUG Executing INSERT query with {len(values)} values")
+                self.logger.info(f"DEBUG Query columns: {quoted_columns}")
+
                 result = await conn.fetchrow(query, *values)
 
                 if result:
+                    # DEBUG: Check what was actually inserted
+                    self.logger.info(f"DEBUG Inserted medication ID={result['id']}, createdBy in result: {result.get('createdBy')}")
+
                     # Audit logging
                     await logAuditEvent(
                         userId=created_by,
@@ -92,8 +105,8 @@ class MedicationRepository(BaseRepository):
             query = """
                 SELECT m.*, json_agg(ma.*) FILTER (WHERE ma.id IS NOT NULL) as administrations
                 FROM medications m
-                LEFT JOIN medication_administrations ma ON m.id = ma.medicationId
-                WHERE m."patientId" = $1 AND m."deletedAt" IS NULL
+                LEFT JOIN medicationadministrations ma ON m.id = ma."medicationId"
+                WHERE m."patientId" = $1
                 GROUP BY m.id
                 ORDER BY m."createdAt" DESC
             """
@@ -117,7 +130,7 @@ class MedicationRepository(BaseRepository):
                             'notes', ma.notes
                         )
                         FROM medicationadministrations ma
-                        WHERE ma."medicationId" = m.id::text
+                        WHERE ma."medicationId" = m.id
                         AND ma."patientId" = m."patientId"
                         AND ma."scheduledTime" > NOW()
                         AND ma.status IN ('scheduled', 'prn')

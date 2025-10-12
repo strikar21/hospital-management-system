@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { noteComment, patient, user, caseSheetEntry } from '../types';
 import { PatientService } from '../services';
 import { useDataRefresh } from './useDataRefresh';
-import { getApiUrl } from '../config/apiConfig';
+import { NotesService } from '../services/NotesService';
 
 interface UsePatientNotesProps {
   patient: patient;
@@ -36,25 +36,13 @@ export const usePatientNotes = ({
 
     setIsAddingNote(true);
     try {
-      const noteData = {
-        content: newNote.trim(),
-        authorName: currentUser.name
-      };
-
-      // Use atomic endpoint - creates note and case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(noteData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to add note: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // Use NotesService for atomic note creation with case entry
+      const result = await NotesService.addNoteComment(
+        patient.id,
+        newNote.trim(),
+        currentUser.id,
+        currentUser.name
+      );
 
       if (result.success) {
         // Refetch fresh data from backend (single source of truth)
@@ -86,25 +74,13 @@ export const usePatientNotes = ({
 
     setIsAddingHandoff(true);
     try {
-      const handoffData = {
-        content: newHandoff.trim(),
-        authorName: currentUser.name
-      };
-
-      // Use atomic endpoint - creates handoff note and case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(handoffData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to add handoff note: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // Use NotesService for atomic handoff note creation with case entry
+      const result = await NotesService.addNoteComment(
+        patient.id,
+        newHandoff.trim(),
+        currentUser.id,
+        currentUser.name
+      );
 
       if (result.success) {
         // Refetch fresh data from backend (single source of truth)
@@ -136,32 +112,20 @@ export const usePatientNotes = ({
     setEditText(currentText);
   }, []);
 
-  // Save edited note using atomic operation
+  // Save edited note using authenticated endpoint
   const handleSaveEdit = useCallback(async (noteId: string) => {
     if (!editText.trim()) return;
 
     try {
+      // Use NotesService for note editing
+      const success = await NotesService.editNoteComment(
+        patient.id,
+        noteId,
+        editText.trim(),
+        currentUser.id
+      );
 
-      // Use atomic endpoint - updates note and creates case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/notes/${noteId}/edit`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          note_id: noteId,
-          content: editText.trim(),
-          edited_by: currentUser.staffId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to edit note: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
+      if (success) {
         // Refetch fresh data from backend (single source of truth)
         try {
           const freshNotes = await refreshNotes();

@@ -45,6 +45,30 @@ export class PatientCRUDService extends BaseService {
   }
 
   /**
+   * Retrieves comprehensive patient data including staff information
+   * Used for patient detail views where staff name resolution is needed
+   *
+   * @param patientId - The unique identifier for the patient
+   * @returns Promise resolving to comprehensive patient data with staff
+   * @throws {Error} When backend communication fails
+   */
+  static async getPatientComplete(patientId: string): Promise<any> {
+    try {
+      const response = await this.fetchFromBackend(`/patients/${patientId}?includeStaff=true`);
+
+      if (!response) {
+        // Warning: No patient found with ID
+        return null;
+      }
+
+      return response;
+    } catch (error) {
+      // Error fetching comprehensive patient data - handle silently
+      throw error;
+    }
+  }
+
+  /**
    * Retrieves multiple patients based on filtering criteria
    *
    * @param ward - Optional ward filter for patient location
@@ -115,6 +139,23 @@ export class PatientCRUDService extends BaseService {
       return PatientTransformer.transformPatientArray(patients);
     } catch (error) {
       // Error fetching patients by status - handle silently
+      return [];
+    }
+  }
+
+  /**
+   * Retrieves alerts for a specific patient
+   *
+   * @param patientId - The unique identifier for the patient
+   * @returns Promise resolving to array of patient alerts
+   * @throws {Error} When backend communication fails
+   */
+  static async getPatientAlerts(patientId: string): Promise<any[]> {
+    try {
+      const response = await this.fetchFromBackend(`/patients/${patientId}/alerts`);
+      return response?.alerts || response || [];
+    } catch (error) {
+      // Error fetching patient alerts - handle silently
       return [];
     }
   }

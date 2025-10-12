@@ -4,15 +4,17 @@ Clean, efficient implementation using PatientService
 Demonstrates ~70% code reduction from monolithic approach
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List
 import logging
 
 from ...services.service_factory import get_patient_service
 from ...models.patient import PatientCreate, PatientUpdate
 from ...core.database import getDbConnection
+from ...core.auth_dependencies import require_medical_staff
+from ...middleware import resolve_staff_in_response
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
 
 # ================================
@@ -263,6 +265,32 @@ async def discharge_patient(patient_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{patient_id}/alerts")
+async def get_patient_alerts(
+    patient_id: str,
+    status: Optional[str] = Query('active', description="Filter by alert status (active, acknowledged, resolved)"),
+    limit: int = Query(50, description="Maximum number of alerts to return")
+):
+    """Get alerts for a patient"""
+    try:
+        patient_service = get_patient_service()
+
+        alerts = await patient_service.get_patient_alerts(
+            patient_id=patient_id,
+            status=status,
+            limit=limit
+        )
+
+        logger.info(f"✅ Retrieved {len(alerts)} alerts for patient {patient_id} (status={status})")
+        return {"alerts": alerts, "count": len(alerts)}
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Error getting alerts for patient {patient_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{patient_id}/alerts/{alert_id}/acknowledge")
 async def acknowledge_alert(
     patient_id: str,
@@ -291,6 +319,34 @@ async def acknowledge_alert(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{patient_id}/alerts/{alert_id}/resolve")
+async def resolve_alert(
+    patient_id: str,
+    alert_id: str
+):
+    """Resolve patient alert"""
+    try:
+        patient_service = get_patient_service()
+
+        success = await patient_service.resolve_alert(
+            patient_id=patient_id,
+            alert_id=alert_id,
+            resolved_by='system'
+        )
+
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to resolve alert")
+
+        logger.info(f"✅ Resolved alert {alert_id} for patient {patient_id}")
+        return {"success": True, "message": "Alert resolved successfully"}
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Error resolving alert {alert_id} for patient {patient_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ================================
 # CASE ENTRY ENDPOINTS
 # ================================
@@ -302,16 +358,22 @@ async def get_case_entries(
 ):
     """Get aggregated timeline of all medical activities for patient with optional staff data"""
     try:
+        logger.info(f"🔍 Getting case entries for patient: {patient_id}")
         patient_service = get_patient_service()
+        logger.info(f"✅ Patient service created")
         case_entries = await patient_service.get_aggregated_timeline(patient_id)
+        logger.info(f"✅ Retrieved {len(case_entries)} timeline entries")
 
         response_data = {"caseEntries": case_entries, "count": len(case_entries)}
 
-        # Include staff data if requested for single lookup call efficiency
-        if includeStaff:
-            try:
-                # Direct database query for staff data to avoid service dependency
-                async with getDbConnection() as conn:
+        # Apply staff resolution middleware to ensure ALL staff IDs have names
+        async with getDbConnection() as conn:
+            response_data = await resolve_staff_in_response(response_data, conn)
+            logger.info(f"✅ Applied staff resolution middleware")
+
+            # Include staff data if requested for single lookup call efficiency
+            if includeStaff:
+                try:
                     from ...core.db_utils import fetchAll
 
                     staff_query = """
@@ -334,17 +396,20 @@ async def get_case_entries(
 
                     response_data["staff"] = staff_data
                     logger.info(f"✅ Included {len(staff_data)} staff records in response")
-            except Exception as staff_error:
-                logger.warning(f"⚠️ Failed to include staff data: {staff_error}")
-                response_data["staff"] = []
+                except Exception as staff_error:
+                    logger.warning(f"⚠️ Failed to include staff data: {staff_error}")
+                    response_data["staff"] = []
 
         logger.info(f"✅ Retrieved {len(case_entries)} timeline entries for patient {patient_id}")
         return response_data
 
     except ValueError as e:
+        logger.error(f"❌ ValueError getting case timeline: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ Error getting case timeline for patient {patient_id}: {e}")
+        logger.error(f"❌ Exception getting case timeline for patient {patient_id}: {e}", exc_info=True)
+        import traceback
+        logger.error(f"❌ Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

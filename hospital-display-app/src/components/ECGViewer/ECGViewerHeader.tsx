@@ -165,10 +165,10 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
         {/* Current Values (Header) */}
         <div className="text-right text-sm">
           <div className="font-medium">
-            {isECGMode ? `HR: ${patient.vitals.heartRate} BPM` : 'EEG Activity'}
+            {isECGMode ? `HR: ${patient.vitals?.heartRate ?? '--'} BPM` : 'EEG Activity'}
           </div>
           <div className="text-gray-400">
-            {isECGMode ? `${patient.vitals.ecgReading} mV` : `${patient.vitals.eegReading || '--'} μV • Auto-scaled`}
+            {isECGMode ? `${patient.vitals?.ecgReading ?? '--'} mV` : `${patient.vitals?.eegReading ?? '--'} μV • Auto-scaled`}
           </div>
         </div>
       </div>

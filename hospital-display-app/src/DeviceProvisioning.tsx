@@ -5,8 +5,7 @@ import {
 } from 'lucide-react';
 import { user as UserType } from './types';
 import { PermissionUtils } from './utils/permissionUtils';
-import { getApiUrl } from './config/apiConfig';
-// Removed unused HospitalAPI import
+import { DeviceService } from './services/DeviceService';
 
 interface DeviceProvisioningProps {
   currentUser: UserType;
@@ -62,7 +61,6 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
     setLoading(true);
     try {
       // Backend will assign device ID and name - no frontend generation
-      
       const deviceData = {
         // Backend will generate deviceId and name
         devicetype: formData.devicetype,
@@ -73,34 +71,22 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
         provisionedBy: currentUser.staffId
       };
 
-      const response = await fetch(getApiUrl(`/esp32/provision`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(deviceData)
-      });
+      const result = await DeviceService.provisionESP32Device(deviceData);
+      showMessage(`Device provisioned successfully! Backend assigned ID: ${result.deviceId}`);
 
-      if (response.ok) {
-        const result = await response.json();
-        showMessage(`Device provisioned successfully! Backend assigned ID: ${result.deviceId}`);
-        // Removed console.log for production
-        
-        // Reset form
-        setFormData({
-          deviceId: '',
-          name: '',
-          devicetype: 'watch',
-          location: 'ICU',
-          macaddress: '',
-          ipaddress: '',
-          firmwareversion: ''
-        });
-      } else {
-        const errorData = await response.json();
-        showMessage(errorData.detail || 'Failed to provision device', true);
-      }
+      // Reset form
+      setFormData({
+        deviceId: '',
+        name: '',
+        devicetype: 'watch',
+        location: 'ICU',
+        macaddress: '',
+        ipaddress: '',
+        firmwareversion: ''
+      });
     } catch (error: any) {
       // Error handled silently
-      showMessage('Failed to provision device', true);
+      showMessage(error?.message || 'Failed to provision device', true);
     }
     setLoading(false);
   };

@@ -3,7 +3,7 @@ System Administration API endpoints
 Consolidated admin utilities and audit logging functionality
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from datetime import datetime
 import logging
@@ -12,15 +12,16 @@ from typing import Optional
 
 from ...core.database import getDbConnection, resetConnectionPools
 from ...services.audit import logAuditEvent
+from ...core.auth_dependencies import require_admin, require_any_staff
 
-router = APIRouter()
+router = APIRouter()  # No global auth - endpoints specify individually
 logger = logging.getLogger(__name__)
 
 # ================================
 # SYSTEM UTILITIES
 # ================================
 
-@router.post("/reset-connections")
+@router.post("/reset-connections", dependencies=[Depends(require_admin)])
 async def resetConnections():
     """Reset database connection pools to force fresh connections"""
     try:
@@ -47,7 +48,7 @@ class AuditLogRequest(BaseModel):
     ipAddress: Optional[str] = None
     userAgent: Optional[str] = None
 
-@router.post("/audit/log")
+@router.post("/audit/log", dependencies=[Depends(require_any_staff)])
 async def createAuditLog(request: Request):
     """
     Create an audit log entry (frontend logging endpoint) - handles lowercase fields
@@ -90,14 +91,14 @@ async def createAuditLog(request: Request):
         logger.error(f"❌ Create audit log error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create audit log: {str(e)}")
 
-@router.get("/audit/logs")
+@router.get("/audit/logs", dependencies=[Depends(require_admin)])
 async def getAuditLogs(
     userId: Optional[str] = None,
     action: Optional[str] = None,
     limit: int = 100
 ):
     """
-    Get audit logs with optional filtering
+    Get audit logs with optional filtering - requires admin role
     """
     try:
         async with getDbConnection() as conn:
@@ -150,12 +151,12 @@ async def getAuditLogs(
 # ================================
 
 # Keep old audit endpoints working during transition
-@router.post("/log")
+@router.post("/log", dependencies=[Depends(require_any_staff)])
 async def createAuditLogAlias(request: Request):
     """Backward compatibility alias for /audit/log"""
     return await createAuditLog(request)
 
-@router.get("/logs")
+@router.get("/logs", dependencies=[Depends(require_admin)])
 async def getAuditLogsAlias(
     userId: Optional[str] = None,
     action: Optional[str] = None,

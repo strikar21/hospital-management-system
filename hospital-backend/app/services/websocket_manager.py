@@ -184,7 +184,7 @@ class ConnectionManager:
                 
                 # Check device status
                 deviceResult = await conn.fetchrow(
-                    "SELECT status, lastseen FROM devices WHERE id = $1",
+                    'SELECT status, "lastSeen" FROM devices WHERE id = $1',
                     deviceId
                 )
                 

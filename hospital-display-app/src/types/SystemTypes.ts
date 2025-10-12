@@ -81,3 +81,52 @@ export interface qualitymetric {
   trend: 'improving' | 'stable' | 'declining';
   lastcalculated: string;
 }
+
+// Device Management
+export interface device {
+  id: string;
+  deviceId: string;
+  serialNumber: string;
+  macAddress: string;
+  firmwareVersion: string;
+  deviceType: string;
+  location: string;
+  status: string;
+  connectionStatus?: string;
+  displayName?: string;
+  batteryLevel: number | null;
+  lastSeen: string | null;
+  assignedPatientId: string | null;
+  calibrationDate: string | null;
+  nextMaintenanceDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface deviceAssignmentRecord {
+  id: number;
+  deviceId: string;
+  patientId: string;
+  performedBy: string;
+  assignmentReason: string;
+  assignedAt: string;
+  status: string;
+  deviceName: string;
+  deviceType: string;
+  patientName?: string;
+  location?: string;
+  watchDisplay?: string;
+  serialNumber?: string;
+  connectionStatus?: string;
+  batteryLevel?: number | null;
+}
+
+export interface poolStatus {
+  summary: {
+    totalDevices: number;
+    availableDevices: number;
+    assignedDevices: number;
+    offlineDevices: number;
+    lowBatteryDevices: number;
+  };
+}

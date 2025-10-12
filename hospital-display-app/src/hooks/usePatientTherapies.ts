@@ -1,265 +1,196 @@
+/**
+ * usePatientTherapies - Therapy-specific hook (Refactored)
+ * STRICT CAMELCASE ONLY - No snake_case, no PascalCase for data
+ *
+ * Extends generic usePatientMedicalRecords hook with therapy-specific operations.
+ *
+ * @module usePatientTherapies
+ * @since 2.0.0
+ */
+
 import { useState, useCallback } from 'react';
 import { patient, user, therapy, caseSheetEntry } from '../types';
-import { TherapyService, PatientService } from '../services';
-import { useDataRefresh } from './useDataRefresh';
-import { getApiUrl } from '../config/apiConfig';
+import { TherapyService } from '../services';
+import { NewTherapy } from '../components/PatientTherapies/AddTherapyForm';
+import {
+  usePatientMedicalRecords,
+  UsePatientMedicalRecordsProps
+} from './base/usePatientMedicalRecords';
 
-interface UsePatientTherapiesProps {
-  patient: patient;
-  currentUser: user;
+/** Props interface for therapy hook */
+interface UsePatientTherapiesProps extends Omit<UsePatientMedicalRecordsProps<therapy>, 'records' | 'setRecords'> {
   therapies: therapy[];
   setTherapies: React.Dispatch<React.SetStateAction<therapy[]>>;
-  addCaseSheetEntry: (entry: caseSheetEntry) => void;
-  setCaseEntries: React.Dispatch<React.SetStateAction<caseSheetEntry[]>>;
+  refreshPatientData?: () => Promise<void>;
 }
 
-export const usePatientTherapies = ({
-  patient,
-  currentUser,
-  therapies,
-  setTherapies,
-  addCaseSheetEntry,
-  setCaseEntries
-}: UsePatientTherapiesProps) => {
-  // Initialize data refresh hook for single source of truth
-  const { refreshTherapies, refreshCaseEntries } = useDataRefresh(patient.id);
-  // Therapy form state
-  const [isAddingTherapy, setIsAddingTherapy] = useState(false);
-  const [newTherapy, setNewTherapy] = useState({
-    type: 'physiotherapy' as const, description: '', frequency: '', duration: ''
-  });
-  const [addingTherapy, setAddingTherapy] = useState(false);
+/**
+ * Therapy-specific hook
+ * Provides generic CRUD operations + therapy-specific features
+ */
+export const usePatientTherapies = (props: UsePatientTherapiesProps) => {
+  const {
+    therapies,
+    setTherapies,
+    refreshPatientData,
+    ...baseProps
+  } = props;
 
-  // Add new therapy using atomic operation
-  const handleAddTherapy = useCallback(async () => {
-    if (addingTherapy || !newTherapy.description) return;
+  // ================================
+  // USE GENERIC HOOK
+  // ================================
 
-    setAddingTherapy(true);
-    try {
-      // Exclude backend-generated audit fields (createdAt, updatedAt, createdBy, createdByName)
-      const therapyData: Omit<therapy, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'> = {
-        type: newTherapy.type,
-        name: `${newTherapy.type.charAt(0).toUpperCase() + newTherapy.type.slice(1)} Therapy`,
-        description: newTherapy.description,
-        frequency: newTherapy.frequency,
-        duration: newTherapy.duration,
-        prescribedBy: currentUser.staffId,
+  const {
+    isAdding,
+    setIsAdding,
+    formState,
+    setFormState,
+    adding,
+    handleAdd,
+    handleCancel,
+    performAtomicOperation
+  } = usePatientMedicalRecords<therapy, NewTherapy>(
+    {
+      ...baseProps,
+      records: therapies,
+      setRecords: setTherapies,
+      refreshPatientData
+    },
+    {
+      recordType: 'therapy',
+      recordTypePlural: 'therapies',
+      service: {
+        add: TherapyService.addTherapy
+      },
+      defaultFormState: {
+        type: 'physiotherapy',
+        description: '',
+        frequency: '',
+        duration: ''
+      },
+      validateForm: (form) => !!form.description,
+      buildRecordData: (form, user) => ({
+        type: form.type,
+        name: `${form.type.charAt(0).toUpperCase() + form.type.slice(1)} Therapy`,
+        description: form.description,
+        frequency: form.frequency,
+        duration: form.duration,
+        prescribedBy: user.staffId,
         status: 'active',
         startDate: new Date().toISOString(),
         sessions: [],
-        canEdit: true
-      };
-
-      // Use Service layer for API call
-      const result = await TherapyService.addTherapy(patient.id, therapyData, currentUser.staffId);
-
-      if (result && result.success) {
-        // Use therapy from atomic response
-        const newTherapyRecord = result.medical_record;
-        setTherapies(prev => [...prev, newTherapyRecord]);
-
-        // Add case sheet entry from atomic result (already created atomically)
-        if (result.case_entry) {
-          const newCaseEntry: caseSheetEntry = {
-            id: result.case_entry.id,
-            timestamp: result.case_entry.timestamp,
-            type: result.case_entry.entryType,
-            description: result.case_entry.description,
-            performedBy: result.case_entry.performedBy,
-            canEdit: true
-          };
-          addCaseSheetEntry(newCaseEntry);
-        }
-
-        setNewTherapy({ type: 'physiotherapy', description: '', frequency: '', duration: '' });
-        setIsAddingTherapy(false);
-      } else {
-        throw new Error('Atomic operation failed');
+        canEdit: true,
+        createdAt: new Date().toISOString()
+      } as any as Omit<therapy, 'id'>),
+      resetFormState: {
+        type: 'physiotherapy',
+        description: '',
+        frequency: '',
+        duration: ''
       }
-    } catch (error) {
-      // Failed to add therapy - handle silently
-      alert('Failed to add therapy. Please try again.');
-    } finally {
-      setAddingTherapy(false);
     }
-  }, [addingTherapy, newTherapy, currentUser, patient.id, setTherapies, addCaseSheetEntry]);
+  );
 
-  // Cancel adding therapy
-  const handleCancelAddTherapy = useCallback(() => {
-    setIsAddingTherapy(false);
-    setNewTherapy({ type: 'physiotherapy', description: '', frequency: '', duration: '' });
-  }, []);
+  // ================================
+  // THERAPY-SPECIFIC OPERATIONS
+  // ================================
 
-  // Add therapy session using atomic operation
+  /**
+   * Add therapy session using atomic operation
+   * Therapy-specific operation
+   */
   const handleAddTherapySession = useCallback(async (therapy: therapy) => {
     const duration = window.prompt('Session duration (minutes):');
     const notes = window.prompt('Session notes:');
 
     if (duration && notes) {
       try {
-        // Use atomic endpoint - creates therapy session and case entry in single transaction
-        const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/therapies/${therapy.id}/sessions`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            therapy_id: therapy.id,
-            duration: parseInt(duration),
-            notes: notes,
-            performed_by: currentUser.staffId
-          })
-        });
+        await performAtomicOperation(
+          () => TherapyService.addTherapySessionAtomic(
+            props.patient.id,
+            therapy.id,
+            parseInt(duration),
+            notes,
+            props.currentUser.id
+          ),
+          (prev, result) => prev.map(t =>
+            t.id === therapy.id ? result.medicalRecord : t
+          ),
+          `Failed to record therapy session`
+        );
 
-        if (!response.ok) {
-          throw new Error(`Failed to record therapy session: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          // Update therapy in state with response data
-          setTherapies(prev => prev.map(t =>
-            t.id === therapy.id ? result.medical_record : t
-          ));
-
-          // Add case sheet entry from atomic response
-          if (result.case_entry) {
-            const sessionEntry: caseSheetEntry = {
-              id: result.case_entry.id,
-              timestamp: result.case_entry.timestamp,
-              type: result.case_entry.entryType,
-              description: result.case_entry.description,
-              performedBy: result.case_entry.performedBy,
-              canEdit: true
-            };
-            addCaseSheetEntry(sessionEntry);
-          }
-
-          alert(`✅ Therapy session recorded successfully!`);
-        } else {
-          throw new Error('Atomic operation failed');
-        }
+        alert(`✅ Therapy session recorded successfully!`);
       } catch (error) {
-        // Failed to add therapy session - handle silently
-        alert('Failed to record therapy session. Please try again.');
+        // Error already handled by performAtomicOperation
       }
     }
-  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
+  }, [performAtomicOperation, props.patient.id, props.currentUser.id]);
 
-  // Complete therapy using atomic operation
+  /**
+   * Complete therapy using atomic operation
+   * Therapy-specific operation
+   */
   const handleCompleteTherapy = useCallback(async (therapy: therapy) => {
     if (window.confirm('Mark this therapy as completed?')) {
       try {
-
-        // Use atomic endpoint - updates therapy and creates case entry in single transaction
-        const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/therapies/${therapy.id}/complete`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            therapy_id: therapy.id,
-            completed_by: currentUser.staffId
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to complete therapy: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          // Update therapy in state with response data
-          setTherapies(prev => prev.map(t =>
-            t.id === therapy.id ? result.medical_record : t
-          ));
-
-          // Add case sheet entry from atomic response
-          if (result.case_entry) {
-            const completionEntry: caseSheetEntry = {
-              id: result.case_entry.id,
-              timestamp: result.case_entry.timestamp,
-              type: result.case_entry.entryType,
-              description: result.case_entry.description,
-              performedBy: result.case_entry.performedBy,
-              canEdit: true
-            };
-            addCaseSheetEntry(completionEntry);
-          }
-        } else {
-          throw new Error('Atomic operation failed');
-        }
+        await performAtomicOperation(
+          () => TherapyService.completeTherapyAtomic(
+            props.patient.id,
+            therapy.id,
+            props.currentUser.id
+          ),
+          (prev, result) => prev.map(t =>
+            t.id === therapy.id ? result.medicalRecord : t
+          ),
+          `Failed to complete therapy`
+        );
       } catch (error) {
-        // Error completing therapy - handle silently
-        alert(`❌ Failed to complete therapy: ${(error as Error).message}`);
+        // Error already handled by performAtomicOperation
       }
     }
-  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
+  }, [performAtomicOperation, props.patient.id, props.currentUser.id]);
 
-  // Cancel therapy using atomic operation
+  /**
+   * Cancel therapy using atomic operation
+   * Therapy-specific operation
+   */
   const handleCancelTherapy = useCallback(async (therapy: therapy) => {
     if (window.confirm('Cancel this therapy?')) {
       try {
-
-        // Use atomic endpoint - updates therapy and creates case entry in single transaction
-        const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/therapies/${therapy.id}/cancel`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            therapy_id: therapy.id,
-            cancelled_by: currentUser.staffId
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to cancel therapy: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          // Update therapy in state with response data
-          setTherapies(prev => prev.map(t =>
-            t.id === therapy.id ? result.medical_record : t
-          ));
-
-          // Add case sheet entry from atomic response
-          if (result.case_entry) {
-            const cancellationEntry: caseSheetEntry = {
-              id: result.case_entry.id,
-              timestamp: result.case_entry.timestamp,
-              type: result.case_entry.entryType,
-              description: result.case_entry.description,
-              performedBy: result.case_entry.performedBy,
-              canEdit: true
-            };
-            addCaseSheetEntry(cancellationEntry);
-          }
-        } else {
-          throw new Error('Atomic operation failed');
-        }
+        await performAtomicOperation(
+          () => TherapyService.cancelTherapyAtomic(
+            props.patient.id,
+            therapy.id,
+            props.currentUser.id
+          ),
+          (prev, result) => prev.map(t =>
+            t.id === therapy.id ? result.medicalRecord : t
+          ),
+          `Failed to cancel therapy`
+        );
       } catch (error) {
-        // Error cancelling therapy - handle silently
-        alert(`❌ Failed to cancel therapy: ${(error as Error).message}`);
+        // Error already handled by performAtomicOperation
       }
     }
-  }, [patient.id, currentUser, setTherapies, addCaseSheetEntry]);
+  }, [performAtomicOperation, props.patient.id, props.currentUser.id]);
+
+  // ================================
+  // RETURN INTERFACE (Backward Compatible)
+  // ================================
 
   return {
-    // Form state
-    isAddingTherapy,
-    setIsAddingTherapy,
-    newTherapy,
-    setNewTherapy,
-    addingTherapy,
+    // Generic state (aliased for backward compatibility)
+    isAddingTherapy: isAdding,
+    setIsAddingTherapy: setIsAdding,
+    newTherapy: formState,
+    setNewTherapy: setFormState,
+    addingTherapy: adding,
 
-    // Actions
-    handleAddTherapy,
-    handleCancelAddTherapy,
+    // Generic handlers (aliased for backward compatibility)
+    handleAddTherapy: handleAdd,
+    handleCancelAddTherapy: handleCancel,
+
+    // Therapy-specific handlers
     handleAddTherapySession,
     handleCompleteTherapy,
     handleCancelTherapy

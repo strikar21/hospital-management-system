@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
-import { getApiUrl } from './config/apiConfig';
+import { StaffService } from './services/StaffService';
 
 interface PasswordChangeProps {
   staffId: string;
@@ -38,32 +38,16 @@ const PasswordChange: React.FC<PasswordChangeProps> = ({ staffId, onClose }) => 
     setLoading(true);
     setError('');
     setMessage('');
-    
-    try {
-      const response = await fetch(getApiUrl(`/staff/${staffId}/change-password`), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentPassword: currentPassword,
-          newPassword: newPassword,
-        }),
-      });
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        setMessage('Password changed successfully!');
-        setTimeout(() => {
-          onClose();
-        }, 2000);
-      } else {
-        setError(data.detail || 'Error changing password');
-      }
-    } catch (error) {
+    try {
+      await StaffService.changePassword(staffId, currentPassword, newPassword);
+      setMessage('Password changed successfully!');
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } catch (error: any) {
       // Error handled silently
-      setError('Network error. Please try again.');
+      setError(error?.message || 'Network error. Please try again.');
     } finally {
       setLoading(false);
     }

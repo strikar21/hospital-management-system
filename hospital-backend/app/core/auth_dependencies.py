@@ -39,6 +39,21 @@ async def get_current_user(
     """
     token = credentials.credentials
 
+    # Check if token is blacklisted
+    async with getDbConnection() as conn:
+        is_blacklisted = await conn.fetchval(
+            'SELECT EXISTS(SELECT 1 FROM token_blacklist WHERE token = $1 AND expires_at > NOW())',
+            token
+        )
+
+        if is_blacklisted:
+            logger.warning(f"Blacklisted token attempted use")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     # Decode and validate token
     user_info = get_user_from_token(token)
     user_id = user_info.get("id")
@@ -122,12 +137,57 @@ class RoleChecker:
         return current_user
 
 
-# Convenience role checker instances
-require_doctor = RoleChecker(["Doctor"])
-require_nurse = RoleChecker(["Nurse"])
-require_admin = RoleChecker(["Administrator"])
-require_medical_staff = RoleChecker(["Doctor", "Nurse"])
-require_any_staff = RoleChecker(["Doctor", "Nurse", "Administrator", "Technician", "Lab Technician", "Radiologist"])
+# Convenience role checker functions
+async def require_doctor(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require Doctor role"""
+    if current_user.get("role") != "Doctor":
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required Doctor")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required role: Doctor"
+        )
+    return current_user
+
+async def require_nurse(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require Nurse role"""
+    if current_user.get("role") != "Nurse":
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required Nurse")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required role: Nurse"
+        )
+    return current_user
+
+async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require Administrator role"""
+    if current_user.get("role") != "Administrator":
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required Administrator")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required role: Administrator"
+        )
+    return current_user
+
+async def require_medical_staff(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require Doctor or Nurse role"""
+    if current_user.get("role") not in ["Doctor", "Nurse"]:
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required Doctor or Nurse")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required role: Doctor or Nurse"
+        )
+    return current_user
+
+async def require_any_staff(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require any staff role"""
+    allowed_roles = ["Doctor", "Nurse", "Administrator", "Technician", "Lab Technician", "Radiologist"]
+    if current_user.get("role") not in allowed_roles:
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required staff role")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required: Staff role"
+        )
+    return current_user
 
 
 async def get_optional_current_user(
@@ -152,3 +212,77 @@ async def get_optional_current_user(
         return await get_current_user(credentials)
     except HTTPException:
         return None
+
+
+async def verify_device_key(device_key: str = None) -> dict:
+    """
+    Verify ESP32 device authentication using X-Device-Key header
+
+    Args:
+        device_key: Device key from X-Device-Key header
+
+    Returns:
+        Device information dict
+
+    Raises:
+        HTTPException: If device key is invalid or device not found
+
+    Usage:
+        from fastapi import Header
+
+        @router.post("/esp32/vitals")
+        async def receive_vitals(
+            device_key: str = Header(None, alias="X-Device-Key"),
+            device: dict = Depends(verify_device_key)
+        ):
+            return {"device": device}
+    """
+    if not device_key:
+        logger.warning("Device authentication failed: No X-Device-Key header provided")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Device authentication required. X-Device-Key header missing",
+            headers={"WWW-Authenticate": "X-Device-Key"},
+        )
+
+    # Verify device key exists in database
+    async with getDbConnection() as conn:
+        query = '''SELECT id, name, "deviceType", status, "assignedPatientId"
+                   FROM devices
+                   WHERE "deviceKey" = $1'''
+        device_row = await conn.fetchrow(query, device_key)
+
+        if not device_row:
+            logger.warning(f"Invalid device key attempted use")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid device key",
+                headers={"WWW-Authenticate": "X-Device-Key"},
+            )
+
+        device_dict = dict(device_row)
+
+        # Check device status
+        if device_dict.get("status") not in ["active", "available", "assigned"]:
+            logger.warning(f"Inactive device attempted access: {device_dict.get('id')}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Device is not active",
+            )
+
+        # Update last seen timestamp
+        await conn.execute(
+            'UPDATE devices SET "lastSeen" = NOW() WHERE id = $1',
+            device_dict["id"]
+        )
+
+        logger.info(f"✅ Device authenticated: {device_dict['id']}")
+
+        # Return device info
+        return {
+            "id": device_dict["id"],
+            "name": device_dict["name"],
+            "deviceType": device_dict["deviceType"],
+            "status": device_dict["status"],
+            "assignedPatientId": device_dict.get("assignedPatientId"),
+        }

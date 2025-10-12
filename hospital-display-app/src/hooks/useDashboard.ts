@@ -47,6 +47,7 @@ export const useDashboard = ({
   const [currentPage, setCurrentPage] = useState(1);
   const PATIENTS_PER_PAGE = 20;
   const alertTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const isMountedRef = useRef(true);
 
   // Auto-logout hook
   useAutoLogout({
@@ -83,7 +84,9 @@ export const useDashboard = ({
   // Clean up alert timeouts on unmount
   useEffect(() => {
     return () => {
-      // Capture current ref value to prevent stale closure
+      // Mark as unmounted to prevent zombie updates
+      isMountedRef.current = false;
+      // Clear all pending timeouts
       const timeouts = alertTimeoutsRef.current;
       timeouts.forEach((timeout) => clearTimeout(timeout));
       timeouts.clear();
@@ -182,8 +185,11 @@ export const useDashboard = ({
       }
 
       const timeout = setTimeout(() => {
-        // Refetch fresh data from backend after alert auto-hide period
-        loadPatients();
+        // Only execute if component is still mounted (prevent zombie updates)
+        if (isMountedRef.current) {
+          // Refetch fresh data from backend after alert auto-hide period
+          loadPatients();
+        }
         alertTimeoutsRef.current.delete(alertId);
       }, 2000);
 

@@ -55,6 +55,9 @@ export const VitalChart: React.FC<VitalChartProps> = React.memo(({
 
   // Get current value for display
   const getCurrentValue = () => {
+    // Guard clause - prevent crash if patient has no vitals data
+    if (!patient.vitals) return '--';
+
     if (vitalType === 'heartRate') return `${patient.vitals.heartRate} BPM`;
     if (vitalType === 'skinTemperature') return `${patient.vitals.skinTemperature.toFixed(1)}°F`;
     if (vitalType === 'oxygenSaturation') return `${patient.vitals.oxygenSaturation}%`;

@@ -1,91 +1,120 @@
-// InvestigationService.ts - Medical investigations and lab tests (V2)
+/**
+ * InvestigationService - Medical investigations and lab tests (V2 - Refactored)
+ * STRICT CAMELCASE ONLY - No snake_case, no PascalCase for data
+ *
+ * Extends BaseMedicalRecordService for generic CRUD operations.
+ * Adds investigation-specific field mapping and result formatting.
+ *
+ * @module InvestigationService
+ * @since 2.0.0
+ */
+
 import { investigation } from '../types';
-import { BaseService } from './BaseService';
+import { BaseMedicalRecordService, MedicalRecordConfig } from './base/BaseMedicalRecordService';
 
-export class InvestigationService extends BaseService {
+export class InvestigationService extends BaseMedicalRecordService<investigation> {
 
   // ================================
-  // V2 RESPONSE HANDLER
+  // CONFIGURATION
   // ================================
 
-  private static handleV2Response<T>(response: any): T[] {
-    if (response?.investigations) return response.investigations;
-    if (response?.data) return response.data;
-    return Array.isArray(response) ? response : [];
+  protected getConfig(): MedicalRecordConfig {
+    return {
+      recordType: 'investigations',
+      recordTypeSingular: 'investigation',
+      recordTypePlural: 'investigations'
+    };
   }
 
   // ================================
-  // INVESTIGATION MANAGEMENT (V2)
+  // TYPE-SPECIFIC PAYLOAD TRANSFORMATION
   // ================================
 
+  /**
+   * Transform investigation payload with field mapping and capitalization
+   * Maps frontend field names to backend validator expectations
+   */
+  protected transformAddPayload(investigation: any, userId: string): any {
+    // Helper to capitalize first letter
+    const capitalize = (str: string): string => {
+      return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    };
+
+    // Capitalize testType and priority for backend validation
+    const testType = capitalize(investigation.type);  // 'lab' → 'Lab'
+    const priority = capitalize(investigation.priority);  // 'routine' → 'Routine'
+    const urgency = investigation.urgency ? capitalize(investigation.urgency) : undefined;  // 'urgent' → 'Urgent'
+
+    return {
+      testName: investigation.name,        // Backend expects "testName" not "name"
+      testType: testType,                  // Backend expects "testType" capitalized: 'Lab', 'Radiology', etc.
+      priority: priority,                  // Backend expects capitalized: 'Routine', 'High', 'Critical'
+      urgency: urgency,                    // Backend expects capitalized: 'Routine', 'Urgent', 'STAT'
+      notes: investigation.notes,
+      prescribedBy: userId,
+      status: 'pending'  // Backend validator accepts: pending, scheduled, in-progress, completed, cancelled
+    };
+  }
+
+  // ================================
+  // STATIC WRAPPER METHODS (Backward Compatibility)
+  // ================================
+
+  /**
+   * Get all investigations for a patient
+   * @param patientId - Patient ID
+   * @returns Promise resolving to array of investigations
+   */
   static async getPatientInvestigations(patientId: string): Promise<investigation[]> {
-    try {
-      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}`);
-      const investigations = this.handleV2Response<investigation>(response);
-
-      // Removed console.log for production
-      return investigations;
-    } catch (error) {
-      // Error fetching patient investigations - handle silently
-      return [];
-    }
+    const instance = new InvestigationService();
+    return await instance.getPatientRecords(patientId);
   }
 
+  /**
+   * Get pending investigations for a patient
+   * @param patientId - Patient ID
+   * @returns Promise resolving to array of pending investigations
+   */
   static async getPendingInvestigations(patientId: string): Promise<investigation[]> {
-    try {
-      const response = await this.fetchFromBackend(`/investigations/patient/${patientId}/pending`);
-      const investigations = this.handleV2Response<investigation>(response);
-
-      // Removed console.log for production
-      return investigations;
-    } catch (error) {
-      // Error fetching pending investigations - handle silently
-      return [];
-    }
+    return new InvestigationService().getActiveRecords(patientId, 'pending');
   }
 
-  // Exclude backend-generated audit fields from creation payload
-  static async addInvestigation(patientId: string, investigation: Omit<investigation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>, userId: string): Promise<any> {
-    try {
-      const response = await this.fetchFromBackend(`/atomic/patients/${patientId}/investigations?performedBy=${userId}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...investigation,
-          prescribedBy: userId,
-          status: 'ordered'
-        })
-      });
-
-      // Atomic response includes {success: true, medical_record: {...}, case_entry: {...}}
-      return response;
-    } catch (error) {
-      // Error adding investigation - handle silently
-      return null;
-    }
+  /**
+   * Add new investigation
+   * @param patientId - Patient ID
+   * @param investigation - Investigation data (excluding backend-generated fields)
+   * @param userId - User ID
+   * @returns Promise resolving to atomic response
+   */
+  static async addInvestigation(
+    patientId: string,
+    investigation: Omit<investigation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByName'>,
+    userId: string
+  ): Promise<any> {
+    return new InvestigationService().addRecord(patientId, investigation, userId);
   }
 
+  /**
+   * Update investigation status
+   * @param investigationId - Investigation ID
+   * @param status - New status
+   * @param userId - User ID
+   * @returns Promise resolving to success boolean
+   */
   static async updateInvestigationStatus(investigationId: string, status: string, userId: string): Promise<boolean> {
-    try {
-      await this.fetchFromBackend(`/investigations/${investigationId}/status`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          status,
-          modifiedBy: userId,
-          modifiedAt: new Date().toISOString()
-        })
-      });
-
-      // Removed console.log for production
-      return true;
-    } catch (error) {
-      // Error updating investigation status - handle silently
-      return false;
-    }
+    return new InvestigationService().updateRecordStatus(investigationId, status, userId);
   }
 
+  /**
+   * Complete investigation (legacy method)
+   * @param investigationId - Investigation ID
+   * @param results - Investigation results
+   * @param userId - User ID
+   * @returns Promise resolving to success boolean
+   */
   static async completeInvestigation(investigationId: string, results: any, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/investigations/${investigationId}/complete`, {
+      await new InvestigationService().fetchFromBackend(`/investigations/${investigationId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
           results,
@@ -94,17 +123,22 @@ export class InvestigationService extends BaseService {
         })
       });
 
-      // Removed console.log for production
       return true;
     } catch (error) {
-      // Error completing investigation - handle silently
       return false;
     }
   }
 
+  /**
+   * Update investigation results
+   * @param investigationId - Investigation ID
+   * @param results - Investigation results
+   * @param userId - User ID
+   * @returns Promise resolving to success boolean
+   */
   static async updateInvestigationResults(investigationId: string, results: any, userId: string): Promise<boolean> {
     try {
-      await this.fetchFromBackend(`/investigations/${investigationId}/results`, {
+      await new InvestigationService().fetchFromBackend(`/investigations/${investigationId}/results`, {
         method: 'PUT',
         body: JSON.stringify({
           results,
@@ -113,96 +147,99 @@ export class InvestigationService extends BaseService {
         })
       });
 
-      // Removed console.log for production
       return true;
     } catch (error) {
-      // Error updating investigation results - handle silently
       return false;
     }
   }
 
   // ================================
-  // INVESTIGATION TYPES (V2)
+  // ATOMIC OPERATIONS (Investigation-Specific)
   // ================================
 
+  /**
+   * Complete investigation atomically with automatic case entry creation
+   * @param patientId - Patient ID
+   * @param investigationId - Investigation ID
+   * @param results - Investigation results/findings
+   * @param userId - User ID completing the investigation
+   * @returns Promise resolving to atomic response with medicalRecord and caseEntry
+   */
+  static async completeInvestigationAtomic(
+    patientId: string,
+    investigationId: string,
+    results: string,
+    userId: string
+  ): Promise<any> {
+    try {
+      const response = await new InvestigationService().fetchFromBackend(
+        `/atomic/patients/${patientId}/investigations/${investigationId}/complete`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            investigationId: investigationId,
+            results: results,
+            completedBy: userId
+          })
+        }
+      );
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ================================
+  // TYPE & HISTORY METHODS (Delegate to Base)
+  // ================================
+
+  /**
+   * Get available investigation types
+   * @returns Promise resolving to array of investigation types
+   */
   static async getInvestigationTypes(): Promise<any[]> {
-    try {
-      const response = await this.fetchFromBackend(`/investigations/types`);
-      const types = this.handleV2Response<any>(response);
-
-      // Removed console.log for production
-      return types;
-    } catch (error) {
-      // Error fetching investigation types - handle silently
-      return [];
-    }
+    return new InvestigationService().getRecordTypes();
   }
 
-  // ================================
-  // LEGACY SUPPORT METHODS
-  // ================================
-
+  /**
+   * Get investigation history
+   * @param patientId - Patient ID
+   * @param investigationId - Optional specific investigation ID
+   * @returns Promise resolving to investigation history
+   */
   static async getInvestigationHistory(patientId: string, investigationId?: string): Promise<any[]> {
-    try {
-      // For v2, we get all investigations and filter if needed
-      const investigations = await this.getPatientInvestigations(patientId);
-
-      if (investigationId) {
-        return investigations.filter(inv => inv.id === investigationId);
-      }
-
-      return investigations;
-    } catch (error) {
-      // Error fetching investigation history - handle silently
-      return [];
-    }
+    return new InvestigationService().getRecordHistory(patientId, investigationId);
   }
 
+  /**
+   * Get investigations by status
+   * @param patientId - Patient ID
+   * @param status - Status to filter by
+   * @returns Promise resolving to filtered investigations
+   */
   static async getInvestigationsByStatus(patientId: string, status: string): Promise<investigation[]> {
-    try {
-      if (status === 'pending') {
-        return await this.getPendingInvestigations(patientId);
-      }
-
-      // For other statuses, get all and filter
-      const investigations = await this.getPatientInvestigations(patientId);
-      return investigations.filter(inv => inv.status === status);
-    } catch (error) {
-      // Error fetching investigations with status - handle silently
-      return [];
-    }
+    return new InvestigationService().getRecordsByStatus(patientId, status);
   }
 
-  // ================================
-  // INVESTIGATION TIMELINE
-  // ================================
-
+  /**
+   * Get investigation timeline
+   * @param patientId - Patient ID
+   * @param hoursBack - Hours to look back (default: 48)
+   * @returns Promise resolving to investigation timeline
+   */
   static async getInvestigationTimeline(patientId: string, hoursBack: number = 48): Promise<investigation[]> {
-    try {
-      const investigations = await this.getPatientInvestigations(patientId);
-
-      // Filter by time if orderedAt exists
-      const cutoff = new Date();
-      cutoff.setHours(cutoff.getHours() - hoursBack);
-
-      return investigations.filter(inv =>
-        !(inv as any).orderedAt || new Date((inv as any).orderedAt) >= cutoff
-      ).sort((a, b) => {
-        // Sort by orderedAt descending (newest first)
-        const dateA = new Date((a as any).orderedAt || 0);
-        const dateB = new Date((b as any).orderedAt || 0);
-        return dateB.getTime() - dateA.getTime();
-      });
-    } catch (error) {
-      // Error fetching investigation timeline - handle silently
-      return [];
-    }
+    return new InvestigationService().getRecordTimeline(patientId, hoursBack, 'orderedAt');
   }
 
   // ================================
-  // INVESTIGATION VALIDATION
+  // UTILITY METHODS (Investigation-Specific)
   // ================================
 
+  /**
+   * Validate investigation data
+   * @param investigation - Investigation to validate
+   * @returns true if valid, false otherwise
+   */
   static validateInvestigation(investigation: any): boolean {
     if (!investigation.name || !investigation.type) {
       return false;
@@ -213,6 +250,11 @@ export class InvestigationService extends BaseService {
     return requiredFields.every(field => investigation[field]);
   }
 
+  /**
+   * Format investigation results for display
+   * @param results - Investigation results
+   * @returns Formatted results string
+   */
   static formatInvestigationResults(results: any): string {
     try {
       if (typeof results === 'string') {
@@ -225,7 +267,6 @@ export class InvestigationService extends BaseService {
 
       return String(results);
     } catch (error) {
-      // Error formatting investigation results - handle silently
       return 'Invalid results format';
     }
   }

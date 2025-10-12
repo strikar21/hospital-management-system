@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     # Logging
     logLevel: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
+    # Environment
+    environment: str = Field(default="development", validation_alias="ENVIRONMENT")
+    debug: bool = Field(default=False, validation_alias="DEBUG")
+    testing: bool = Field(default=False, validation_alias="TESTING")
+
+    # HTTPS/SSL Configuration
+    sslCertPath: Optional[str] = Field(default=None, validation_alias="SSL_CERT_PATH")
+    sslKeyPath: Optional[str] = Field(default=None, validation_alias="SSL_KEY_PATH")
+    forceHttps: bool = Field(default=False, validation_alias="FORCE_HTTPS")
+    enableSsl: bool = Field(default=False, validation_alias="ENABLE_SSL")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

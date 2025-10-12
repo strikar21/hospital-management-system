@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { patient } from '../types';
 import { PatientService } from '../services';
-import { getApiUrl } from '../config/apiConfig';
 
 interface UsePatientDataOptions {
   userId: string;
@@ -71,43 +70,34 @@ export const usePatientData = ({
 
   // Patient-specific operations
   const updatePatient = useCallback(async (patientId: string, updates: Partial<patient>) => {
-    // Refetch fresh data from backend (single source of truth)
+    // Refetch fresh data from backend using authenticated service (single source of truth)
     try {
-      const response = await fetch(getApiUrl('/patients'));
-      if (response.ok) {
-        const data = await response.json();
-        setPatients(data.patients || data);
-      }
+      const patientData = await PatientService.getPatients(selectedWard, selectedWard, showAllDepartments);
+      setPatients(patientData);
     } catch (refreshError) {
       // Failed to refresh patients after update - handle silently
     }
-  }, []);
+  }, [selectedWard, showAllDepartments]);
 
   const removePatient = useCallback(async (patientId: string) => {
-    // Refetch fresh data from backend (single source of truth)
+    // Refetch fresh data from backend using authenticated service (single source of truth)
     try {
-      const response = await fetch(getApiUrl('/patients'));
-      if (response.ok) {
-        const data = await response.json();
-        setPatients(data.patients || data);
-      }
+      const patientData = await PatientService.getPatients(selectedWard, selectedWard, showAllDepartments);
+      setPatients(patientData);
     } catch (refreshError) {
       // Failed to refresh patients after removal - handle silently
     }
-  }, []);
+  }, [selectedWard, showAllDepartments]);
 
   const addPatient = useCallback(async (newPatient: patient) => {
-    // Refetch fresh data from backend (single source of truth)
+    // Refetch fresh data from backend using authenticated service (single source of truth)
     try {
-      const response = await fetch(getApiUrl('/patients'));
-      if (response.ok) {
-        const data = await response.json();
-        setPatients(data.patients || data);
-      }
+      const patientData = await PatientService.getPatients(selectedWard, selectedWard, showAllDepartments);
+      setPatients(patientData);
     } catch (refreshError) {
       // Failed to refresh patients after addition - handle silently
     }
-  }, []);
+  }, [selectedWard, showAllDepartments]);
 
   const getPatientById = useCallback((patientId: string) => {
     return patients.find(p => p.id === patientId);

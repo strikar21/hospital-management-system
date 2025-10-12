@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getApiUrl } from '../config/apiConfig';
+import { StaffService } from '../services/StaffService';
 
 interface Staff {
   id: string;
@@ -73,13 +73,8 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(getApiUrl('/staff'));
-      if (response.ok) {
-        const data = await response.json();
-        setStaff(Array.isArray(data) ? data : []);
-      } else {
-        throw new Error('Failed to fetch staff');
-      }
+      const data = await StaffService.getAllStaff();
+      setStaff(Array.isArray(data) ? data : []);
     } catch (error) {
       // Error fetching staff - handle silently
       setError('Failed to load staff members');
@@ -92,20 +87,13 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
   // Fetch roles and departments
   const fetchRolesAndDepartments = useCallback(async () => {
     try {
-      const [rolesResponse, deptsResponse] = await Promise.all([
-        fetch(getApiUrl('/staff/roles')),
-        fetch(getApiUrl('/staff/departments'))
+      const [rolesData, deptsData] = await Promise.all([
+        StaffService.getRoles(),
+        StaffService.getDepartments()
       ]);
 
-      if (rolesResponse.ok) {
-        const rolesData = await rolesResponse.json();
-        setRoles(Array.isArray(rolesData) ? rolesData : []);
-      }
-
-      if (deptsResponse.ok) {
-        const deptsData = await deptsResponse.json();
-        setDepartments(Array.isArray(deptsData) ? deptsData : []);
-      }
+      setRoles(Array.isArray(rolesData) ? rolesData : []);
+      setDepartments(Array.isArray(deptsData) ? deptsData : []);
     } catch (error) {
       // Error fetching roles/departments - handle silently
     }
@@ -115,39 +103,25 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
   const addStaff = useCallback(async (staffData: NewStaff): Promise<boolean> => {
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('/staff'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(staffData),
+      const result = await StaffService.addStaff(staffData);
+      setCreatedStaff(result);
+      setShowAddForm(false);
+      setPreviewStaffId('');
+      setNewStaff({
+        staffId: '',
+        name: '',
+        role: '',
+        department: '',
+        nfcId: '',
+        phone: '',
+        email: '',
+        password: 'hospital123'
       });
-
-      if (response.ok) {
-        const result = await response.json();
-        setCreatedStaff(result);
-        setShowAddForm(false);
-        setPreviewStaffId('');
-        setNewStaff({
-          staffId: '',
-          name: '',
-          role: '',
-          department: '',
-          nfcId: '',
-          phone: '',
-          email: '',
-          password: 'hospital123'
-        });
-        await fetchStaff();
-        return true;
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to add staff member');
-        return false;
-      }
-    } catch (error) {
+      await fetchStaff();
+      return true;
+    } catch (error: any) {
       // Error adding staff - handle silently
-      setError('Error adding staff member');
+      setError(error?.message || 'Error adding staff member');
       return false;
     } finally {
       setLoading(false);
@@ -158,33 +132,20 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
   const editStaff = useCallback(async (staffData: Staff): Promise<boolean> => {
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl(`/staff/${staffData.staffId}`), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: staffData.name,
-          role: staffData.role,
-          department: staffData.department,
-          nfcId: staffData.nfcId,
-          phone: staffData.phone,
-          email: staffData.email,
-        }),
+      await StaffService.updateStaff(staffData.staffId, {
+        name: staffData.name,
+        role: staffData.role,
+        department: staffData.department,
+        nfcId: staffData.nfcId,
+        phone: staffData.phone,
+        email: staffData.email,
       });
-
-      if (response.ok) {
-        setEditingStaff(null);
-        await fetchStaff();
-        return true;
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to update staff member');
-        return false;
-      }
-    } catch (error) {
+      setEditingStaff(null);
+      await fetchStaff();
+      return true;
+    } catch (error: any) {
       // Error updating staff - handle silently
-      setError('Error updating staff member');
+      setError(error?.message || 'Error updating staff member');
       return false;
     } finally {
       setLoading(false);
@@ -195,21 +156,12 @@ export const useStaffManagement = (options: UseStaffManagementOptions = {}) => {
   const deleteStaff = useCallback(async (staffId: string): Promise<boolean> => {
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl(`/staff/${staffId}`), {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        await fetchStaff();
-        return true;
-      } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to delete staff member');
-        return false;
-      }
-    } catch (error) {
+      await StaffService.deleteStaff(staffId);
+      await fetchStaff();
+      return true;
+    } catch (error: any) {
       // Error deleting staff - handle silently
-      setError('Error deleting staff member');
+      setError(error?.message || 'Error deleting staff member');
       return false;
     } finally {
       setLoading(false);

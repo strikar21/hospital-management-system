@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { user as UserType, patient } from './types';
+import { user as UserType, patient, device, deviceAssignmentRecord, poolStatus } from './types';
 import { DeviceService, PatientService } from './services';
 import {
   DeviceAssignmentHeader,
@@ -10,55 +10,6 @@ import {
   AssignedDevicesTab,
   DevicePoolTab
 } from './components/DeviceAssignment';
-
-// Type definitions
-interface Device {
-  id: string;
-  deviceId: string;
-  serialNumber: string;
-  macAddress: string;
-  firmwareVersion: string;
-  deviceType: string;
-  location: string;
-  status: string;
-  connectionStatus?: string;
-  displayName?: string;
-  batteryLevel: number | null;
-  lastSeen: string | null;
-  assignedPatientId: string | null;
-  calibrationDate: string | null;
-  nextMaintenanceDate: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface DeviceAssignmentRecord {
-  id: number;
-  deviceId: string;
-  patientId: string;
-  performedBy: string;
-  assignmentReason: string;
-  assignedAt: string;
-  status: string;
-  deviceName: string;
-  deviceType: string;
-  patientName?: string;
-  location?: string;
-  watchDisplay?: string;
-  serialNumber?: string;
-  connectionStatus?: string;
-  batteryLevel?: number | null;
-}
-
-interface PoolStatus {
-  summary: {
-    totalDevices: number;
-    availableDevices: number;
-    assignedDevices: number;
-    offlineDevices: number;
-    lowBatteryDevices: number;
-  };
-}
 
 interface DeviceAssignmentProps {
   currentUser: UserType;
@@ -73,12 +24,12 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
 }) => {
   // State management
   const [activeTab, setActiveTab] = useState<TabType>('assign');
-  const [freeDevices, setFreeDevices] = useState<Device[]>([]);
+  const [freeDevices, setFreeDevices] = useState<device[]>([]);
   const [patients, setPatients] = useState<patient[]>([]);
-  const [assignedDevices, setAssignedDevices] = useState<DeviceAssignmentRecord[]>([]);
-  const [poolStatus, setPoolStatus] = useState<PoolStatus | null>(null);
-  const [availableWatches, setAvailableWatches] = useState<Device[]>([]);
-  const [assignedWatches, setAssignedWatches] = useState<DeviceAssignmentRecord[]>([]);
+  const [assignedDevices, setAssignedDevices] = useState<deviceAssignmentRecord[]>([]);
+  const [poolStatus, setPoolStatus] = useState<poolStatus | null>(null);
+  const [availableWatches, setAvailableWatches] = useState<device[]>([]);
+  const [assignedWatches, setAssignedWatches] = useState<deviceAssignmentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<string>('');
@@ -175,7 +126,7 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const loadAssignedDevices = async () => {
     try {
       const assignedData = await DeviceService.getAssignmentHistory(currentUser.staffId);
-      const assignedWithPatients = (assignedData || []).map((assignment: DeviceAssignmentRecord) => ({
+      const assignedWithPatients = (assignedData || []).map((assignment: deviceAssignmentRecord) => ({
         ...assignment,
         patientName: assignment.patientName || 'Unknown Patient',
         location: assignment.location || 'N/A',

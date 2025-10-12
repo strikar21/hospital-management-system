@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { alert, patient, user, caseSheetEntry } from '../types';
 import { PatientService } from '../services';
 import { useDataRefresh } from './useDataRefresh';
-import { getApiUrl } from '../config/apiConfig';
+import { PatientCaseService } from '../services/patient/PatientCaseService';
 
 interface UsePatientAlertsProps {
   patient: patient;
@@ -31,26 +31,14 @@ export const usePatientAlerts = ({
       const alertToAck = alerts.find(a => a.id === alertId);
       if (!alertToAck) return;
 
+      // Use PatientCaseService for atomic alert acknowledgment with case entry
+      const success = await PatientCaseService.acknowledgeAlert(
+        patient.id,
+        alertId,
+        currentUser.id
+      );
 
-      // Use atomic endpoint - updates alert and creates case entry in single transaction
-      const response = await fetch(getApiUrl(`/atomic/patients/${patient.id}/alerts/${alertId}/acknowledge`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          alert_id: alertId,
-          acknowledged_by: currentUser.staffId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to acknowledge alert: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
+      if (success) {
         // Refetch fresh data from backend (single source of truth)
         try {
           const freshAlerts = await refreshAlerts();

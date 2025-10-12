@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Shield, Lock, Eye, EyeOff, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
-import { getApiUrl } from './config/apiConfig';
+import { StaffService } from './services/StaffService';
 
 interface PINChangeProps {
   staffId: string;
@@ -68,23 +68,7 @@ const PINChange: React.FC<PINChangeProps> = ({ staffId, onClose, onPINChanged })
     setIsLoading(true);
 
     try {
-      // Note: This endpoint would need to be implemented in the backend
-      const response = await fetch(getApiUrl(`/staff/${staffId}/change-pin`), {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentPin: currentPIN,
-          newPin: newPIN
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'PIN change failed');
-      }
-
+      await StaffService.changePIN(staffId, currentPIN, newPIN);
       setSuccess('PIN changed successfully!');
       setTimeout(() => {
         onPINChanged();

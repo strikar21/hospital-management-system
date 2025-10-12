@@ -20,9 +20,8 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
   const touchEndX = useRef<number>(0);
   const MIN_SWIPE_DISTANCE = 50;
   
-  // Filter out medicationAdministration entries and sort by timestamp (newest first)
+  // Show all medical activities in chronological order (case sheet is complete medical record)
   const sortedEntries = [...(caseSheet || [])]
-    .filter(entry => entry.type !== 'medicationAdministration')
     .sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
@@ -126,6 +125,8 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
                     <div className="flex items-center justify-between">
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                         entry.type === 'handoffNote' ? 'bg-indigo-100 text-indigo-800' :
+                        entry.type === 'medication_status_change' ? 'bg-orange-100 text-orange-800' :
+                        entry.type === 'medication_administration' ? 'bg-teal-100 text-teal-800' :
                         entry.type === 'medicationAdministration' ? 'bg-green-100 text-green-800' :
                         entry.type === 'doctorNote' ? 'bg-blue-100 text-blue-800' :
                         entry.type === 'nurseNote' ? 'bg-purple-100 text-purple-800' :
@@ -145,6 +146,8 @@ export const CaseSheetBook: React.FC<CaseSheetBookProps> = ({ caseSheet }) => {
                         'bg-gray-100 text-gray-800'
                       }`}>
                         {entry.type === 'handoffNote' ? 'HANDOFF NOTE' :
+                         entry.type === 'medication_status_change' ? 'MED STATUS' :
+                         entry.type === 'medication_administration' ? 'ADMINISTERED' :
                          entry.type === 'medicationAdministration' ? 'MEDICATION ADMIN' :
                          entry.type === 'doctorNote' ? 'DOCTOR NOTE' :
                          entry.type === 'nurseNote' ? 'NURSE NOTE' :

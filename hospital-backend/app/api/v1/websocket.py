@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from ...services.websocket_manager import connectionManager
 from ...core.database import getDbConnection, getTimescaleConnection
 from ...core.db_utils import fetchOne
+from ...core.jwt_handler import verify_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -19,24 +20,44 @@ logger = logging.getLogger(__name__)
 @router.websocket("/realtime")
 async def websocketEndpoint(
     websocket: WebSocket,
-    userId: str = Query(..., description="User ID for authentication"),
-    userRole: str = Query(..., description="User role for authorization")
+    token: str = Query(None, description="JWT authentication token")
 ):
     """
     WebSocket endpoint for real-time hospital data updates
-    
+    FIXED: Now requires valid JWT token for authentication
+
     Supports:
     - Real-time vitals streaming
     - Medication updates
     - Alert notifications
     - Patient-specific subscriptions
     """
-    
+
+    # Must accept connection before we can close it with a reason
+    await websocket.accept()
+
+    # Validate JWT token - reject if missing or invalid
+    if not token:
+        logger.warning("WebSocket: Connection rejected - no token provided")
+        await websocket.close(code=1008, reason="Authentication token required")
+        return
+
+    try:
+        user = verify_token(token, "access")
+        userId = user.get("id")
+        userRole = user.get("role")
+        logger.info(f"WebSocket: Authenticated user {userId} with role {userRole}")
+    except Exception as e:
+        # Invalid token - reject connection
+        logger.warning(f"WebSocket: Authentication failed - {str(e)}")
+        await websocket.close(code=1008, reason="Invalid authentication token")
+        return
+
     # Generate unique connection ID
     connectionId = f"conn{uuid.uuid4().hex[:8]}"
-    
+
     try:
-        # Establish WebSocket connection
+        # Establish WebSocket connection with validated user
         await connectionManager.connect(websocket, connectionId, userId, userRole)
         
         # Handle incoming messages from client

@@ -252,7 +252,7 @@ class MQTTService:
             # Update device last seen
             async with getDbConnection() as conn:
                 await conn.execute(
-                    "UPDATE devices SET lastseen = NOW(), batterylevel = $2 WHERE id = $1",
+                    'UPDATE devices SET "lastSeen" = NOW(), "batteryLevel" = $2 WHERE id = $1',
                     deviceId, payload.get('battery', 100)
                 )
 
@@ -271,8 +271,8 @@ class MQTTService:
             # Update device status in database
             async with getDbConnection() as conn:
                 await conn.execute("""
-                    UPDATE devices 
-                    SET lastseen = NOW(), batterylevel = $2, status = 'active'
+                    UPDATE devices
+                    SET "lastSeen" = NOW(), "batteryLevel" = $2, status = 'active'
                     WHERE id = $1
                 """, deviceId, payload.get('battery', 100))
 

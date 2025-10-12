@@ -11,10 +11,9 @@ import PatientAlerts from '../PatientAlerts';
 import PatientMedications from '../PatientMedications';
 import PatientInvestigations from '../PatientInvestigations';
 import PatientTherapies from '../PatientTherapies';
-import PatientNotes from '../PatientNotes';
+import { PatientNotesContainer as PatientNotes } from '../PatientNotes';
 import CaseSheetBook from '../../CaseSheetBook';
-import { PatientCaseService } from '../../services/patient';
-import { getApiUrl } from '../../config/apiConfig';
+import { PatientCaseService, PatientCRUDService } from '../../services/patient';
 
 interface PatientDetailContainerProps {
   patient: patient;
@@ -62,10 +61,10 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
   useEffect(() => {
     const loadComprehensivePatientData = async () => {
       try {
-        // Comprehensive single API call for all patient data including staff
-        const freshPatientData = await fetch(getApiUrl(`/patients/${patient.id}?includeStaff=true`));
-        if (freshPatientData.ok) {
-          const patientResponse = await freshPatientData.json();
+        // Comprehensive single API call for all patient data including staff - with authentication
+        const patientResponse = await PatientCRUDService.getPatientComplete(patient.id);
+
+        if (patientResponse) {
           // Production: Log to monitoring service - comprehensive patient data received
 
           // Update all states with fresh comprehensive data
@@ -97,18 +96,42 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
     loadComprehensivePatientData();
   }, [patient.id]);
 
-  // Add case sheet entry helper function
-  const addCaseSheetEntry = async (entry: caseSheetEntry) => {
-    // Refetch fresh data from backend after case entry added (single source of truth)
+  // Centralized refresh function - single source of truth for all patient data
+  const refreshPatientData = async () => {
     try {
-      const entriesResponse = await fetch(getApiUrl(`/patients/${patient.id}/case-entries`));
-      if (entriesResponse.ok) {
-        const data = await entriesResponse.json();
-        setCaseSheet(data.entries || data);
+      // Fetch complete patient data with all medical records and staff resolution
+      const freshData = await PatientCRUDService.getPatientComplete(patient.id);
+
+      if (freshData) {
+        // Update ALL state with fresh data from backend
+        if (freshData.medications) setMedications(freshData.medications);
+        if (freshData.investigations) setInvestigations(freshData.investigations);
+        if (freshData.therapies) setTherapies(freshData.therapies);
+        if (freshData.notes) setNotes(freshData.notes);
+        if (freshData.alerts) setAlerts(freshData.alerts);
+        if (freshData.caseSheet) setCaseSheet(freshData.caseSheet);
       }
-    } catch (refreshError) {
-      // Failed to refresh case entries - handle silently
+
+      // Also fetch case entries separately (backend doesn't include them in complete response)
+      try {
+        const caseEntries = await PatientCaseService.getCaseEntries(patient.id);
+        if (caseEntries && caseEntries.length > 0) {
+          setCaseSheet(caseEntries);
+        }
+      } catch (caseError) {
+        // Failed to refresh case entries - handle silently
+        console.error('Failed to refresh case entries:', caseError);
+      }
+    } catch (error) {
+      // Failed to refresh patient data - handle silently
+      console.error('Failed to refresh patient data:', error);
     }
+  };
+
+  // Legacy function for backwards compatibility - now uses centralized refresh
+  const addCaseSheetEntry = async (entry: caseSheetEntry) => {
+    // Refresh all patient data to ensure consistency
+    await refreshPatientData();
   };
 
   // Handle tab changes
@@ -182,6 +205,8 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               setNotes={setNotes}
               caseSheet={caseSheet}
               addCaseSheetEntry={addCaseSheetEntry}
+              setCaseEntries={setCaseSheet}
+              refreshPatientData={refreshPatientData}
             />
           )}
 
@@ -193,6 +218,8 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               medications={medications}
               setMedications={setMedications}
               addCaseSheetEntry={addCaseSheetEntry}
+              setCaseEntries={setCaseSheet}
+              refreshPatientData={refreshPatientData}
             />
           )}
 
@@ -205,6 +232,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               setInvestigations={setInvestigations}
               addCaseSheetEntry={addCaseSheetEntry}
               setCaseEntries={setCaseSheet}
+              refreshPatientData={refreshPatientData}
             />
           )}
 
@@ -217,6 +245,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               setTherapies={setTherapies}
               addCaseSheetEntry={addCaseSheetEntry}
               setCaseEntries={setCaseSheet}
+              refreshPatientData={refreshPatientData}
             />
           )}
 

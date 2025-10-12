@@ -7,6 +7,38 @@
 2. **Ask clarifying questions** - If uncertain about anything, ask before proceeding
 3. **Document plan** - Make a file and refer to it before executing
 4. **NEVER assume or guess data/IDs** - If Claude uses made-up data like "PAT0001", STOP immediately and research actual data first
+5. **BEFORE TESTING: Always check for saved/stored data** - Never assume test data exists. Query database/API to verify actual patient IDs, device IDs, and other data before running tests
+
+### SENIOR TECH LEAD CHECKLIST - BEFORE ANY IMPLEMENTATION:
+Before writing ANY code or making ANY changes, ask yourself these questions:
+
+1. **Do I have a detailed failproof plan for each of the fixes?**
+   - Have I broken down the problem completely?
+   - Have I identified all affected components?
+   - Do I know the exact steps to implement?
+
+2. **Have I thought of alternative plans or if something better exists?**
+   - Are there multiple approaches to solve this?
+   - What are the trade-offs of each approach?
+   - Is there existing code that already solves this?
+
+3. **Does the code I plan to fix conform to both project and memory guidelines?**
+   - Does it follow camelCase strictly?
+   - Does it respect backend-only medical logic?
+   - Does it comply with Indian medical regulations?
+   - Is it modular and well-structured?
+
+4. **Have I thought about the fixes with logic and sense?**
+   - Does the solution make logical sense?
+   - Have I considered edge cases?
+   - Will this create new problems?
+
+5. **Have I thought this out like a senior experienced tech lead who's fixing the stuff?**
+   - Am I fixing the root cause, not symptoms?
+   - Is this production-ready code?
+   - Would I be proud to have this code reviewed by senior engineers?
+
+**IF YOU CANNOT ANSWER "YES" TO ALL QUESTIONS ABOVE, DO NOT PROCEED WITH IMPLEMENTATION.**
 
 ### Core Requirements:
 - **NEVER assume stuff** - always ask relevant questions first
@@ -78,4 +110,6 @@
 - Use ports 3000 and 8001 only
 - Consider CORS requirements for security
 - Indian medical and other laws primarily. HIPAA is secondary for reference only.
-- no incomplete stubs, we want a full production ready end to end backend for patinets. from recommending admission to approving and removing watch when being discharged. we will do tye best possible clinical trcacking and automation for patinets and caregivers
+- No incomplete stubs, we want a full production ready end to end backend for patients. From recommending admission to approving and removing watch when being discharged. We will do the best possible clinical tracking and automation for patients and caregivers.
+- **NO QUICK FIXES OR WORKAROUNDS** - Always find and fix root cause. Never use temporary patches.
+- **See "SENIOR TECH LEAD CHECKLIST" above** - All five questions must be answered YES before any implementation.

@@ -373,6 +373,34 @@ export class DeviceService extends BaseService {
     }
   }
 
+  /**
+   * Provisions an ESP32-based device (watch, door scanner, etc.)
+   * Backend will auto-generate deviceId and name if not provided
+   *
+   * @param deviceData - ESP32 device provisioning data
+   * @returns Promise resolving to provisioned device details
+   * @throws {Error} When ESP32 provisioning fails
+   */
+  static async provisionESP32Device(deviceData: {
+    devicetype: string;
+    location: string;
+    macaddress?: string;
+    ipaddress?: string;
+    firmwareversion?: string;
+    provisionedBy: string;
+  }): Promise<any> {
+    try {
+      const response = await this.fetchFromBackend('/esp32/provision', {
+        method: 'POST',
+        body: JSON.stringify(deviceData)
+      });
+      return response;
+    } catch (error) {
+      // Error provisioning ESP32 device - handle silently
+      throw error;
+    }
+  }
+
   static async decommissionDevice(deviceId: string, reason: string): Promise<boolean> {
     try {
       await this.fetchFromBackend(`/devices/${deviceId}/decommission`, {

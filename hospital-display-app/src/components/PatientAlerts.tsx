@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Stethoscope } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { patient, user, alert as alertType, clinicalAlert } from '../types';
 import { formatTimeOnly } from '../utils';
 import { PatientService } from '../services';
+import { PatientCRUDService } from '../services/patient/PatientCRUDService';
 
 interface PatientAlertsProps {
   patient: patient;
@@ -32,11 +34,8 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
       const timer = setTimeout(async () => {
         // Refetch fresh data from backend (single source of truth)
         try {
-          const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
-          if (alertsResponse.ok) {
-            const data = await alertsResponse.json();
-            setAlerts(data.alerts || data);
-          }
+          const data = await PatientCRUDService.getPatientAlerts(patient.id);
+          setAlerts(data);
         } catch (refreshError) {
           // Failed to refresh alerts - handle silently
         }
@@ -64,38 +63,32 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
   // Handle Alert Acknowledgment
   const handleAcknowledgeAlert = async (alertId: string) => {
     setAcknowledgingAlert(alertId);
+
+    // Optimistic update - mark as acknowledged immediately for instant UI feedback
+    setAlerts(prevAlerts =>
+      prevAlerts.map(a =>
+        a.id === alertId
+          ? { ...a, isAcknowledged: true, acknowledgedBy: currentUser.id, acknowledgedByName: currentUser.name, acknowledgedByRole: currentUser.role, acknowledgedAt: new Date().toISOString() }
+          : a
+      )
+    );
+
     try {
+      // Backend updates the alert
       await PatientService.acknowledgeAlert(patient.id, alertId, currentUser.id);
 
-      // Refetch fresh data from backend (single source of truth)
-      try {
-        const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
-        if (alertsResponse.ok) {
-          const data = await alertsResponse.json();
-          setAlerts(data.alerts || data);
-        }
-      } catch (refreshError) {
-        // Failed to refresh alerts after acknowledgment - handle silently
-      }
-
-      // Auto-hide acknowledged alert after 2 seconds with fresh data fetch
-      setTimeout(async () => {
-        try {
-          const alertsResponse = await fetch(`/api/v2/patients/${patient.id}/alerts`);
-          if (alertsResponse.ok) {
-            const data = await alertsResponse.json();
-            setAlerts(data.alerts || data);
-          }
-        } catch (refreshError) {
-          // Failed to refresh alerts - handle silently
-        }
-      }, 2000);
-
-      const alertMessage = alerts.find(a => a.id === alertId)?.message || 'Unknown Alert';
-      // Removed console.log for production
+      // Single fetch to confirm - backend is source of truth
+      const freshAlerts = await PatientCRUDService.getPatientAlerts(patient.id);
+      setAlerts(freshAlerts);
 
     } catch (error) {
-      // Error handled silently
+      // Rollback optimistic update on error
+      try {
+        const freshAlerts = await PatientCRUDService.getPatientAlerts(patient.id);
+        setAlerts(freshAlerts);
+      } catch (refreshError) {
+        // Failed to refresh alerts - handle silently
+      }
       alert('Failed to acknowledge alert. Please try again.');
     } finally {
       setAcknowledgingAlert(null);
@@ -141,7 +134,9 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
                     alert.severity === 'medium' ? 'bg-yellow-500' :
                     'bg-blue-500'
                   }`}></div>
-                  <span className="text-xs text-red-700 font-medium truncate flex-1">{alert.message}</span>
+                  <span className="text-xs text-red-700 font-medium truncate flex-1">
+                    {DOMPurify.sanitize(alert.message, { ALLOWED_TAGS: [] })}
+                  </span>
                   <span className="text-xs text-gray-500 flex-shrink-0">
                     {formatTimeOnly(alert.timestamp)}
                   </span>
@@ -172,7 +167,9 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
               <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-green-500 opacity-75">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                   <div className="w-2 h-2 rounded-full bg-green-600"></div>
-                  <span className="text-xs text-green-700 font-medium truncate flex-1">{alert.message}</span>
+                  <span className="text-xs text-green-700 font-medium truncate flex-1">
+                    {DOMPurify.sanitize(alert.message, { ALLOWED_TAGS: [] })}
+                  </span>
                 </div>
                 <div className="text-xs text-gray-600 flex-shrink-0">
                   by {alert.acknowledgedByName || `User ${alert.acknowledgedBy}`}
@@ -212,7 +209,9 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
                     'bg-blue-500'
                   }`}></div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs text-amber-700 font-medium truncate block">{alert.message}</span>
+                    <span className="text-xs text-amber-700 font-medium truncate block">
+                      {DOMPurify.sanitize(alert.message, { ALLOWED_TAGS: [] })}
+                    </span>
                     <p className="text-xs text-gray-600 truncate">{alert.details}</p>
                     {alert.suggestedActions && alert.suggestedActions.length > 0 && (
                       <p className="text-xs text-amber-600 mt-1">

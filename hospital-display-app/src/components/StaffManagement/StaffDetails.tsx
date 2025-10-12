@@ -1,29 +1,12 @@
 import React from 'react';
 import { User, Mail, Phone, CreditCard, Building, Shield, Calendar, X } from 'lucide-react';
-
-interface Staff {
-  id: string;
-  staffId: string;
-  name: string;
-  role: string;
-  department: string;
-  nfcId?: string;
-  phone?: string;
-  email?: string;
-  isActive: boolean;
-  createdAt: string;
-}
-
-interface CreatedStaff extends Staff {
-  temppin?: string;
-  temppassword?: string;
-}
+import { staff, createdStaff } from '../../types';
 
 interface StaffDetailsProps {
-  staff: Staff | null;
-  createdStaff: CreatedStaff | null;
+  staff: staff | null;
+  createdStaff: createdStaff | null;
   onClose: () => void;
-  onEdit?: (staff: Staff) => void;
+  onEdit?: (staff: staff) => void;
 }
 
 export const StaffDetails: React.FC<StaffDetailsProps> = ({

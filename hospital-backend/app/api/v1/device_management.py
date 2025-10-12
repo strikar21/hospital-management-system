@@ -3,7 +3,7 @@ General Device Management API endpoints for all hospital devices
 (tablets, displays, sensors, medical equipment, etc.)
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
 import asyncpg
@@ -13,9 +13,10 @@ import uuid
 
 from ...core.database import getDbConnection
 from ...services.audit import logAuditEvent
+from ...core.auth_dependencies import require_admin, require_medical_staff, get_current_user
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 # Device types supported by the system
 DEVICE_TYPES = {
@@ -41,8 +42,16 @@ async def getDeviceTypes():
     })
 
 @router.post("/")
-async def createDevice(deviceData: dict, createdBy: str = Query(..., description="Staff ID creating the device")):
-    """Add a new device to the hospital inventory"""
+async def createDevice(
+    deviceData: dict,
+    createdBy: str = Query(..., description="Staff ID creating the device"),
+    current_user: dict = Depends(require_admin)  # Only admin can add devices
+):
+    """
+    Add a new device to the hospital inventory
+
+    RBAC: Requires administrator role.
+    """
     try:
         # Required fields
         requiredFields = ['deviceType', 'name', 'location']
@@ -298,11 +307,11 @@ async def getDevice(deviceId: str):
             # Get assignment history if applicable
             if deviceDict['deviceType'] in ['watch', 'tablet']:
                 assignmentQuery = """
-                    SELECT da.*, p.firstName, p.lastName, p.roomNumber, p.bedNumber
+                    SELECT da.*, p."firstName", p."lastName", p."roomNumber", p."bedNumber"
                     FROM deviceassignments da
-                    LEFT JOIN patients p ON da.patientId = p.id
-                    WHERE da.deviceId = $1
-                    ORDER BY da.assignedAt DESC
+                    LEFT JOIN patients p ON da."patientId" = p.id
+                    WHERE da."deviceId" = $1
+                    ORDER BY da."assignedAt" DESC
                     LIMIT 10
                 """
                 assignmentRows = await conn.fetch(assignmentQuery, deviceId)
@@ -328,8 +337,17 @@ async def getDevice(deviceId: str):
         raise HTTPException(status_code=500, detail=f"Failed to get device: {str(e)}")
 
 @router.put("/{deviceId}")
-async def updateDevice(deviceId: str, updateData: dict, updatedBy: str = Query(..., description="Staff ID updating the device")):
-    """Update device properties"""
+async def updateDevice(
+    deviceId: str,
+    updateData: dict,
+    updatedBy: str = Query(..., description="Staff ID updating the device"),
+    current_user: dict = Depends(require_admin)  # Only admin can update devices
+):
+    """
+    Update device properties
+
+    RBAC: Requires administrator role.
+    """
     try:
         # Allowed fields for update - match actual database schema
         allowedFields = ['name', 'model', 'manufacturer', 'location', 'serialNumber', 'macAddress',
@@ -351,7 +369,7 @@ async def updateDevice(deviceId: str, updateData: dict, updatedBy: str = Query(.
         async with getDbConnection() as conn:
             # Add updatedAt field
             paramCount += 1
-            updateFields.append(f"updatedAt = ${paramCount}")
+            updateFields.append(f'"updatedAt" = ${paramCount}')
             updateValues.append(datetime.now())
 
             # Add deviceId as final parameter
@@ -399,16 +417,25 @@ async def updateDevice(deviceId: str, updateData: dict, updatedBy: str = Query(.
         raise HTTPException(status_code=500, detail=f"Failed to update device: {str(e)}")
 
 @router.delete("/{deviceId}")
-async def removeDevice(deviceId: str, deletedBy: str = Query(..., description="Staff ID removing the device"), force: bool = False):
-    """Remove a device from the hospital inventory (soft delete unless force=True)"""
+async def removeDevice(
+    deviceId: str,
+    deletedBy: str = Query(..., description="Staff ID removing the device"),
+    force: bool = False,
+    current_user: dict = Depends(require_admin)  # Only admin can remove devices
+):
+    """
+    Remove a device from the hospital inventory (soft delete unless force=True)
+
+    RBAC: Requires administrator role.
+    """
     try:
         async with getDbConnection() as conn:
             # Check if device has active assignments
             assignmentCheck = """
-                SELECT da.patientId, p.firstName, p.lastName
+                SELECT da."patientId", p."firstName", p."lastName"
                 FROM deviceassignments da
-                JOIN patients p ON da.patientId = p.id
-                WHERE da.deviceId = $1 AND da.status = 'active'
+                JOIN patients p ON da."patientId" = p.id
+                WHERE da."deviceId" = $1 AND da.status = 'active'
             """
             assignment = await conn.fetchrow(assignmentCheck, deviceId)
 
@@ -422,19 +449,19 @@ async def removeDevice(deviceId: str, deletedBy: str = Query(..., description="S
             if force and assignment:
                 # Force unassign first
                 await conn.execute(
-                    "UPDATE deviceassignments SET status = 'forceRemoved', unassignedAt = $1 WHERE deviceId = $2 AND status = 'active'",
+                    'UPDATE deviceassignments SET status = \'forceRemoved\', "unassignedAt" = $1 WHERE "deviceId" = $2 AND status = \'active\'',
                     datetime.now(), deviceId
                 )
 
             # Get device info before deletion
-            deviceInfo = await conn.fetchrow('SELECT name, deviceType FROM devices WHERE id = $1', deviceId)
+            deviceInfo = await conn.fetchrow('SELECT name, "deviceType" FROM devices WHERE id = $1', deviceId)
             if not deviceInfo:
                 raise HTTPException(status_code=404, detail="Device not found")
 
             # Soft delete by setting status to 'retired'
             query = """
                 UPDATE devices
-                SET status = 'retired', updatedAt = $1
+                SET status = 'retired', "updatedAt" = $1
                 WHERE id = $2
                 RETURNING name
             """

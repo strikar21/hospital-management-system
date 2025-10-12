@@ -23,6 +23,14 @@ from pydantic import ConfigDict
 import os
 os.environ['PYDANTIC_V2_CONFIG_ALIAS_GENERATOR'] = 'none'
 
+# HTTPS/SSL enforcement for production
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Middleware to transform lowercase field names to camelCase for Pydantic compatibility
 class FieldNameTransformMiddleware(BaseHTTPMiddleware):
     """Middleware that transforms request field names from lowercase to camelCase"""
@@ -83,22 +91,20 @@ from app.api.v1.esp32 import router as esp32Router
 from app.api.v1.discharge_workflow import router as dischargeWorkflowRouter
 from app.api.v1.system_admin import router as systemAdminRouter
 from app.api.v1.nursing import router as nursingRouter
-# from app.api.v1.medication_administration import router as medicationAdministrationRouter  # Replaced by v2/medications
-# from app.api.v1.therapy_sessions import router as therapySessionsRouter  # Replaced by v2/therapy
 from app.api.v1.watch_management import router as watchManagementRouter
 from app.api.v1.device_management import router as deviceManagementRouter
-# from app.api.v1.admin import router as adminRouter  # Consolidated into system_admin
 
 # Import v2 repository-based API endpoints
 from app.api.v2.patients import router as patientsV2Router
 from app.api.v2.medications import router as medicationsV2Router
-# COMMENTED OUT: Using atomic operations instead
-# from app.api.v2.investigations import router as investigationsV2Router
-# from app.api.v2.therapy import router as therapyV2Router
 from app.api.v2.atomic_medical import router as atomicMedicalRouter
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with environment-based level
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")  # Default INFO for production
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Create FastAPI application
@@ -109,6 +115,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Temporarily disable middleware to test hanging issue
 # app.add_middleware(FieldNameTransformMiddleware)
@@ -193,6 +204,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Security Headers Middleware (Production)
+if settings.environment == "production":
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
 # =====================================================
 # GLOBAL EXCEPTION HANDLERS (Day 7)
 # =====================================================
@@ -240,28 +262,22 @@ app.include_router(staffRouter, prefix=f"{settings.apiV1Str}/staff", tags=["Staf
 app.include_router(admissionRouter, prefix=f"{settings.apiV1Str}/admission", tags=["Admissions"])
 app.include_router(websocketRouter, prefix=f"{settings.apiV1Str}/ws", tags=["WebSocket"])
 app.include_router(esp32Router, prefix=f"{settings.apiV1Str}/esp32", tags=["ESP32 Devices"])
-logger.info(f"🔄 Attempting to register discharge workflow router at {settings.apiV1Str}/dischargeworkflow")
-app.include_router(dischargeWorkflowRouter, prefix=f"{settings.apiV1Str}/dischargeworkflow", tags=["Discharge Workflow"])
-logger.info(f"✅ Discharge workflow router registered successfully at {settings.apiV1Str}/dischargeworkflow")
-app.include_router(systemAdminRouter, prefix=f"{settings.apiV1Str}/admin", tags=["System Administration"])  # Consolidated admin + audit
+logger.info(f"🔄 Attempting to register discharge workflow router at {settings.apiV1Str}/discharge")
+app.include_router(dischargeWorkflowRouter, prefix=f"{settings.apiV1Str}/discharge", tags=["Discharge Workflow"])
+logger.info(f"✅ Discharge workflow router registered successfully at {settings.apiV1Str}/discharge")
+app.include_router(systemAdminRouter, prefix=f"{settings.apiV1Str}/admin", tags=["System Administration"])
 app.include_router(nursingRouter, prefix=f"{settings.apiV1Str}/nursing", tags=["Nursing Dashboard"])
-# app.include_router(medicationAdministrationRouter, prefix=f"{settings.apiV1Str}/medicationadministration", tags=["Medication Administration"])  # Replaced by v2/medications
-# app.include_router(therapySessionsRouter, prefix=f"{settings.apiV1Str}/therapysessions", tags=["Therapy Sessions"])  # Replaced by v2/therapy
 logger.info(f"🔄 Attempting to register watch management router at {settings.apiV1Str}/watchmanagement")
 app.include_router(watchManagementRouter, prefix=f"{settings.apiV1Str}/watchmanagement", tags=["Watch Management"])
 logger.info(f"✅ Watch management router registered successfully at {settings.apiV1Str}/watchmanagement")
 logger.info(f"🔄 Attempting to register device management router at {settings.apiV1Str}/devices")
 app.include_router(deviceManagementRouter, prefix=f"{settings.apiV1Str}/devices", tags=["Device Management"])
-# app.include_router(adminRouter, prefix=f"{settings.apiV1Str}/admin", tags=["Admin"])  # Consolidated into system_admin
 logger.info(f"✅ Device management router registered successfully at {settings.apiV1Str}/devices")
 
 # Register v2 repository-based API endpoints
 logger.info("🔄 Registering v2 repository-based API endpoints...")
 app.include_router(patientsV2Router, prefix="/api/v2/patients", tags=["Patients v2 (Repository)"])
 app.include_router(medicationsV2Router, prefix="/api/v2/medications", tags=["Medications v2 (Repository)"])
-# COMMENTED OUT: Using atomic operations instead
-# app.include_router(investigationsV2Router, prefix="/api/v2/investigations", tags=["Investigations v2 (Repository)"])
-# app.include_router(therapyV2Router, prefix="/api/v2/therapy", tags=["Therapy v2 (Repository)"])
 app.include_router(atomicMedicalRouter, prefix="/api/v2", tags=["Atomic Medical Operations"])
 logger.info("✅ Patient API registered successfully")
 logger.info("✅ Medications API registered successfully")
@@ -401,10 +417,23 @@ async def root():
 
 if __name__ == "__main__":
     # Run the application
+    # HTTPS/SSL Configuration
+    ssl_config = {}
+    if settings.enableSsl and settings.sslCertPath and settings.sslKeyPath:
+        if os.path.exists(settings.sslCertPath) and os.path.exists(settings.sslKeyPath):
+            ssl_config = {
+                "ssl_certfile": settings.sslCertPath,
+                "ssl_keyfile": settings.sslKeyPath
+            }
+            logger.info(f"🔒 HTTPS enabled with SSL certificate: {settings.sslCertPath}")
+        else:
+            logger.warning("⚠️ SSL paths configured but files not found - running HTTP")
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8001,
         reload=False,
-        log_level="info"
+        log_level="info",
+        **ssl_config
     )

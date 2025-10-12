@@ -37,7 +37,7 @@ def isWithinEditWindow(createdAt: Union[str, datetime], hoursLimit: int = 2) -> 
     elif not creationTime.tzinfo and currentTime.tzinfo:
         creationTime = creationTime.replace(tzinfo=timezone.utc)
 
-    hoursElapsed = (currentTime - creationTime).totalSeconds() / 3600
+    hoursElapsed = (currentTime - creationTime).total_seconds() / 3600
     return hoursElapsed <= hoursLimit
 
 def getRemainingEditTime(createdAt: Union[str, datetime], hoursLimit: int = 2) -> int:
@@ -70,7 +70,7 @@ def getRemainingEditTime(createdAt: Union[str, datetime], hoursLimit: int = 2) -
     elif not creationTime.tzinfo and currentTime.tzinfo:
         creationTime = creationTime.replace(tzinfo=timezone.utc)
 
-    minutesElapsed = (currentTime - creationTime).totalSeconds() / 60
+    minutesElapsed = (currentTime - creationTime).total_seconds() / 60
     remainingMinutes = (hoursLimit * 60) - minutesElapsed
 
     return max(0, int(remainingMinutes))

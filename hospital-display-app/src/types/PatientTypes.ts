@@ -122,8 +122,9 @@ export interface caseSheetEntry {
   timestamp: string;
   type: 'admission' | 'medication' | 'investigation' | 'therapy' | 'vitalAlert' | 'statusChange' | 'discharge' |
         'doctorNote' | 'nurseNote' | 'therapistNote' | 'pharmacistNote' | 'technicianNote' | 'clinicalNote' |
-        'handoffNote' | 'medicationAdministration' | 'caseEntry' |
-        'alertTriggered' | 'alertAcknowledged' | 'alertResolved' | 'alertEscalated';
+        'handoffNote' | 'medicationAdministration' | 'caseEntry' | 'note' |
+        'alertTriggered' | 'alertAcknowledged' | 'alertResolved' | 'alertEscalated' |
+        'medication_status_change' | 'medication_administration';  // Backend snake_case types
   description: string;
   performedBy: string;
   performedByName?: string;

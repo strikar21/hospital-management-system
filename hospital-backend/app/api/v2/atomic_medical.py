@@ -4,7 +4,7 @@ Provides failproof atomic operations for all medical actions
 Replaces individual service calls with single atomic operations
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import uuid
@@ -22,9 +22,40 @@ from ...services.medical_action_service import (
 from ...validators.medical_validators import MedicationRequest
 from ...validators.investigation_validators import InvestigationRequest as InvestigationRequestValidated
 from ...validators.therapy_validators import TherapyRequest as TherapyRequestValidated
+from ...core.auth_dependencies import require_doctor, require_medical_staff, get_current_user
 
-router = APIRouter(prefix="/atomic", tags=["Atomic Medical Operations"])
+# Rate limiting
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+router = APIRouter(prefix="/atomic", tags=["Atomic Medical Operations"], dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
+
+
+def validate_performed_by(performedBy: str, current_user: dict) -> None:
+    """
+    Validate that performedBy matches authenticated user.
+    Prevents audit trail forgery where Doctor A could act as Doctor B.
+
+    FIXED: Added security validation for HIPAA/DPDP Act 2023 compliance
+
+    Args:
+        performedBy: User ID claiming to perform the action
+        current_user: Authenticated user from JWT token
+
+    Raises:
+        HTTPException: 403 if performedBy doesn't match authenticated user
+    """
+    if performedBy == "SYSTEM":
+        return  # System actions allowed (e.g., automated processes)
+
+    if performedBy != current_user.get("id"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot perform action as {performedBy}. Authenticated as {current_user.get('id')}. "
+                   f"Audit trail forgery is not permitted."
+        )
 
 
 # Use validated request models from validators module
@@ -65,12 +96,12 @@ class NoteRequest(BaseModel):
 
 
 class MedicationAdministrationRequest(BaseModel):
-    administered_by: str
+    administeredBy: str
     notes: Optional[str] = None
 
 
 class TherapySessionRequest(BaseModel):
-    therapy_id: str
+    therapyId: str
     duration: int  # minutes
     notes: str
     performedBy: str
@@ -82,31 +113,34 @@ class AlertAcknowledgmentRequest(BaseModel):
 
 
 class InvestigationCompletionRequest(BaseModel):
-    investigation_id: str
+    investigationId: str
     results: str
-    completed_by: str
+    completedBy: str
 
 
 class MedicationStatusChangeRequest(BaseModel):
-    medication_id: str
+    medicationId: Optional[str] = None  # Optional - already in URL path
     status: str
-    changed_by: str
+    changedBy: str
 
 
 class AtomicResponse(BaseModel):
     success: bool
-    medical_record: Dict[str, Any]
-    case_entry: Dict[str, Any]
-    action_type: str
-    transaction_id: str
+    medicalRecord: Dict[str, Any]
+    caseEntry: Dict[str, Any]
+    actionType: str
+    transactionId: str
     message: str
 
 
 @router.post("/patients/{patient_id}/medications", response_model=AtomicResponse)
+@limiter.limit("30/minute")
 async def add_medication_atomic_endpoint(
+    request: Request,
     patient_id: str,
     medication: MedicationRequest,
-    performedBy: str = "SYSTEM"  # In real implementation, get from auth
+    performedBy: str = "SYSTEM",  # Keep for backward compatibility
+    current_user: dict = Depends(require_doctor)  # Only doctors can prescribe
 ) -> AtomicResponse:
     """
     Add medication atomically with automatic case entry creation
@@ -117,28 +151,44 @@ async def add_medication_atomic_endpoint(
     3. Frontend state updates
 
     Everything happens in one atomic transaction or fails completely.
+
+    RBAC: Requires doctor role. Must prescribe as themselves.
     """
     try:
-        logger.info(f"Atomic medication request for patient {patient_id}")
-        logger.info(f"DEBUG: Raw medication object: {medication}")
-        logger.info(f"DEBUG: performedBy parameter: {performedBy}")
+        logger.info(f"Atomic medication request for patient {patient_id} by user {current_user.get('id')}")
+        logger.debug(f"Raw medication object: {medication}")
+        logger.debug(f"performedBy parameter: {performedBy}")
+
+        # FIXED: Validate performedBy to prevent audit trail forgery
+        validate_performed_by(performedBy, current_user)
 
         # Convert to dict for service
         medication_data = medication.dict(exclude_none=True)
-        logger.info(f"DEBUG: medication_data after dict conversion: {medication_data}")
+        logger.debug(f"medication_data after dict conversion: {medication_data}")
+
+        # RBAC validation: Doctor must prescribe as themselves
+        prescriber_id = medication_data.get("prescribedBy")
+        if prescriber_id and prescriber_id != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot prescribe medication as another doctor. Prescribing as {prescriber_id} but authenticated as {current_user.get('id')}"
+            )
 
         # Execute atomic operation
         result = await add_medication_atomic(patient_id, medication_data, performedBy)
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Medication '{medication.name}' added successfully with case entry"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403 from validation) without modification
+        raise
     except Exception as e:
         logger.error(f"Atomic medication failed for patient {patient_id}: {e}")
         raise HTTPException(
@@ -151,7 +201,8 @@ async def add_medication_atomic_endpoint(
 async def add_investigation_atomic_endpoint(
     patient_id: str,
     investigation: InvestigationRequest,
-    performedBy: str = "SYSTEM"
+    performedBy: str = "SYSTEM",  # Keep for backward compatibility
+    current_user: dict = Depends(require_doctor)  # Only doctors can order investigations
 ) -> AtomicResponse:
     """
     Add investigation atomically with automatic case entry creation
@@ -162,23 +213,39 @@ async def add_investigation_atomic_endpoint(
     3. Frontend state updates
 
     Everything happens in one atomic transaction or fails completely.
+
+    RBAC: Requires doctor role. Must order as themselves.
     """
     try:
-        logger.info(f"Atomic investigation request for patient {patient_id}")
+        logger.info(f"Atomic investigation request for patient {patient_id} by user {current_user.get('id')}")
+
+        # FIXED: Validate performedBy to prevent audit trail forgery
+        validate_performed_by(performedBy, current_user)
 
         investigation_data = investigation.dict(exclude_none=True)
+
+        # RBAC validation: Doctor must order investigation as themselves
+        prescriber_id = investigation_data.get("prescribedBy")
+        if prescriber_id and prescriber_id != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot order investigation as another doctor. Ordering as {prescriber_id} but authenticated as {current_user.get('id')}"
+            )
 
         result = await add_investigation_atomic(patient_id, investigation_data, performedBy)
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Investigation '{investigation.testName}' ordered successfully with case entry"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403 from validation) without modification
+        raise
     except Exception as e:
         logger.error(f"Atomic investigation failed for patient {patient_id}: {e}")
         raise HTTPException(
@@ -191,7 +258,8 @@ async def add_investigation_atomic_endpoint(
 async def add_therapy_atomic_endpoint(
     patient_id: str,
     therapy: TherapyRequest,
-    performedBy: str = "SYSTEM"
+    performedBy: str = "SYSTEM",
+    current_user: dict = Depends(require_medical_staff)  # FIXED: Added authentication
 ) -> AtomicResponse:
     """
     Add therapy atomically with automatic case entry creation
@@ -202,9 +270,14 @@ async def add_therapy_atomic_endpoint(
     3. Frontend state updates
 
     Everything happens in one atomic transaction or fails completely.
+
+    FIXED: Now requires authentication and validates performedBy
     """
     try:
-        logger.info(f"Atomic therapy request for patient {patient_id}")
+        logger.info(f"Atomic therapy request for patient {patient_id} by user {current_user.get('id')}")
+
+        # FIXED: Validate performedBy to prevent audit trail forgery
+        validate_performed_by(performedBy, current_user)
 
         therapy_data = therapy.dict(exclude_none=True)
 
@@ -212,13 +285,16 @@ async def add_therapy_atomic_endpoint(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Therapy '{therapy.type}' prescribed successfully with case entry"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403 from validation) without modification
+        raise
     except Exception as e:
         logger.error(f"Atomic therapy failed for patient {patient_id}: {e}")
         raise HTTPException(
@@ -231,7 +307,8 @@ async def add_therapy_atomic_endpoint(
 async def add_note_atomic_endpoint(
     patient_id: str,
     note: NoteRequest,
-    performedBy: str = "SYSTEM"
+    performedBy: str = "SYSTEM",
+    current_user: dict = Depends(require_medical_staff)  # FIXED: Added authentication
 ) -> AtomicResponse:
     """
     Add patient note atomically with automatic case entry creation
@@ -242,9 +319,14 @@ async def add_note_atomic_endpoint(
     3. Frontend state updates
 
     Everything happens in one atomic transaction or fails completely.
+
+    FIXED: Now requires authentication and validates performedBy
     """
     try:
-        logger.info(f"Atomic note request for patient {patient_id}")
+        logger.info(f"Atomic note request for patient {patient_id} by user {current_user.get('id')}")
+
+        # FIXED: Validate performedBy to prevent audit trail forgery
+        validate_performed_by(performedBy, current_user)
 
         note_data = note.dict(exclude_none=True)
 
@@ -252,13 +334,16 @@ async def add_note_atomic_endpoint(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message="Patient note added successfully with case entry"
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 403 from validation) without modification
+        raise
     except Exception as e:
         logger.error(f"Atomic note failed for patient {patient_id}: {e}")
         raise HTTPException(
@@ -290,10 +375,10 @@ async def execute_medical_action_endpoint(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Medical action '{action_type}' completed successfully"
         )
 
@@ -308,10 +393,13 @@ async def execute_medical_action_endpoint(
 # Medication Administration - Atomic administration with tracking
 
 @router.post("/patients/{patient_id}/medications/{medication_id}/administer")
+@limiter.limit("50/minute")
 async def administer_medication_atomic_endpoint(
+    request: Request,
     patient_id: str,
     medication_id: str,
-    request: MedicationAdministrationRequest
+    admin_request: MedicationAdministrationRequest,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can administer
 ) -> AtomicResponse:
     """
     Record medication administration atomically with automatic case entry creation
@@ -321,31 +409,38 @@ async def administer_medication_atomic_endpoint(
     2. Updates medication status to 'administered'
     3. Creates case entry with administration details
     4. Everything happens in one atomic transaction
+
+    RBAC: Requires medical staff (doctor or nurse). Must administer as themselves.
     """
     try:
-        logger.info(f"Atomic medication administration for medication {medication_id}, patient {patient_id}")
+        logger.info(f"Atomic medication administration for medication {medication_id}, patient {patient_id} by user {current_user.get('id')}")
+
+        # RBAC validation: Must administer as themselves
+        if admin_request.administeredBy != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot administer medication as another staff member. Administering as {admin_request.administeredBy} but authenticated as {current_user.get('id')}"
+            )
 
         administration_data = {
             'medication_id': medication_id,
-            'administered_by': request.administered_by,
-            'administered_at': datetime.now().isoformat(),
-            'notes': request.notes,
-            'action': 'Medication administered'
+            # Note: performedBy passed separately as 4th argument below (line 437)
+            'notes': admin_request.notes
         }
 
         result = await medical_action_service.execute_medical_action(
             'medication_administration',
             patient_id,
             administration_data,
-            request.administered_by
+            admin_request.administeredBy  # Fixed: use camelCase from model
         )
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message="Medication administered successfully with case entry"
         )
 
@@ -361,7 +456,8 @@ async def administer_medication_atomic_endpoint(
 async def record_therapy_session_atomic_endpoint(
     patient_id: str,
     therapy_id: str,
-    request: TherapySessionRequest
+    request: TherapySessionRequest,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can record sessions
 ) -> AtomicResponse:
     """
     Record therapy session completion atomically with automatic case entry creation
@@ -371,9 +467,18 @@ async def record_therapy_session_atomic_endpoint(
     2. Updates therapy status to show it has sessions
     3. Creates case entry with session details
     4. Everything happens in one atomic transaction
+
+    RBAC: Requires medical staff (doctor or nurse). Must record as themselves.
     """
     try:
-        logger.info(f"Atomic therapy session for therapy {therapy_id}, patient {patient_id}")
+        logger.info(f"Atomic therapy session for therapy {therapy_id}, patient {patient_id} by user {current_user.get('id')}")
+
+        # RBAC validation: Must record session as themselves
+        if request.performedBy != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot record therapy session as another staff member. Recording as {request.performedBy} but authenticated as {current_user.get('id')}"
+            )
 
         session_data = {
             'therapy_id': therapy_id,
@@ -390,10 +495,10 @@ async def record_therapy_session_atomic_endpoint(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message="Therapy session recorded successfully with case entry"
         )
 
@@ -440,10 +545,10 @@ async def update_investigation_status_atomic(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Investigation status updated to {new_status} with case entry"
         )
 
@@ -481,10 +586,10 @@ async def update_medication_status_atomic(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Medication status updated to {new_status} with case entry"
         )
 
@@ -522,10 +627,10 @@ async def update_therapy_status_atomic(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Therapy status updated to {new_status} with case entry"
         )
 
@@ -584,7 +689,8 @@ async def get_transaction_status(patient_id: str, transaction_id: str):
 async def acknowledge_alert_atomic_endpoint(
     patient_id: str,
     alert_id: str,
-    request: AlertAcknowledgmentRequest
+    request: AlertAcknowledgmentRequest,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can acknowledge
 ) -> AtomicResponse:
     """
     Acknowledge alert atomically with automatic case entry creation
@@ -594,9 +700,18 @@ async def acknowledge_alert_atomic_endpoint(
     2. Sets performedBy and performedAt fields
     3. Creates case entry with acknowledgment details
     4. Everything happens in one atomic transaction
+
+    RBAC: Requires medical staff (doctor or nurse). Must acknowledge as themselves.
     """
     try:
-        logger.info(f"Atomic alert acknowledgment for alert {alert_id}, patient {patient_id}")
+        logger.info(f"Atomic alert acknowledgment for alert {alert_id}, patient {patient_id} by user {current_user.get('id')}")
+
+        # RBAC validation: Must acknowledge as themselves
+        if request.acknowledgedBy != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot acknowledge alert as another staff member. Acknowledging as {request.acknowledgedBy} but authenticated as {current_user.get('id')}"
+            )
 
         acknowledgment_data = {
             'alertId': alert_id
@@ -611,10 +726,10 @@ async def acknowledge_alert_atomic_endpoint(
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
             message=f"Alert acknowledged successfully by {request.acknowledgedBy}"
         )
 
@@ -632,7 +747,8 @@ async def acknowledge_alert_atomic_endpoint(
 async def complete_investigation_atomic_endpoint(
     patient_id: str,
     investigation_id: str,
-    request: InvestigationCompletionRequest
+    request: InvestigationCompletionRequest,
+    current_user: dict = Depends(require_medical_staff)  # Doctor or Nurse can complete
 ) -> AtomicResponse:
     """
     Complete investigation atomically with automatic case entry creation
@@ -642,9 +758,18 @@ async def complete_investigation_atomic_endpoint(
     2. Sets results and completedAt fields
     3. Creates case entry with completion details
     4. Everything happens in one atomic transaction
+
+    RBAC: Requires medical staff (doctor or nurse). Must complete as themselves.
     """
     try:
-        logger.info(f"Atomic investigation completion for investigation {investigation_id}, patient {patient_id}")
+        logger.info(f"Atomic investigation completion for investigation {investigation_id}, patient {patient_id} by user {current_user.get('id')}")
+
+        # RBAC validation: Must complete as themselves
+        if request.completedBy != current_user.get("id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot complete investigation as another staff member. Completing as {request.completedBy} but authenticated as {current_user.get('id')}"
+            )
 
         completion_data = {
             'investigation_id': investigation_id,
@@ -655,16 +780,16 @@ async def complete_investigation_atomic_endpoint(
             'investigation_completion',
             patient_id,
             completion_data,
-            request.completed_by
+            request.completedBy  # Fixed: use camelCase from model
         )
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
-            message=f"Investigation completed successfully by {request.completed_by}"
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
+            message=f"Investigation completed successfully by {request.completedBy}"
         )
 
     except HTTPException:
@@ -700,16 +825,16 @@ async def update_medication_status_atomic_endpoint(
             'medication_status_change',
             patient_id,
             status_change_data,
-            request.changed_by
+            request.changedBy
         )
 
         return AtomicResponse(
             success=True,
-            medical_record=result['medical_record'],
-            case_entry=result['case_entry'],
-            action_type=result['action_type'],
-            transaction_id=result['transaction_id'],
-            message=f"Medication status changed to {request.status} by {request.changed_by}"
+            medicalRecord=result['medical_record'],
+            caseEntry=result['case_entry'],
+            actionType=result['action_type'],
+            transactionId=result['transaction_id'],
+            message=f"Medication status changed to {request.status} by {request.changedBy}"
         )
 
     except HTTPException:

@@ -1,130 +1,96 @@
 /**
- * PatientCaseService - Patient case management and alerts
+ * PatientCaseService - DEPRECATED: Backward compatibility wrapper
  * STRICT CAMELCASE ONLY - No snake_case, no PascalCase, no kebab-case
- * Medical-grade case management with alert handling
+ *
+ * @deprecated Use CaseSheetService and AlertService instead
+ *
+ * This service is maintained for backward compatibility only.
+ * New code should use the standardized services:
+ * - CaseSheetService for case entries (extends BaseMedicalRecordService)
+ * - AlertService for alert operations
+ *
+ * Migration Guide:
+ * - Old: PatientCaseService.getCaseEntries()
+ *   New: CaseSheetService.getCaseEntries()
+ *
+ * - Old: PatientCaseService.addCaseEntry()
+ *   New: CaseSheetService.addCaseEntry()
+ *
+ * - Old: PatientCaseService.acknowledgeAlert()
+ *   New: AlertService.acknowledgeAlert()
+ *
+ * @module PatientCaseService
+ * @since Legacy (pre-Phase 6)
  */
 
-import { BaseService } from '../BaseService';
-import { PatientTransformer } from '../../utils/transformers/PatientTransformer';
+import { CaseSheetService } from '../CaseSheetService';
+import { AlertService } from '../AlertService';
+import { caseSheetEntry } from '../../types/PatientTypes';
 
 /**
- * PatientCaseService - Handles patient case entries and alerts
+ * PatientCaseService - Backward compatibility wrapper
  *
- * Responsibilities:
- * - Medical case entry management
- * - Case history retrieval
- * - Alert acknowledgment
- * - Medical record operations
+ * This class wraps the new standardized services (CaseSheetService and AlertService)
+ * to maintain backward compatibility with existing code.
+ *
+ * @deprecated Use CaseSheetService and AlertService instead
  */
-export class PatientCaseService extends BaseService {
-
+export class PatientCaseService {
 
   /**
-   * Retrieves all case entries (medical records) for a specific patient with embedded staff data
-   * CONSOLIDATED: Gets case entries + staff data in single call for efficiency
+   * Retrieves all case entries for a patient with staff data
    *
-   * @param patientId - The unique identifier for the patient
-   * @returns Promise resolving to array of case entry records with resolved staff names
-   * @throws {Error} When case entry retrieval fails
+   * @deprecated Use CaseSheetService.getCaseEntries() instead
+   *
+   * @param patientId - Patient ID
+   * @returns Promise resolving to array of case entries with staff names resolved
    */
-  static async getCaseEntries(patientId: string): Promise<any[]> {
-    try {
-      // Single consolidated call with staff data included
-      const response = await this.fetchFromBackend(`/patients/${patientId}/case-entries?includeStaff=true`);
-      // Consolidated case entries response received
-
-      // Extract the caseEntries array from the response
-      const caseEntries = response?.caseEntries || [];
-
-      // Extract staff mapping from response (eliminating separate API call)
-      const staffData = response?.staff || [];
-      // Staff data from consolidated response received
-
-      // Build staff mapping from embedded staff data
-      const staffMapping: { [key: string]: { name: string; role: string } } = {};
-      staffData.forEach((staff: any) => {
-        const staffId = staff.staffId || staff.id || staff.userId || staff.staff_id;
-        if (staffId) {
-          const fullName = staff.name || staff.staffName || staff.fullName ||
-                          (staff.firstName && staff.lastName ? `${staff.firstName} ${staff.lastName}` : null) ||
-                          staff.firstName || staff.lastName || 'Unknown';
-          staffMapping[staffId] = {
-            name: fullName,
-            role: staff.role || staff.staffRole || 'Staff'
-          };
-          // Staff mapping created for staffId
-        }
-      });
-
-      // Final staff mapping completed
-
-      // Transform using unified PatientTransformer with staff mapping for role detection
-      const transformedEntries = PatientTransformer.transformCaseTimeline(caseEntries, staffMapping);
-
-      return Array.isArray(transformedEntries) ? transformedEntries : [];
-    } catch (error) {
-      // Error fetching consolidated case entries - handle silently
-      return [];
-    }
+  static async getCaseEntries(patientId: string): Promise<caseSheetEntry[]> {
+    return CaseSheetService.getCaseEntries(patientId);
   }
 
   /**
    * Adds a new case entry to a patient's medical record
    *
-   * @param patientId - The unique identifier for the patient
-   * @param entryData - The case entry data containing medical information
-   * @param userId - The ID of the user creating the entry
-   * @returns Promise resolving to true if case entry was added successfully
-   * @throws {Error} When case entry creation fails
+   * @deprecated Use CaseSheetService.addCaseEntry() instead
+   *
+   * @param patientId - Patient ID
+   * @param entryData - Case entry data
+   * @param userId - User ID creating the entry
+   * @returns Promise resolving to created entry or null
    */
-  static async addCaseEntry(patientId: string, entryData: {
-    entryType: string;
-    description: string;
-    findings?: string;
-    recommendations?: string;
-    followUpDate?: string;
-    severity?: string;
-    category?: string;
-  }, userId: string): Promise<boolean> {
-    try {
-      await this.fetchFromBackend(`/patients/${patientId}/case-entries`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...entryData,
-          createdBy: userId
-          // Let backend handle timestamp creation to avoid datetime format issues
-        })
-      });
-      return true;
-    } catch (error) {
-      // Failed to add case entry - handle silently
-      return false;
-    }
+  static async addCaseEntry(
+    patientId: string,
+    entryData: {
+      entryType: string;
+      description: string;
+      performedBy?: string;
+      findings?: string;
+      recommendations?: string;
+      followUpDate?: string;
+      severity?: string;
+      category?: string;
+    },
+    userId: string
+  ): Promise<any> {
+    return CaseSheetService.addCaseEntry(patientId, entryData, userId);
   }
 
   /**
    * Acknowledges a patient alert
    *
-   * @param patientId - The unique identifier for the patient
-   * @param alertId - The unique identifier for the alert
-   * @param userId - The ID of the user acknowledging the alert
-   * @returns Promise resolving to true if alert was acknowledged successfully
-   * @throws {Error} When alert acknowledgment fails
+   * @deprecated Use AlertService.acknowledgeAlert() instead
+   *
+   * @param patientId - Patient ID
+   * @param alertId - Alert ID
+   * @param userId - User ID acknowledging the alert
+   * @returns Promise resolving to true if acknowledged successfully
    */
-  static async acknowledgeAlert(patientId: string, alertId: string, userId: string): Promise<boolean> {
-    try {
-      await this.fetchFromBackend(`/atomic/patients/${patientId}/alerts/${alertId}/acknowledge`, {
-        method: 'POST',
-        body: JSON.stringify({
-          acknowledgedBy: userId,
-          alertId: alertId
-          // Let backend handle acknowledgedAt timestamp to avoid datetime format issues
-        })
-      });
-      return true;
-    } catch (error) {
-      // Error acknowledging alert - handle silently
-      return false;
-    }
+  static async acknowledgeAlert(
+    patientId: string,
+    alertId: string,
+    userId: string
+  ): Promise<boolean> {
+    return AlertService.acknowledgeAlert(patientId, alertId, userId);
   }
 }

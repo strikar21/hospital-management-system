@@ -162,36 +162,35 @@ export class AuthService extends BaseService {
 
   static logout(): void {
     SecureStorage.clearAll();
-    localStorage.removeItem('currentUser');
-    // User logged out - secure storage cleared
+    // User logged out - secure storage cleared (including currentUser)
   }
 
   // ================================
   // USER INFORMATION
   // ================================
 
-  static getCurrentUser() {
-    return super.getCurrentUser();
+  static async getCurrentUser() {
+    return await super.getCurrentUser();
   }
 
   static async isAuthenticated(): Promise<boolean> {
     const token = await SecureStorage.getToken();
-    const user = this.getCurrentUser();
+    const user = await this.getCurrentUser();
     return !!(token && user);
   }
 
-  static getUserRole(): string | null {
-    const user = this.getCurrentUser();
+  static async getUserRole(): Promise<string | null> {
+    const user = await this.getCurrentUser();
     return user?.role || null;
   }
 
-  static getUserId(): string | null {
-    const user = this.getCurrentUser();
+  static async getUserId(): Promise<string | null> {
+    const user = await this.getCurrentUser();
     return user?.id || null;
   }
 
-  static getUserName(): string | null {
-    const user = this.getCurrentUser();
+  static async getUserName(): Promise<string | null> {
+    const user = await this.getCurrentUser();
     if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`;
     }

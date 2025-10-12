@@ -53,7 +53,7 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({
 
   // Render individual note item
   const renderNoteItem = (note: noteComment) => {
-    const roleStyles = getRoleBadgeStyles(note.authorRole);
+    const roleStyles = getRoleBadgeStyles(note.authorRole || 'Staff');
     const canUserEditNote = note.canEdit &&
       note.authorId === currentUser.id &&
       PermissionUtils.canEditNotes(currentUser.role);
@@ -72,7 +72,7 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="font-medium text-gray-900 text-sm">{note.authorName}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleStyles.badge}`}>
-                  {note.authorRole}
+                  {note.authorRole || 'Staff'}
                 </span>
                 <span className="text-xs text-gray-500">
                   {formatDateTime(note.timestamp)}
@@ -134,7 +134,7 @@ export const NotesViewer: React.FC<NotesViewerProps> = ({
     <div className="flex-1 overflow-y-auto space-y-2">
       {notes && notes.length > 0 ? (
         // Display notes in reverse chronological order (newest first)
-        notes.slice().reverse().map(renderNoteItem)
+        notes.slice().reverse().filter(note => note != null).map(renderNoteItem)
       ) : (
         renderEmptyState()
       )}

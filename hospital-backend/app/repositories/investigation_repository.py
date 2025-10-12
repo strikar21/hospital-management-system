@@ -33,7 +33,7 @@ class InvestigationRepository(BaseRepository):
         update_data = {
             'status': 'completed',
             'results': results,
-            'completedBy': completed_by,
+            'performedBy': completed_by,
             'completedAt': self.get_current_timestamp()
         }
         result = await self.update(investigation_id, update_data, completed_by)

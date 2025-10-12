@@ -5,6 +5,7 @@ import { user, appsettings, patient } from './types';
 import { Login } from './Login';
 import { Dashboard } from './Dashboard';
 import { BedsideMode } from './BedsideMode';
+import SecureStorage from './utils/secureStorage';
 // Removed unused HospitalAPI import
 import MedicalErrorBoundary from './components/MedicalErrorBoundary';
 
@@ -29,31 +30,34 @@ const App: React.FC = () => {
   const [bedsidePatients, setBedsidePatients] = useState<patient[]>([]);
   const [bedsideDisplayCount, setBedsideDisplayCount] = useState<1 | 2>(1);
 
-  // Load settings from localStorage on app start
+  // Load settings from SecureStorage on app start (FIXED: encrypted storage for HIPAA compliance)
   useEffect(() => {
-    try {
-      const savedSettings = localStorage.getItem('hospitalDisplaySettings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+    const loadSettings = async () => {
+      try {
+        const savedSettings = await SecureStorage.get('hospitalDisplaySettings');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+        }
+      } catch (error) {
+        // Settings load failed - using defaults
       }
-    } catch (error) {
-      // Settings load failed - using defaults
-    }
+    };
+    loadSettings();
   }, []);
 
   // NFC override functionality removed - using backend-only mode
 
-  // Debounce settings saves to prevent excessive localStorage writes
+  // Debounce settings saves to prevent excessive SecureStorage writes (FIXED: encrypted storage)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    
-    saveTimeoutRef.current = setTimeout(() => {
+
+    saveTimeoutRef.current = setTimeout(async () => {
       try {
-        localStorage.setItem('hospitalDisplaySettings', JSON.stringify(settings));
+        await SecureStorage.set('hospitalDisplaySettings', JSON.stringify(settings));
       } catch (error) {
         // Settings save failed
       }
