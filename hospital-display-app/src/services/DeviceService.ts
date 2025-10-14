@@ -23,6 +23,7 @@ export class DeviceService extends BaseService {
 
   /**
    * Retrieves all available (unassigned) medical devices from the device pool
+   * NOW USING V2 API: Single Source of Truth architecture
    *
    * @param staffId - The unique identifier for the requesting staff member
    * @param deviceType - Optional filter by device type (e.g., 'watch', 'monitor')
@@ -41,8 +42,16 @@ export class DeviceService extends BaseService {
    */
   static async getFreeDevices(staffId: string, deviceType?: string, location?: string): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(`/watch-management/available`);
-      return Array.isArray(response) ? response : [];
+      // V2 API: Use unified endpoint with filtering
+      const params = new URLSearchParams();
+      params.append('status', 'available');
+      if (deviceType) params.append('deviceType', deviceType);
+      if (location) params.append('location', location);
+
+      const response = await this.fetchFromBackend(`/v2/devices/?${params.toString()}`);
+
+      // V2 API returns {devices: [...], count: N, total: N}
+      return response?.devices || [];
     } catch (error) {
       // Error fetching free devices - handle silently
       return [];
@@ -51,6 +60,7 @@ export class DeviceService extends BaseService {
 
   /**
    * Retrieves comprehensive status information about the medical device pool
+   * NOW USING V2 API: Statistics endpoint with aggregated data
    *
    * @param staffId - The unique identifier for the requesting staff member
    * @returns Promise resolving to device pool status summary
@@ -64,8 +74,9 @@ export class DeviceService extends BaseService {
    */
   static async getDevicePoolStatus(staffId: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/watch-management/available`);
-      return response || { totalDevices: 0, availableDevices: 0, assignedDevices: 0 };
+      // V2 API: Use statistics endpoint for aggregated data
+      const response = await this.fetchFromBackend(`/v2/devices/stats/summary`);
+      return response?.summary || { totalDevices: 0, availableDevices: 0, assignedDevices: 0 };
     } catch (error) {
       // Error fetching device pool status - handle silently
       return { totalDevices: 0, availableDevices: 0, assignedDevices: 0 };
@@ -99,7 +110,7 @@ export class DeviceService extends BaseService {
    */
   static async assignDevice(staffId: string, deviceId: string, patientId: string, assignmentReason: string): Promise<any> {
     try {
-      const response = await this.fetchFromBackend(`/watch-management/assign`, {
+      const response = await this.fetchFromBackend(`/watchmanagement/assign`, {
         method: 'POST',
         body: JSON.stringify({
           deviceId,
@@ -149,7 +160,7 @@ export class DeviceService extends BaseService {
     // Unassigning device - processing silently
 
     try {
-      const response = await this.fetchFromBackend(`/watch-management/unassign`, {
+      const response = await this.fetchFromBackend(`/watchmanagement/unassign`, {
         method: 'POST',
         body: JSON.stringify({
           deviceId,
@@ -186,11 +197,16 @@ export class DeviceService extends BaseService {
 
   static async getPatientDevice(staffId: string, patientId: string): Promise<any | null> {
     try {
-      const response = await this.fetchFromBackend(`/watch-management/assigned`);
+      // V2 API: Filter by patientId directly
+      const params = new URLSearchParams();
+      params.append('patientId', patientId);
+      params.append('includeUnassigned', 'false');
 
-      if (Array.isArray(response)) {
-        const patientDevice = response.find(assignment => assignment.patientId === patientId);
-        return patientDevice || null;
+      const response = await this.fetchFromBackend(`/v2/devices/?${params.toString()}`);
+
+      // V2 API returns {devices: [...]}
+      if (response?.devices && response.devices.length > 0) {
+        return response.devices[0]; // Return first (should only be one per patient)
       }
 
       return null;
@@ -202,8 +218,14 @@ export class DeviceService extends BaseService {
 
   static async getAssignmentHistory(staffId: string, patientId?: string, deviceId?: string, limit: number = 50): Promise<any[]> {
     try {
-      const response = await this.fetchFromBackend(`/watch-management/assigned`);
-      return Array.isArray(response) ? response.slice(0, limit) : [];
+      // V2 API: Get assigned devices with optional filtering
+      const params = new URLSearchParams();
+      params.append('includeUnassigned', 'false');
+      params.append('limit', limit.toString());
+      if (patientId) params.append('patientId', patientId);
+
+      const response = await this.fetchFromBackend(`/v2/devices/?${params.toString()}`);
+      return response?.devices || [];
     } catch (error) {
       // Error fetching assignment history - handle silently
       return [];
