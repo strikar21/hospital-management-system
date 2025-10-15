@@ -30,6 +30,54 @@ class PatientRepository(BaseRepository[Patient]):
         result = await self.get_by_id(patient_id)
         return [result] if result else []
 
+    async def get_all(self, filters: Optional[Dict[str, Any]] = None,
+                     limit: Optional[int] = None,
+                     offset: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Override get_all to include device assignment data via JOIN"""
+        try:
+            where_conditions = []
+            params = []
+            param_count = 0
+
+            if filters:
+                for key, value in filters.items():
+                    if value is not None:
+                        param_count += 1
+                        # Quote camelCase column names
+                        quoted_key = f'"p"."{key}"' if any(c.isupper() for c in key) else f'p.{key}'
+                        where_conditions.append(f"{quoted_key} = ${param_count}")
+                        params.append(value)
+
+            # JOIN with deviceassignments to get assigned device info
+            query = """
+                SELECT p.*, da."deviceId" as "assignedDeviceId", da."assignedAt" as "deviceAssignedAt"
+                FROM patients p
+                LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
+            """
+
+            # Add WHERE conditions if any exist
+            if where_conditions:
+                query += f" WHERE {' AND '.join(where_conditions)}"
+
+            # Add ORDER BY clause
+            query += ' ORDER BY p."createdAt" DESC'
+
+            if limit:
+                param_count += 1
+                query += f" LIMIT ${param_count}"
+                params.append(limit)
+
+            if offset:
+                param_count += 1
+                query += f" OFFSET ${param_count}"
+                params.append(offset)
+
+            return await self.execute_custom_query(query, params)
+
+        except Exception as e:
+            self.logger.error(f"Error fetching patients with device assignments: {e}")
+            raise
+
     async def get_complete_patient_data(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """Get patient with all associated medical records"""
         try:
