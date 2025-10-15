@@ -48,11 +48,21 @@ class PatientRepository(BaseRepository[Patient]):
                         where_conditions.append(f"{quoted_key} = ${param_count}")
                         params.append(value)
 
-            # JOIN with deviceassignments to get assigned device info
+            # JOIN with deviceassignments AND devices to get assigned device info and connection status
             query = """
-                SELECT p.*, da."deviceId" as "assignedDeviceId", da."assignedAt" as "deviceAssignedAt"
+                SELECT p.*,
+                       da."deviceId" as "assignedDeviceId",
+                       da."assignedAt" as "deviceAssignedAt",
+                       d."lastSeen" as "deviceLastSeen",
+                       d."batteryLevel" as "deviceBatteryLevel",
+                       CASE
+                           WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                           WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                           ELSE 'offline'
+                       END as "deviceStatus"
                 FROM patients p
                 LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
+                LEFT JOIN devices d ON da."deviceId" = d.id
             """
 
             # Add WHERE conditions if any exist
