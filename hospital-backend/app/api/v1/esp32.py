@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
 import uuid
+import bcrypt
 
 from ...core.database import getDbConnection, getTimescaleConnection
 from ...core.auth_dependencies import verify_device_key
@@ -15,6 +16,9 @@ from ...services.websocket_manager import connectionManager
 from ...services.audit import logAuditEvent
 from ...services.vital_alert_service import vital_alert_service
 from ...services.arrhythmia_detection_service import arrhythmia_detection_service
+from ...middleware.esp32_field_mapper import ESP32FieldMapper
+from ...middleware.esp32_hmac_auth import ESP32HMACAuth
+from ...core.config import settings
 
 # Rate limiting
 from slowapi import Limiter
@@ -28,6 +32,13 @@ logger = logging.getLogger(__name__)
 # Device ID counter for auto-assignment
 deviceCounter = 1
 
+# Initialize HMAC authenticator for runtime device authentication
+hmac_auth = ESP32HMACAuth(
+    factory_secret=settings.esp32FactorySecret,
+    timestamp_window=settings.esp32TimestampWindow
+)
+logger.info("✅ ESP32 HMAC authenticator initialized")
+
 @router.post("/provision")
 async def provisionEsp32Device(provisionData: Dict[str, Any]):
     """
@@ -35,8 +46,11 @@ async def provisionEsp32Device(provisionData: Dict[str, Any]):
     Validates provisioner credentials and assigns device ID/serial
     """
     try:
+        # Transform ESP32 lowercase fields to backend camelCase
+        provisionData = ESP32FieldMapper.transform_request(provisionData)
+
         macAddress = provisionData.get('macAddress')
-        deviceType = provisionData.get('deviceType', 'esp32Watch')
+        deviceType = provisionData.get('deviceType', 'watch')  # Default to 'watch' (valid enum value)
         provisionerId = provisionData.get('provisionerId')
         provisionerPassword = provisionData.get('provisionerPassword')
         firmwareVersion = provisionData.get('firmwareVersion', '3.0.0')
@@ -45,24 +59,28 @@ async def provisionEsp32Device(provisionData: Dict[str, Any]):
             raise HTTPException(status_code=400, detail="MAC address and provisioner credentials required")
         
         async with getDbConnection() as conn:
-            # Validate provisioner credentials
+            # Validate provisioner credentials (allow Technician or Provisioner roles)
             provisioner = await conn.fetchrow(
-                "SELECT id, name, role, password FROM staff WHERE id = $1 AND role = 'Provisioner'",
+                "SELECT id, \"firstName\", \"lastName\", role, password FROM staff WHERE id = $1 AND role IN ('Provisioner', 'Technician')",
                 provisionerId
             )
-            
+
             if not provisioner:
-                logger.warning(f"❌ Invalid provisioner ID: {provisionerId}")
-                raise HTTPException(status_code=403, detail="Invalid provisioner credentials")
-            
-            # Validate provisioner password
-            if provisioner['password'] != provisionerPassword:
+                logger.warning(f"❌ Invalid provisioner ID or role: {provisionerId}")
+                raise HTTPException(status_code=403, detail="Invalid provisioner credentials or insufficient role")
+
+            # Validate provisioner password using bcrypt
+            passwordValid = bcrypt.checkpw(
+                provisionerPassword.encode('utf-8'),
+                provisioner['password'].encode('utf-8')
+            )
+            if not passwordValid:
                 logger.warning(f"❌ Invalid provisioner password for ID: {provisionerId}")
                 raise HTTPException(status_code=403, detail="Invalid provisioner credentials")
             
             # Check if device already exists by MAC address
             existingDevice = await conn.fetchrow(
-                'SELECT id, serialNumber FROM devices WHERE macAddress = $1',
+                'SELECT id, "serialNumber" FROM devices WHERE "macAddress" = $1',
                 macAddress
             )
 
@@ -77,19 +95,20 @@ async def provisionEsp32Device(provisionData: Dict[str, Any]):
                 })
             
             # Generate new device ID and serial number
-            deviceCount = await conn.fetchval('SELECT COUNT(*) FROM devices WHERE deviceType = $1', deviceType)
+            deviceCount = await conn.fetchval('SELECT COUNT(*) FROM devices WHERE "deviceType" = $1', deviceType)
             newDeviceNumber = deviceCount + 1
-            
+
             deviceId = f"ESP32_WATCH_{newDeviceNumber:03d}"  # ESP32_WATCH_001, ESP32_WATCH_002, etc.
             serialNumber = f"SN_W{newDeviceNumber:03d}"     # SN_W001, SN_W002, etc.
-            
-            # Create new device record
+            deviceName = f"ESP32 Watch #{newDeviceNumber:03d}"  # ESP32 Watch #001, #002, etc.
+
+            # Create new device record (HMAC authentication - no deviceKey needed)
             await conn.execute("""
-                INSERT INTO devices (id, deviceType, serialNumber, macAddress,
-                                   firmwareVersion, batteryLevel, status, location,
-                                   lastSeen, createdAt, updatedAt)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW())
-            """, deviceId, deviceType, serialNumber, macAddress,
+                INSERT INTO devices (id, "deviceType", name, "serialNumber", "macAddress",
+                                   "firmwareVersion", "batteryLevel", status, location,
+                                   "lastSeen", "createdAt", "updatedAt")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW())
+            """, deviceId, deviceType, deviceName, serialNumber, macAddress,
                  firmwareVersion, 100, 'available', 'Device Pool')
             
             # Log provisioning action
@@ -98,14 +117,16 @@ async def provisionEsp32Device(provisionData: Dict[str, Any]):
                 f"Provisioned new {deviceType} with serial {serialNumber}"
             )
             
-            logger.info(f"✅ New ESP32 device provisioned: {deviceId} (Serial: {serialNumber}) by {provisioner['name']}")
-        
+            provisionerName = f"{provisioner['firstName']} {provisioner['lastName']}"
+            logger.info(f"✅ New ESP32 device provisioned: {deviceId} (Serial: {serialNumber}) by {provisionerName}")
+
         return JSONResponse({
             "success": True,
-            "message": "Device provisioned successfully",
+            "message": "Device provisioned successfully (HMAC authentication)",
             "deviceId": deviceId,
             "serialNumber": serialNumber,
-            "provisionedby": provisioner['name'],
+            "macAddress": macAddress,
+            "provisionedBy": provisionerName,
             "status": "new"
         })
         
@@ -121,6 +142,9 @@ async def deviceOnline(statusData: Dict[str, Any]):
     Mark device as online after successful provisioning
     """
     try:
+        # Transform ESP32 lowercase fields to backend camelCase
+        statusData = ESP32FieldMapper.transform_request(statusData)
+
         deviceId = statusData.get('deviceId')
         serialNumber = statusData.get('serialNumber')
         batteryLevel = statusData.get('batteryLevel', 100)
@@ -149,101 +173,135 @@ async def deviceOnline(statusData: Dict[str, Any]):
         raise HTTPException(status_code=500, detail="Device status update failed")
 
 @router.post("/register")
-async def registerEsp32Device(deviceData: Dict[str, Any]):
+async def registerEsp32Device(
+    request: Request,
+    deviceData: Dict[str, Any],
+    device_mac: str = Header(None, alias="X-Device-MAC"),
+    device_signature: str = Header(None, alias="X-Device-Signature"),
+    device_timestamp: str = Header(None, alias="X-Timestamp")
+):
     """
     Register ESP32 device in the system
-    Called by ESP32 on startup
+    Called by ESP32 after provisioning
+
+    Security: Requires HMAC-SHA256 authentication
     """
     try:
-        deviceId = deviceData.get('deviceId')
-        deviceType = deviceData.get('deviceType', 'esp32Watch')
+        deviceData = ESP32FieldMapper.transform_request(deviceData)
         macAddress = deviceData.get('macAddress')
-        firmwareVersion = deviceData.get('firmwareVersion', '1.0.0')
+        firmwareVersion = deviceData.get('firmwareVersion', '3.0.0')
         batteryLevel = deviceData.get('batteryLevel', 100)
-        location = deviceData.get('location', 'Mobile')
-        
-        if not deviceId or not macAddress:
-            raise HTTPException(status_code=400, detail="Device ID and MAC address required")
-        
+
+        if not macAddress:
+            raise HTTPException(status_code=400, detail="MAC address required")
+
+        # HMAC Authentication
+        endpoint = "/api/v1/esp32/register"
+        is_valid, validated_mac, error_msg = hmac_auth.authenticate_device(
+            device_mac, device_signature, device_timestamp, endpoint
+        )
+
+        if not is_valid:
+            logger.warning(f"❌ Registration failed: {error_msg}")
+            raise HTTPException(status_code=401, detail=error_msg)
+
+        if macAddress != validated_mac:
+            raise HTTPException(status_code=403, detail="MAC address mismatch")
+
         async with getDbConnection() as conn:
-            # Check if device already exists
-            existingDevice = await conn.fetchrow(
-                'SELECT id FROM devices WHERE id = $1 OR macAddress = $2',
-                deviceId, macAddress
+            device = await conn.fetchrow(
+                'SELECT id, "serialNumber" FROM devices WHERE "macAddress" = $1',
+                validated_mac
             )
 
-            if existingDevice:
-                # Update existing device
-                await conn.execute("""
-                    UPDATE devices
-                    SET deviceType = $2, batteryLevel = $3, firmwareVersion = $4,
-                        lastSeen = NOW(), updatedAt = NOW(), status = 'available'
-                    WHERE id = $1
-                """, deviceId, deviceType, batteryLevel, firmwareVersion)
-                
-                logger.info(f"📱 ESP32 device updated: {deviceId}")
-            else:
-                # Create new device
-                await conn.execute("""
-                    INSERT INTO devices (id, deviceType, serialNumber, macAddress,
-                                       batteryLevel, firmwareVersion, location, status,
-                                       lastSeen, createdAt, updatedAt)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW())
-                """, deviceId, deviceType, f"ESP32_{deviceId[-4:]}", macAddress,
-                     batteryLevel, firmwareVersion, location, 'available')
-                
-                logger.info(f"✅ New ESP32 device registered: {deviceId}")
-        
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not provisioned")
+
+            deviceId = device['id']
+
+            await conn.execute("""
+                UPDATE devices
+                SET "batteryLevel" = $2, "firmwareVersion" = $3,
+                    "lastSeen" = NOW(), "updatedAt" = NOW(), status = 'available'
+                WHERE id = $1
+            """, deviceId, batteryLevel, firmwareVersion)
+
+            logger.info(f"✅ ESP32 registered: {deviceId} (HMAC auth)")
+
         return JSONResponse({
             "success": True,
             "deviceId": deviceId,
-            "message": "Device registered successfully",
+            "serialNumber": device['serialNumber'],
+            "message": "Device registered",
             "servertime": datetime.now().isoformat()
         })
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ ESP32 registration error: {e}")
-        raise HTTPException(status_code=500, detail="Device registration failed")
+        logger.error(f"❌ Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed")
 
 @router.post("/{deviceId}/heartbeat")
 async def deviceHeartbeat(
+    request: Request,
     deviceId: str,
-    heartbeatData: Dict[str, Any]
+    heartbeatData: Dict[str, Any],
+    device_mac: str = Header(None, alias="X-Device-MAC"),
+    device_signature: str = Header(None, alias="X-Device-Signature"),
+    device_timestamp: str = Header(None, alias="X-Timestamp")
 ):
     """
     Receive heartbeat from ESP32 device
-    Updates device status and battery level
+
+    Security: Requires HMAC-SHA256 authentication
     """
     try:
+        heartbeatData = ESP32FieldMapper.transform_request(heartbeatData)
         batteryLevel = heartbeatData.get('batteryLevel', 100)
-        signalStrength = heartbeatData.get('signalstrength', -50)
-        deviceStatus = heartbeatData.get('status', 'active')
-        
+        signalStrength = heartbeatData.get('signalStrength', -50)
+
+        # HMAC Authentication
+        endpoint = f"/api/v1/esp32/{deviceId}/heartbeat"
+        is_valid, validated_mac, error_msg = hmac_auth.authenticate_device(
+            device_mac, device_signature, device_timestamp, endpoint
+        )
+
+        if not is_valid:
+            raise HTTPException(status_code=401, detail=error_msg)
+
         async with getDbConnection() as conn:
-            # Update device status
-            await conn.execute("""
-                UPDATE devices
-                SET batteryLevel = $2, status = $3, lastSeen = NOW(), updatedAt = NOW()
-                WHERE id = $1
-            """, deviceId, batteryLevel, deviceStatus)
-            
-            # Check if device exists
-            device = await conn.fetchrow('SELECT id, "assignedPatientId" FROM devices WHERE id = $1', deviceId)
+            device = await conn.fetchrow(
+                'SELECT "macAddress" FROM devices WHERE id = $1',
+                deviceId
+            )
+
             if not device:
                 raise HTTPException(status_code=404, detail="Device not found")
-        
-        logger.info(f"💓 Heartbeat from {deviceId}: Battery {batteryLevel}%, Signal {signalStrength}dBm")
-        
+
+            if device['macAddress'] != validated_mac:
+                raise HTTPException(status_code=403, detail="MAC mismatch")
+
+            await conn.execute("""
+                UPDATE devices
+                SET "batteryLevel" = $2, "lastSeen" = NOW(), "updatedAt" = NOW(),
+                    status = CASE WHEN status = 'offline' THEN 'available' ELSE status END
+                WHERE id = $1
+            """, deviceId, batteryLevel)
+
+        logger.info(f"💓 Heartbeat: {deviceId} Battery {batteryLevel}%")
+
         return JSONResponse({
             "success": True,
             "message": "Heartbeat received",
-            "servertime": datetime.now().isoformat(),
-            "batteryLevel": batteryLevel
+            "servertime": datetime.now().isoformat()
         })
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ ESP32 heartbeat error: {e}")
-        raise HTTPException(status_code=500, detail="Heartbeat processing failed")
+        logger.error(f"❌ Heartbeat error: {e}")
+        raise HTTPException(status_code=500, detail="Heartbeat failed")
 
 @router.post("/{deviceId}/vitals/{patientId}")
 @limiter.limit("100/minute")  # Allow 100 vitals updates per minute per device
@@ -264,6 +322,10 @@ async def receiveVitalsData(
     - Validates device is assigned to patient
     """
     try:
+        # Transform ESP32 lowercase fields to backend camelCase
+        vitalsData = ESP32FieldMapper.transform_request(vitalsData)
+        logger.debug(f"🔄 Transformed ESP32 vitals data to camelCase for device {deviceId}")
+
         # Verify device authentication
         device = await verify_device_key(device_key)
 
@@ -273,15 +335,17 @@ async def receiveVitalsData(
             raise HTTPException(status_code=403, detail="Device ID mismatch")
         # Validate that device is assigned to this patient
         async with getDbConnection() as conn:
-            patient = await conn.fetchrow(
-                'SELECT id, "assignedDeviceId" FROM patients WHERE id = $1',
-                patientId
-            )
+            patient = await conn.fetchrow('SELECT id FROM patients WHERE id = $1', patientId)
 
             if not patient:
                 raise HTTPException(status_code=404, detail="Patient not found")
 
-            if patient['assignedDeviceId'] != deviceId:
+            # Check device assignment via deviceassignments table
+            assignment = await conn.fetchrow(
+                'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
+                patientId
+            )
+            if not assignment or assignment['deviceId'] != deviceId:
                 logger.warning(f"⚠️ Device {deviceId} sent vitals for patient {patientId} but not assigned")
                 raise HTTPException(status_code=403, detail="Device not assigned to this patient")
         
@@ -290,16 +354,16 @@ async def receiveVitalsData(
             async with getTimescaleConnection() as tsConn:
                 timestamp = datetime.now()
                 
-                # Store each vital type (optimized for frontend format)
+                # Store each vital type (using camelCase after transformation)
                 vitalTypes = {
-                    'heartrate': vitalsData.get('heartrate'),
-                    'temperature': vitalsData.get('temperature'),
-                    'oxygensaturation': vitalsData.get('oxygensat'),  # ESP32 sends 'oxygenSat'
-                    'respiratoryrate': vitalsData.get('respiratoryrate'),
-                    'bloodpressuresystolic': vitalsData.get('bloodpressurevalue'),
+                    'heartrate': vitalsData.get('heartRate'),
+                    'temperature': vitalsData.get('bodyTemperature'),
+                    'oxygensaturation': vitalsData.get('oxygenSaturation'),
+                    'respiratoryrate': vitalsData.get('respiratoryRate'),
+                    'bloodpressuresystolic': vitalsData.get('bloodPressureSystolic'),
                     'ecg': vitalsData.get('ecg'),
                     'eeg': vitalsData.get('eeg'),
-                    'bioimpedance': vitalsData.get('bioimpedance'),
+                    'bioimpedance': vitalsData.get('bioImpedance'),
                     'tremor': vitalsData.get('tremor')
                 }
                 
@@ -321,7 +385,7 @@ async def receiveVitalsData(
         async with getDbConnection() as conn:
             await conn.execute(
                 'UPDATE devices SET "lastSeen" = NOW(), "batteryLevel" = $2 WHERE id = $1',
-                deviceId, vitalsData.get('devicebattery', 100)
+                deviceId, vitalsData.get('deviceBattery', 100)
             )
 
         # ============================================
@@ -336,10 +400,10 @@ async def receiveVitalsData(
                 )
 
                 # NEW: Arrhythmia detection
-                if vitalsData.get('heartrate'):
-                    logger.info(f"🔬 CALLING ARRHYTHMIA DETECTION for patient {patientId}, HR: {vitalsData.get('heartrate')}")
+                if vitalsData.get('heartRate'):
+                    logger.info(f"🔬 CALLING ARRHYTHMIA DETECTION for patient {patientId}, HR: {vitalsData.get('heartRate')}")
                     arrhythmia_alert = await arrhythmia_detection_service.detect_arrhythmia(
-                        patientId, deviceId, int(vitalsData['heartrate']), conn
+                        patientId, deviceId, int(vitalsData['heartRate']), conn
                     )
                     logger.info(f"🔬 ARRHYTHMIA DETECTION RETURNED: {arrhythmia_alert}")
                     if arrhythmia_alert:
@@ -365,21 +429,22 @@ async def receiveVitalsData(
         # ============================================
         # PHASE 3: BROADCAST VITALS (BEST EFFORT)
         # ============================================
-        # Broadcast to WebSocket subscribers with frontend-compatible format
-        frontendVitals = {
-            'heartrate': vitalsData.get('heartrate'),
-            'bloodpressure': vitalsData.get('bloodpressure'),
-            'bloodpressurevalue': vitalsData.get('bloodpressurevalue'),
-            'respiratoryrate': vitalsData.get('respiratoryrate'),
-            'oxygensat': vitalsData.get('oxygensat'),
-            'temperature': vitalsData.get('temperature'),
+        # Transform camelCase vitals back to lowercase for frontend/ESP32 compatibility
+        frontendVitals = ESP32FieldMapper.transform_response({
+            'heartRate': vitalsData.get('heartRate'),
+            'bloodPressure': vitalsData.get('bloodPressure'),
+            'bloodPressureSystolic': vitalsData.get('bloodPressureSystolic'),
+            'respiratoryRate': vitalsData.get('respiratoryRate'),
+            'oxygenSaturation': vitalsData.get('oxygenSaturation'),
+            'bodyTemperature': vitalsData.get('bodyTemperature'),
             'ecg': vitalsData.get('ecg'),
             'eeg': vitalsData.get('eeg'),
-            'bioimpedance': vitalsData.get('bioimpedance'),
+            'bioImpedance': vitalsData.get('bioImpedance'),
             'tremor': vitalsData.get('tremor'),
-            'lastupdated': datetime.now().isoformat(),
-            'lastsync': datetime.now().isoformat()
-        }
+            'lastUpdated': datetime.now().isoformat(),
+            'lastSync': datetime.now().isoformat()
+        })
+        logger.debug(f"🔄 Transformed vitals to lowercase for frontend broadcast")
         await connectionManager.sendVitalsUpdate(patientId, deviceId, frontendVitals)
         
         return JSONResponse({
@@ -400,40 +465,67 @@ async def receiveVitalsData(
 
 @router.post("/{deviceId}/alert")
 async def receiveEmergencyAlert(
+    request: Request,
     deviceId: str,
-    alertData: Dict[str, Any]
+    alertData: Dict[str, Any],
+    device_mac: str = Header(None, alias="X-Device-MAC"),
+    device_signature: str = Header(None, alias="X-Device-Signature"),
+    device_timestamp: str = Header(None, alias="X-Timestamp")
 ):
     """
     Receive emergency alert from ESP32 device
+
+    Security: Requires HMAC-SHA256 authentication
     """
     try:
+        # HMAC Authentication
+        endpoint = f"/api/v1/esp32/{deviceId}/alert"
+        is_valid, validated_mac, error_msg = hmac_auth.authenticate_device(
+            device_mac, device_signature, device_timestamp, endpoint
+        )
+
+        if not is_valid:
+            raise HTTPException(status_code=401, detail=error_msg)
+
+        async with getDbConnection() as conn:
+            device = await conn.fetchrow(
+                'SELECT "macAddress" FROM devices WHERE id = $1',
+                deviceId
+            )
+
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found")
+
+            if device['macAddress'] != validated_mac:
+                raise HTTPException(status_code=403, detail="MAC mismatch")
+
+        alertData = ESP32FieldMapper.transform_request(alertData)
         patientId = alertData.get('patientId')
-        alertType = alertData.get('alerttype', 'warning')
-        message = alertData.get('message', 'Device alert')
+        alertType = alertData.get('alertType', 'emergency')
+        message = alertData.get('message', 'Emergency button pressed')
         vitals = alertData.get('vitals', {})
-        
-        # Broadcast emergency alert
-        alertPayload = {
+
+        await connectionManager.sendAlert(patientId, {
             'severity': alertType,
             'message': message,
             'source': f'Device {deviceId}',
             'vitals': vitals,
             'deviceId': deviceId
-        }
-        
-        await connectionManager.sendAlert(patientId, alertPayload)
-        
-        logger.warning(f"🚨 Emergency alert from {deviceId} for patient {patientId}: {message}")
-        
+        })
+
+        logger.warning(f"🚨 Alert: {deviceId} for {patientId}: {message}")
+
         return JSONResponse({
             "success": True,
-            "message": "Emergency alert broadcasted",
+            "message": "Alert broadcasted",
             "alertid": str(uuid.uuid4())
         })
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ ESP32 alert error: {e}")
-        raise HTTPException(status_code=500, detail="Alert processing failed")
+        logger.error(f"❌ Alert error: {e}")
+        raise HTTPException(status_code=500, detail="Alert failed")
 
 @staticmethod
 def getUnitForVital(vitalType: str) -> str:
@@ -472,8 +564,11 @@ async def doorScannerDetection(
     Tracks which devices (watches/tablets) are in which rooms
     """
     try:
-        detectedDevices = scanData.get('detecteddevices', [])
-        roomId = scanData.get('roomid')
+        # Transform ESP32 lowercase fields to backend camelCase
+        scanData = ESP32FieldMapper.transform_request(scanData)
+
+        detectedDevices = scanData.get('detectedDevices', [])
+        roomId = scanData.get('roomId')
         scannerLocation = scanData.get('location')
         
         if not roomId:
@@ -483,8 +578,8 @@ async def doorScannerDetection(
             # Update scanner heartbeat
             await conn.execute("""
                 UPDATE devices
-                SET lastSeen = NOW(), status = 'active'
-                WHERE id = $1 AND deviceType = 'doorScanner'
+                SET "lastSeen" = NOW(), status = 'active'
+                WHERE id = $1 AND "deviceType" = 'doorScanner'
             """, scannerId)
             
             # Process detected devices
@@ -496,15 +591,16 @@ async def doorScannerDetection(
                     # Update device location based on door scanner detection
                     await conn.execute("""
                         UPDATE devices
-                        SET location = $2, lastSeen = NOW()
+                        SET location = $2, "lastSeen" = NOW()
                         WHERE id = $1
                     """, deviceId, roomId)
                     
-                    # Find patient assigned to this device
+                    # Find patient assigned to this device (via deviceassignments JOIN)
                     patient = await conn.fetchrow("""
-                        SELECT id, "firstName", "lastName"
-                        FROM patients
-                        WHERE "assignedDeviceId" = $1 AND status = 'active'
+                        SELECT p.id, p."firstName", p."lastName"
+                        FROM patients p
+                        JOIN deviceassignments da ON p.id = da."patientId"
+                        WHERE da."deviceId" = $1 AND da.status = 'active' AND p.status = 'active'
                     """, deviceId)
                     
                     if patient:

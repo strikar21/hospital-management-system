@@ -213,6 +213,11 @@ export class VitalService extends BaseService {
   // ================================
 
   static async detectRoomProximity() {
+    // TODO: Implement proximity detection endpoint in backend
+    // For now, return null to prevent 403 errors and type mismatches
+    return null;
+
+    /* DISABLED UNTIL BACKEND ENDPOINT EXISTS
     try {
       const response = await this.fetchFromBackend('/devices/proximity');
       return response;
@@ -220,6 +225,7 @@ export class VitalService extends BaseService {
       // Failed to detect room proximity
       return { roomId: null, distance: null, error: error instanceof Error ? error.message : 'Unknown error' };
     }
+    */
   }
 
   // ================================

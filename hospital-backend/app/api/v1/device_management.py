@@ -14,6 +14,7 @@ import uuid
 from ...core.database import getDbConnection
 from ...services.audit import logAuditEvent
 from ...core.auth_dependencies import require_admin, require_medical_staff, get_current_user
+from ...middleware.staff_resolution_middleware import resolve_staff_in_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -282,10 +283,10 @@ async def getDevice(deviceId: str):
         async with getDbConnection() as conn:
             query = """
                 SELECT d.*,
-                       CASE WHEN d.lastSeen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                            WHEN d.lastSeen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                       CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                            WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                             ELSE 'offline' END as connectionStatus,
-                       EXTRACT(EPOCH FROM (NOW() - d.lastSeen))/60 as minutesSinceLastSeen
+                       CAST(EXTRACT(EPOCH FROM (NOW() - d."lastSeen"))/60 AS DOUBLE PRECISION) as minutesSinceLastSeen
                 FROM devices d
                 WHERE d.id = $1
             """
@@ -325,10 +326,15 @@ async def getDevice(deviceId: str):
                 deviceDict['assignmentHistory'] = assignments
 
             logger.info(f"✅ Retrieved device: {deviceId}")
-            return JSONResponse(content={
+
+            # Apply staff resolution middleware (resolves assignedBy in assignmentHistory)
+            response = {
                 "success": True,
                 "device": deviceDict
-            })
+            }
+            response = await resolve_staff_in_response(response, conn)
+
+            return JSONResponse(content=response)
 
     except HTTPException:
         raise
@@ -350,9 +356,10 @@ async def updateDevice(
     """
     try:
         # Allowed fields for update - match actual database schema
+        # Note: Device assignments are tracked in deviceassignments table, not here
         allowedFields = ['name', 'model', 'manufacturer', 'location', 'serialNumber', 'macAddress',
                          'firmwareVersion', 'batteryLevel', 'status', 'description', 'lastSeen',
-                         'assignedPatientId', 'calibrationDate', 'nextMaintenanceDate']
+                         'calibrationDate', 'nextMaintenanceDate']
         updateFields = []
         updateValues = []
         paramCount = 0
@@ -499,12 +506,12 @@ async def getDevicesByLocation(location: str):
         async with getDbConnection() as conn:
             query = """
                 SELECT d.*,
-                       CASE WHEN d.lastSeen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                            WHEN d.lastSeen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                       CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                            WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                             ELSE 'offline' END as connectionStatus
                 FROM devices d
                 WHERE d.location ILIKE $1 AND d.status != 'retired'
-                ORDER BY d.deviceType, d.name
+                ORDER BY d."deviceType", d.name
             """
 
             rows = await conn.fetch(query, f"%{location}%")
@@ -540,17 +547,17 @@ async def getDeviceHealthStatus():
         async with getDbConnection() as conn:
             query = """
                 SELECT
-                    deviceType,
+                    "deviceType",
                     status,
                     COUNT(*) as count,
-                    CASE WHEN lastSeen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                         WHEN lastSeen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
-                         ELSE 'offline' END as connectionStatus
+                    CASE WHEN "lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                         WHEN "lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                         ELSE 'offline' END as "connectionStatus"
                 FROM devices
                 WHERE status != 'retired'
                 GROUP BY "deviceType", status,
-                    CASE WHEN lastSeen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                         WHEN lastSeen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                    CASE WHEN "lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                         WHEN "lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                          ELSE 'offline' END
                 ORDER BY "deviceType", status
             """

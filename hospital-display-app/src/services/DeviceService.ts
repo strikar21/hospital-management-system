@@ -370,6 +370,38 @@ export class DeviceService extends BaseService {
   // DEVICE PROVISIONING
   // ================================
 
+  /**
+   * Generates a 6-digit numeric provisioning PIN for ESP32 device setup
+   * Requires Administrator or Technician role
+   *
+   * @param validityMinutes - How long the PIN is valid (default: 10 minutes)
+   * @returns Promise resolving to PIN details (code, expiresAt, etc.)
+   * @throws {Error} When PIN generation fails
+   *
+   * @example
+   * ```typescript
+   * const pinData = await DeviceService.generateProvisioningPin(10);
+   * // Returns: { code: "123456", expiresAt: "2025-10-18T...", validityMinutes: 10 }
+   * ```
+   */
+  static async generateProvisioningPin(validityMinutes: number = 10): Promise<{
+    code: string;
+    expiresAt: string;
+    validityMinutes: number;
+    technicianId: string;
+  }> {
+    try {
+      const response = await this.fetchFromBackend('/provisioning/generate-code', {
+        method: 'POST',
+        body: JSON.stringify({ validityMinutes })
+      });
+      return response;
+    } catch (error) {
+      // Error generating provisioning PIN
+      throw error;
+    }
+  }
+
   static async provisionDevice(deviceData: {
     deviceId: string;
     deviceType: string;

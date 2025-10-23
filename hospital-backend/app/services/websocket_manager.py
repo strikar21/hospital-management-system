@@ -168,18 +168,18 @@ class ConnectionManager:
         try:
             # Check if patient has this device assigned and device is connected
             async with getDbConnection() as conn:
-                # Check device assignment
+                # Check device assignment from deviceassignments table
                 result = await conn.fetchrow(
-                    "SELECT assigneddeviceid FROM patients WHERE id = $1",
+                    'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
                     patientId
                 )
-                
-                if not result or not result['assigneddeviceid']:
+
+                if not result or not result['deviceId']:
                     logger.warning(f"⚠️ Vitals update ignored - no device assigned to patient {patientId}")
                     return
-                
-                if result['assigneddeviceid'] != deviceId:
-                    logger.warning(f"⚠️ Vitals update ignored - device mismatch. Patient {patientId} assigned to {result['assigneddeviceid']}, got update from {deviceId}")
+
+                if result['deviceId'] != deviceId:
+                    logger.warning(f"⚠️ Vitals update ignored - device mismatch. Patient {patientId} assigned to {result['deviceId']}, got update from {deviceId}")
                     return
                 
                 # Check device status
@@ -187,8 +187,8 @@ class ConnectionManager:
                     'SELECT status, "lastSeen" FROM devices WHERE id = $1',
                     deviceId
                 )
-                
-                if not deviceResult or deviceResult['status'] not in ['active', 'connected']:
+
+                if not deviceResult or deviceResult['status'] not in ['active', 'connected', 'assigned']:
                     logger.warning(f"⚠️ Vitals update ignored - device {deviceId} status is {deviceResult['status'] if deviceResult else 'not found'}")
                     return
         
@@ -207,7 +207,61 @@ class ConnectionManager:
         
         except Exception as e:
             logger.error(f"❌ Error validating device assignment for vitals update: {e}")
-    
+
+    async def sendWaveformStream(self, patientId: str, deviceId: str, waveformData: Dict[str, Any]) -> None:
+        """
+        Send real-time waveform stream packet to patient subscribers
+        Called 10 times per second (100ms intervals) for continuous ECG/EEG streaming
+
+        This is EPHEMERAL streaming - NOT stored in database, only broadcast to WebSocket
+        """
+        from ..core.database import getDbConnection
+
+        try:
+            # Validate device assignment (same as vitals)
+            async with getDbConnection() as conn:
+                result = await conn.fetchrow(
+                    'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
+                    patientId
+                )
+
+                if not result or not result['deviceId']:
+                    logger.warning(f"⚠️ Waveform stream ignored - no device assigned to patient {patientId}")
+                    return
+
+                if result['deviceId'] != deviceId:
+                    logger.warning(f"⚠️ Waveform stream ignored - device mismatch. Patient {patientId} assigned to {result['deviceId']}, got stream from {deviceId}")
+                    return
+
+                # Check device status
+                deviceResult = await conn.fetchrow(
+                    'SELECT status FROM devices WHERE id = $1',
+                    deviceId
+                )
+
+                if not deviceResult or deviceResult['status'] not in ['active', 'connected', 'assigned']:
+                    logger.warning(f"⚠️ Waveform stream ignored - device {deviceId} status is {deviceResult['status'] if deviceResult else 'not found'}")
+                    return
+
+            # Device validation passed - broadcast waveform stream packet
+            data = {
+                'type': 'waveformStream',
+                'patientId': patientId,
+                'deviceId': deviceId,
+                'timestamp': datetime.now().isoformat(),
+                'waveform': waveformData
+            }
+
+            sentCount = await self.broadcastToPatientSubscribers(patientId, data)
+
+            # Debug log only every 10th packet (1 second intervals) to avoid spam
+            sequence = waveformData.get('sequence', 0)
+            if sequence % 10 == 0 and sentCount > 0:
+                logger.debug(f"📊 Waveform stream sent to {sentCount} subscribers for patient {patientId} (seq: {sequence})")
+
+        except Exception as e:
+            logger.error(f"❌ Error in waveform stream broadcast: {e}")
+
     async def sendMedicationUpdate(self, patientId: str, medicationData: Dict[str, Any]) -> None:
         """Send medication update to patient subscribers"""
         data = {
@@ -229,17 +283,34 @@ class ConnectionManager:
             'timestamp': datetime.now().isoformat(),
             'alert': alertData
         }
-        
+
         if patientId:
             # Send to patient-specific subscribers
             sentCount = await self.broadcastToPatientSubscribers(patientId, data)
         else:
             # Send to all general subscribers
             sentCount = await self.broadcastGeneral(data)
-        
+
         if sentCount > 0:
             logger.info(f"🚨 Alert sent to {sentCount} subscribers{f' for patient {patientId}' if patientId else ' (general)'}")
-    
+
+    async def broadcastSystemAlert(self, alertData: Dict[str, Any]) -> None:
+        """
+        Broadcast system-level alert to all connected clients
+        Used for Component 2 system alerts (device pool, outbreak detection, etc.)
+        """
+        data = {
+            'type': 'systemAlert',
+            'timestamp': datetime.now().isoformat(),
+            'alert': alertData
+        }
+
+        # Send to all general subscribers (all connected staff)
+        sentCount = await self.broadcastGeneral(data)
+
+        if sentCount > 0:
+            logger.info(f"🚨 System alert broadcast to {sentCount} connections: {alertData.get('alertType')}")
+
     async def keepalive(self) -> None:
         """Send keepalive pings to all connections"""
         pingData = {

@@ -3,19 +3,19 @@
  */
 
 export const API_CONFIG = {
-  // Backend URL configuration
+  // Backend URL configuration - Backend runs with HTTPS (SSL certificates installed)
   BACKEND_BASE_URL: process.env.NODE_ENV === 'development'
-    ? 'http://localhost:8001'
-    : (process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001'),
+    ? 'https://localhost:8001'
+    : (process.env.REACT_APP_BACKEND_URL || 'https://localhost:8001'),
 
   // API versions - v2 for modern services, v1 for legacy
   API_V1: '/api/v1',
   API_V2: '/api/v2',
 
-  // WebSocket URL
+  // WebSocket URL - Backend runs with WSS (SSL certificates installed)
   WS_BASE_URL: process.env.NODE_ENV === 'development'
-    ? 'ws://localhost:8001'
-    : (process.env.REACT_APP_WS_URL || 'ws://localhost:8001'),
+    ? 'wss://localhost:8001'
+    : (process.env.REACT_APP_WS_URL || 'wss://localhost:8001'),
 };
 
 // Service-to-version mapping

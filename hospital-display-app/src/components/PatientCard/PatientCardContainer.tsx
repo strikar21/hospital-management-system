@@ -13,6 +13,7 @@ import { PatientVitalStrip } from './PatientVitalStrip';
 import { PatientCardHeader } from './PatientCardHeader';
 import { PatientCardAlerts } from './PatientCardAlerts';
 import { PatientCardWaveform } from './PatientCardWaveform';
+import { WatchDetailsModal } from '../WatchDetailsModal';
 
 interface PatientCardContainerProps {
   patient: patient;
@@ -36,6 +37,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
 
   // State management - no mock alerts, only real backend alerts
   const [displayedAlerts, setDisplayedAlerts] = useState<any[]>([]);
+  const [watchDetailsPatient, setWatchDetailsPatient] = useState<patient | null>(null);
 
   // MEDICAL SAFETY: Never auto-hide any medical alerts - all alerts must be manually dismissed
   useEffect(() => {
@@ -116,6 +118,11 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
 
   // Memoize watch assignment status
   const hasWatchAssigned = useMemo(() => patient.assignedDeviceId, [patient.assignedDeviceId]);
+
+  // Watch details modal handler
+  const handleViewWatchDetails = useCallback((patient: patient) => {
+    setWatchDetailsPatient(patient);
+  }, []);
 
   // Memoize all vitals calculation - expensive operation with alert status computation
   const allVitals = useMemo(() => [
@@ -217,6 +224,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
         onBedsideMode={onBedsideMode}
         unacknowledgedAlerts={allCombinedAlerts}
         onAcknowledgeAlert={onAcknowledgeAlert}
+        onViewWatchDetails={handleViewWatchDetails}
       />
 
       {/* Main Content Area */}
@@ -243,6 +251,14 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
           onToggleECGMode={onToggleECGMode}
         />
       </div>
+
+      {/* Watch Details Modal */}
+      {watchDetailsPatient && (
+        <WatchDetailsModal
+          patient={watchDetailsPatient}
+          onClose={() => setWatchDetailsPatient(null)}
+        />
+      )}
     </div>
   );
 });

@@ -5,18 +5,20 @@ Watch Management API endpoints for ESP32 watch assignment and monitoring
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
+from decimal import Decimal
 import asyncpg
 import logging
 from datetime import datetime, timedelta
-import uuid
 
 from ...core.database import getDbConnection
 # Utils for date serialization
 from ...services.websocket_manager import connectionManager
-from ...core.auth_dependencies import require_medical_staff, require_admin, get_current_user
+from ...services.mqtt_service import mqttService
+from ...core.auth_dependencies import require_medical_staff, require_admin, get_current_user, require_admin_or_medical
+from ...middleware.staff_resolution_middleware import resolve_staff_in_response
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(require_medical_staff)])
+router = APIRouter(dependencies=[Depends(require_admin_or_medical)])
 
 @router.get("/available")
 async def getAvailableWatches():
@@ -45,8 +47,8 @@ async def getAvailableWatches():
                         watchDict[key] = value.isoformat()
 
                 # Add display information
-                watchDict['displayName'] = f"Watch {watchDict.get('serialnumber', '')}"
-                watchDict['batteryStatus'] = getBatteryStatus(watchDict.get('batterylevel', 0))
+                watchDict['displayName'] = f"Watch {watchDict.get('serialNumber', '')}"
+                watchDict['batteryStatus'] = getBatteryStatus(watchDict.get('batteryLevel', 0))
 
                 watches.append(watchDict)
 
@@ -69,8 +71,8 @@ async def getAssignedWatches():
         async with getDbConnection() as conn:
             query = """
             SELECT d.*, da.*, p."firstName", p."lastName", p."roomNumber", p."bedNumber",
-                   CASE WHEN d.lastseen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                        WHEN d.lastseen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                   CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                        WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                         ELSE 'offline' END as connectionStatus
             FROM devices d
             JOIN deviceassignments da ON d.id = da."deviceId"
@@ -93,18 +95,22 @@ async def getAssignedWatches():
                 # Add display information
                 assignmentDict['patientName'] = f"{assignmentDict['firstName']} {assignmentDict['lastName']}"
                 assignmentDict['location'] = f"Room {assignmentDict['roomNumber']}, Bed {assignmentDict['bedNumber']}"
-                assignmentDict['watchDisplay'] = f"Watch {assignmentDict['serialnumber']}"
-                assignmentDict['batteryStatus'] = getBatteryStatus(assignmentDict.get('batterylevel', 0))
+                assignmentDict['watchDisplay'] = f"Watch {assignmentDict.get('serialNumber', '')}"
+                assignmentDict['batteryStatus'] = getBatteryStatus(assignmentDict.get('batteryLevel', 0))
 
                 assignments.append(assignmentDict)
 
             logger.info(f"✅ Retrieved {len(assignments)} assigned watches")
 
-            return JSONResponse(content={
+            # Apply staff resolution middleware (resolves assignedBy → assignedByName, assignedByRole)
+            response = {
                 "success": True,
                 "assignedWatches": assignments,
                 "count": len(assignments)
-            })
+            }
+            response = await resolve_staff_in_response(response, conn)
+
+            return JSONResponse(content=response)
 
     except Exception as e:
         logger.error(f"❌ Error getting assigned watches: {e}")
@@ -123,7 +129,7 @@ async def assignWatchToPatient(
     try:
         patientId = assignmentData.get('patientId')
         deviceId = assignmentData.get('deviceId')
-        assignedBy = assignmentData.get('assignedBy', 'System')
+        assignedBy = current_user['id']  # Always use authenticated user's ID from JWT token
 
         if not patientId or not deviceId:
             raise HTTPException(status_code=400, detail="Patient ID and Device ID are required")
@@ -145,36 +151,55 @@ async def assignWatchToPatient(
                     "SELECT * FROM deviceassignments WHERE \"patientId\" = $1 AND status = 'active'",
                     patientId
                 )
-                if existingAssignment:
-                    raise HTTPException(status_code=400, detail="Patient already has a watch assigned")
 
-                assignmentId = str(uuid.uuid4())
                 now = datetime.now()
 
-                # Create device assignment
-                await conn.execute("""
-                    INSERT INTO deviceassignments (id, \"patientId\", \"deviceId\", \"assignedAt\", \"assignedBy\", status)
-                    VALUES ($1, $2, $3, $4, $5, 'active')
-                """, assignmentId, patientId, deviceId, now, assignedBy)
+                if existingAssignment:
+                    # AUTO-UNASSIGN: Mark old watch as inactive and update device status
+                    oldDeviceId = existingAssignment['deviceId']
 
-                # Update device status
+                    await conn.execute("""
+                        UPDATE deviceassignments
+                        SET status = 'inactive',
+                            "unassignedAt" = $1,
+                            "unassignedBy" = $2,
+                            "unassignmentReason" = 'Auto-unassigned for reassignment'
+                        WHERE \"patientId\" = $3 AND status = 'active'
+                    """, now, assignedBy, patientId)
+
+                    # Update old device status to available
+                    await conn.execute(
+                        "UPDATE devices SET status = 'available', \"updatedAt\" = $1 WHERE id = $2",
+                        now, oldDeviceId
+                    )
+
+                    logger.info(f"🔄 Auto-unassigned existing watch {oldDeviceId} for reassignment by {assignedBy}")
+
+                # Create device assignment (id auto-generated by database sequence)
+                assignmentId = await conn.fetchval("""
+                    INSERT INTO deviceassignments (\"patientId\", \"deviceId\", \"assignedAt\", \"assignedBy\", status)
+                    VALUES ($1, $2, $3, $4, 'active')
+                    RETURNING id
+                """, patientId, deviceId, now, assignedBy)
+
+                # Update device status (assignment tracked in deviceassignments table)
                 await conn.execute(
-                    "UPDATE devices SET status = 'assigned', \"assignedPatientId\" = $1, \"updatedAt\" = $2 WHERE id = $3",
-                    patientId, now, deviceId
+                    "UPDATE devices SET status = 'assigned', \"updatedAt\" = $1 WHERE id = $2",
+                    now, deviceId
                 )
 
-                # Update patient record
-                await conn.execute(
-                    "UPDATE patients SET \"assignedDeviceId\" = $1, \"updatedAt\" = $2 WHERE id = $3",
-                    deviceId, now, patientId
-                )
+                logger.info(f"✅ Assigned watch {device['serialNumber']} to patient {patientId}")
 
-                logger.info(f"✅ Assigned watch {device['serialnumber']} to patient {patientId}")
+                # Send MQTT notification to ESP32 device
+                mqttSuccess = await mqttService.publishAssignment(deviceId, patientId)
+                if not mqttSuccess:
+                    logger.warning(f"⚠️ MQTT assignment notification failed for {deviceId} - device may not receive assignment until reconnect")
 
                 return JSONResponse(content={
                     "success": True,
                     "assignmentId": assignmentId,
-                    "message": f"Watch {device['serialnumber']} assigned to {patient['firstName']} {patient['lastName']}"
+                    "message": f"Watch {device['serialNumber']} assigned to {patient['firstName']} {patient['lastName']}",
+                    "mqttNotificationSent": mqttSuccess
                 })
 
     except HTTPException:
@@ -194,23 +219,35 @@ async def unassignWatchFromPatient(
     RBAC: Requires medical staff (doctor or nurse).
     """
     try:
-        patientId = unassignmentData.get('patientId')
         deviceId = unassignmentData.get('deviceId')
-        unassignedBy = unassignmentData.get('unassignedBy', 'System')
+        patientId = unassignmentData.get('patientId')  # Optional - will be looked up if not provided
+        unassignedBy = current_user['id']  # Always use authenticated user's ID from JWT token
         reason = unassignmentData.get('reason', 'Manual unassignment')
 
-        if not patientId or not deviceId:
-            raise HTTPException(status_code=400, detail="Patient ID and Device ID are required")
+        if not deviceId:
+            raise HTTPException(status_code=400, detail="Device ID is required")
 
         async with getDbConnection() as conn:
             async with conn.transaction():
-                # Verify assignment exists
-                assignment = await conn.fetchrow(
-                    "SELECT * FROM deviceassignments WHERE \"patientId\" = $1 AND \"deviceId\" = $2 AND status = 'active'",
-                    patientId, deviceId
-                )
-                if not assignment:
-                    raise HTTPException(status_code=404, detail="Active assignment not found")
+                # If patientId not provided, look it up from device assignment
+                if not patientId:
+                    assignment = await conn.fetchrow(
+                        "SELECT * FROM deviceassignments WHERE \"deviceId\" = $1 AND status = 'active'",
+                        deviceId
+                    )
+                    if not assignment:
+                        raise HTTPException(status_code=404, detail="No active assignment found for this device")
+
+                    patientId = assignment['patientId']
+                    logger.info(f"🔍 Looked up patientId={patientId} for deviceId={deviceId}")
+                else:
+                    # Verify assignment exists when patientId is explicitly provided
+                    assignment = await conn.fetchrow(
+                        "SELECT * FROM deviceassignments WHERE \"patientId\" = $1 AND \"deviceId\" = $2 AND status = 'active'",
+                        patientId, deviceId
+                    )
+                    if not assignment:
+                        raise HTTPException(status_code=404, detail="Active assignment not found for patient and device")
 
                 now = datetime.now()
 
@@ -221,23 +258,23 @@ async def unassignWatchFromPatient(
                     WHERE \"patientId\" = $4 AND \"deviceId\" = $5 AND status = 'active'
                 """, now, unassignedBy, reason, patientId, deviceId)
 
-                # Update device status
+                # Update device status to available (assignment tracked in deviceassignments table)
                 await conn.execute(
-                    "UPDATE devices SET status = 'available', \"assignedPatientId\" = NULL, \"updatedAt\" = $1 WHERE id = $2",
+                    "UPDATE devices SET status = 'available', \"updatedAt\" = $1 WHERE id = $2",
                     now, deviceId
-                )
-
-                # Update patient record
-                await conn.execute(
-                    "UPDATE patients SET \"assignedDeviceId\" = NULL, \"updatedAt\" = $1 WHERE id = $2",
-                    now, patientId
                 )
 
                 logger.info(f"✅ Unassigned watch from patient {patientId}, reason: {reason}")
 
+                # Send MQTT deassignment notification to ESP32 device
+                mqttSuccess = await mqttService.publishDeassignment(deviceId)
+                if not mqttSuccess:
+                    logger.warning(f"⚠️ MQTT deassignment notification failed for {deviceId} - device may continue sending vitals until reconnect")
+
                 return JSONResponse(content={
                     "success": True,
-                    "message": f"Watch unassigned successfully. Reason: {reason}"
+                    "message": f"Watch unassigned successfully. Reason: {reason}",
+                    "mqttNotificationSent": mqttSuccess
                 })
 
     except HTTPException:
@@ -255,8 +292,8 @@ async def getWatchConnectionStatus():
             SELECT d.*, da."patientId", p."firstName", p."lastName",
                    CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
                         WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
-                        ELSE 'offline' END as connectionStatus,
-                   EXTRACT(EPOCH FROM (NOW() - d."lastSeen"))/60 as minutesSinceLastSeen
+                        ELSE 'offline' END as "connectionStatus",
+                   CAST(EXTRACT(EPOCH FROM (NOW() - d."lastSeen"))/60 AS DOUBLE PRECISION) as "minutesSinceLastSeen"
             FROM devices d
             LEFT JOIN deviceassignments da ON d.id = da."deviceId" AND da.status = 'active'
             LEFT JOIN patients p ON da."patientId" = p.id
@@ -276,9 +313,9 @@ async def getWatchConnectionStatus():
                         statusDict[key] = value.isoformat()
 
                 # Add display information
-                statusDict['watchDisplay'] = f"Watch {statusDict['serialnumber']}"
+                statusDict['watchDisplay'] = f"Watch {statusDict.get('serialNumber', '')}"
                 statusDict['patientName'] = f"{statusDict['firstName'] or ''} {statusDict['lastName'] or ''}".strip() or 'Unassigned'
-                statusDict['batteryStatus'] = getBatteryStatus(statusDict.get('batterylevel', 0))
+                statusDict['batteryStatus'] = getBatteryStatus(statusDict.get('batteryLevel', 0))
 
                 watchStatus.append(statusDict)
 
@@ -311,10 +348,10 @@ async def getWatchAlerts():
         async with getDbConnection() as conn:
             query = """
             SELECT d.*, da."patientId", p."firstName", p."lastName", p."roomNumber", p."bedNumber",
-                   CASE WHEN d.lastseen > NOW() - INTERVAL '5 minutes' THEN 'connected'
-                        WHEN d.lastseen > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                   CASE WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                        WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                         ELSE 'offline' END as connectionStatus,
-                   EXTRACT(EPOCH FROM (NOW() - d.lastseen))/60 as minutesSinceLastSeen
+                   CAST(EXTRACT(EPOCH FROM (NOW() - d."lastSeen"))/60 AS DOUBLE PRECISION) as minutesSinceLastSeen
             FROM devices d
             JOIN deviceassignments da ON d.id = da."deviceId" AND da.status = 'active'
             JOIN patients p ON da."patientId" = p.id
@@ -333,30 +370,30 @@ async def getWatchAlerts():
                         "id": f"disconnect{deviceDict['id']}",
                         "type": "watchDisconnect",
                         "severity": "high",
-                        "patientId": deviceDict['"patientId"'],
+                        "patientId": deviceDict['patientId'],
                         "patientName": f"{deviceDict['firstName']} {deviceDict['lastName']}",
                         "location": f"Room {deviceDict['roomNumber']}, Bed {deviceDict['bedNumber']}",
                         "deviceId": deviceDict['id'],
-                        "deviceSerial": deviceDict['serialnumber'],
-                        "message": f"Watch {deviceDict['serialnumber']} disconnected",
+                        "deviceSerial": deviceDict.get('serialNumber', ''),
+                        "message": f"Watch {deviceDict.get('serialNumber', '')} disconnected",
                         "minutesSinceLastSeen": round(deviceDict['minutesSinceLastSeen']),
                         "timestamp": datetime.now().isoformat()
                     })
 
                 # Check for low battery alert
-                batteryLevel = deviceDict.get('batterylevel', 100)
+                batteryLevel = deviceDict.get('batteryLevel', 100)
                 if batteryLevel <= 20:
                     severity = "critical" if batteryLevel <= 10 else "medium"
                     alerts.append({
                         "id": f"battery{deviceDict['id']}",
                         "type": "lowBattery",
                         "severity": severity,
-                        "patientId": deviceDict['"patientId"'],
+                        "patientId": deviceDict['patientId'],
                         "patientName": f"{deviceDict['firstName']} {deviceDict['lastName']}",
                         "location": f"Room {deviceDict['roomNumber']}, Bed {deviceDict['bedNumber']}",
                         "deviceId": deviceDict['id'],
-                        "deviceSerial": deviceDict['serialnumber'],
-                        "message": f"Watch {deviceDict['serialnumber']} battery low ({batteryLevel}%)",
+                        "deviceSerial": deviceDict.get('serialNumber', ''),
+                        "message": f"Watch {deviceDict.get('serialNumber', '')} battery low ({batteryLevel}%)",
                         "batteryLevel": batteryLevel,
                         "timestamp": datetime.now().isoformat()
                     })

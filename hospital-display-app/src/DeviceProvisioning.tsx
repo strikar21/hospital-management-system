@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
   Watch, Save, X, Activity,
-  CheckCircle, AlertCircle, Settings, Plus
+  CheckCircle, AlertCircle, Settings, Plus,
+  Key, Copy, Clock, RefreshCw
 } from 'lucide-react';
 import { user as UserType } from './types';
 import { PermissionUtils } from './utils/permissionUtils';
@@ -30,6 +31,16 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
   const [showSuccess, setShowSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // PIN generation state
+  const [pinData, setPinData] = useState<{
+    code: string;
+    expiresAt: string;
+    validityMinutes: number;
+    technicianId: string;
+  } | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinCopied, setPinCopied] = useState(false);
+
   const showMessage = (message: string, isError = false) => {
     if (isError) {
       setError(message);
@@ -45,6 +56,41 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
       ...prev,
       [field]: value
     }));
+  };
+
+  // PIN generation functions
+  const generatePin = async () => {
+    setPinLoading(true);
+    try {
+      const result = await DeviceService.generateProvisioningPin(10);
+      setPinData(result);
+      showMessage('6-digit PIN generated successfully!');
+      setPinCopied(false);
+    } catch (error: any) {
+      showMessage(error?.message || 'Failed to generate PIN', true);
+    }
+    setPinLoading(false);
+  };
+
+  const copyPinToClipboard = () => {
+    if (pinData?.code) {
+      navigator.clipboard.writeText(pinData.code);
+      setPinCopied(true);
+      setTimeout(() => setPinCopied(false), 2000);
+    }
+  };
+
+  const getRemainingTime = () => {
+    if (!pinData?.expiresAt) return 'N/A';
+    const now = new Date().getTime();
+    const expiry = new Date(pinData.expiresAt).getTime();
+    const remainingMs = expiry - now;
+
+    if (remainingMs <= 0) return 'Expired';
+
+    const minutes = Math.floor(remainingMs / 60000);
+    const seconds = Math.floor((remainingMs % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
   };
 
   // Device ID generation removed - backend handles device ID assignment
@@ -183,6 +229,113 @@ export const DeviceProvisioning: React.FC<DeviceProvisioningProps> = ({
           </div>
         </div>
       )}
+
+      {/* PIN Generation Card */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-lg border-2 border-blue-200">
+          <div className="px-6 py-4 border-b border-blue-200 bg-blue-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Key className="w-6 h-6 text-blue-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Device Setup PIN</h2>
+                  <p className="text-sm text-gray-600">Generate 6-digit PIN for ESP32 provisioning</p>
+                </div>
+              </div>
+              <button
+                onClick={generatePin}
+                disabled={pinLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${pinLoading ? 'animate-spin' : ''}`} />
+                <span>{pinLoading ? 'Generating...' : 'Generate PIN'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {pinData ? (
+              <div className="space-y-4">
+                {/* PIN Display */}
+                <div className="bg-white rounded-lg p-6 shadow-inner border-2 border-blue-300">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-600 mb-2">Provisioning PIN</p>
+                    <div className="flex items-center justify-center space-x-4">
+                      <div className="text-5xl font-bold text-blue-600 tracking-widest font-mono">
+                        {pinData.code}
+                      </div>
+                      <button
+                        onClick={copyPinToClipboard}
+                        className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"
+                        title="Copy to clipboard"
+                      >
+                        <Copy className="w-6 h-6" />
+                      </button>
+                    </div>
+                    {pinCopied && (
+                      <p className="text-sm text-green-600 mt-2 font-medium">
+                        ✓ Copied to clipboard!
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* PIN Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-sm font-medium">Validity</span>
+                    </div>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {pinData.validityMinutes} minutes
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Time remaining: {getRemainingTime()}
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center space-x-2 text-gray-600 mb-1">
+                      <Activity className="w-4 h-4" />
+                      <span className="text-sm font-medium">Status</span>
+                    </div>
+                    <p className="text-lg font-semibold text-green-600">
+                      Active
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Ready for device setup
+                    </p>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Setup Instructions:</h3>
+                  <ol className="text-sm text-gray-700 space-y-1 list-decimal list-inside">
+                    <li>Power on the ESP32 device</li>
+                    <li>Connect to "HospitalWatch" WiFi network</li>
+                    <li>Enter WiFi credentials and server details in captive portal</li>
+                    <li>Enter this 6-digit PIN: <span className="font-bold text-blue-600">{pinData.code}</span></li>
+                    <li>Wait for device to obtain certificate and connect</li>
+                  </ol>
+                  <p className="text-xs text-gray-500 mt-3">
+                    ⏰ This PIN will expire in {pinData.validityMinutes} minutes. Generate a new one if expired.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Key className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-2">No active PIN</p>
+                <p className="text-sm text-gray-500">
+                  Click "Generate PIN" to create a 6-digit code for device provisioning
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Provisioning Form */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

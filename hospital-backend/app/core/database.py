@@ -163,6 +163,28 @@ async def migrateMedicationsTable(conn):
         logger.warning(f"⚠️ Medications table migration error: {e}")
 
 
+async def migrateDeviceAssignmentsTable(conn):
+    """Add missing audit trail columns to deviceassignments table"""
+    try:
+        # Add missing columns for device unassignment tracking
+        missingColumns = [
+            ('"unassignedBy"', "TEXT"),
+            ('"unassignmentReason"', "TEXT")
+        ]
+
+        for columnName, columnType in missingColumns:
+            try:
+                await conn.execute(f"ALTER TABLE deviceassignments ADD COLUMN IF NOT EXISTS {columnName} {columnType}")
+                logger.info(f"✅ Added column {columnName} to deviceassignments table")
+            except Exception as e:
+                logger.debug(f"Column {columnName} might already exist: {e}")
+
+        logger.info("✅ Device assignments table migration completed successfully")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Device assignments table migration error: {e}")
+
+
 async def createTables():
     """Create PostgreSQL database tables"""
 
@@ -206,7 +228,7 @@ async def createTables():
             "dischargeDate" TIMESTAMPTZ,
             "roomNumber" TEXT,
             "bedNumber" TEXT,
-            "assignedDeviceId" TEXT,
+            -- Note: Device assignments tracked in deviceassignments table
             "attendingPhysician" TEXT,
             "nurseInCharge" TEXT,
             status TEXT DEFAULT 'active',
@@ -229,7 +251,7 @@ async def createTables():
             "batteryLevel" INTEGER,
             status TEXT DEFAULT 'available',
             "lastSeen" TIMESTAMPTZ,
-            "assignedPatientId" TEXT,
+            -- Note: Device assignments tracked in deviceassignments table
             location TEXT,
             description TEXT,
             "calibrationDate" TIMESTAMPTZ,
@@ -246,6 +268,8 @@ async def createTables():
             "assignedBy" TEXT NOT NULL,
             "assignedAt" TIMESTAMPTZ DEFAULT NOW(),
             "unassignedAt" TIMESTAMPTZ,
+            "unassignedBy" TEXT,
+            "unassignmentReason" TEXT,
             status TEXT DEFAULT 'active',
             notes TEXT
         );
@@ -485,6 +509,9 @@ async def createTables():
                 # Apply medications table migrations for medication status tracking
                 await migrateMedicationsTable(conn)
 
+                # Apply device assignments table migrations for audit trail tracking
+                await migrateDeviceAssignmentsTable(conn)
+
                 # Create database indexes for performance optimization
                 logger.info("🔄 Creating database indexes for performance optimization...")
 
@@ -622,3 +649,201 @@ async def seedStaffCredentials():
     except Exception as e:
         logger.error(f"❌ Failed to seed staff credentials: {e}")
         logger.warning("⚠️ Continuing without TimescaleDB - vitals storage may be limited")
+
+# ========================================
+# HISTORICAL VITALS QUERY METHODS
+# For Component 1: Trend Analysis Alerts
+# ========================================
+
+async def getHistoricalVitals(
+    patientId: str,
+    vitalType: str,
+    hoursBack: float = 24
+) -> list:
+    """
+    Query TimescaleDB for historical vitals data
+
+    Args:
+        patientId: Patient identifier
+        vitalType: Type of vital (heartRate, oxygenSaturation, temperature, respiratoryRate, etc.)
+        hoursBack: Number of hours to look back (supports fractions, e.g., 0.5 for 30 minutes)
+
+    Returns:
+        List of dicts with 'timestamp' and 'value' keys
+    """
+    query = """
+        SELECT time as timestamp, value
+        FROM vitals_timeseries
+        WHERE "patientId" = $1
+          AND "vitalType" = $2
+          AND time > NOW() - INTERVAL '%s hours'
+        ORDER BY time ASC
+    """
+
+    try:
+        async with getTimescaleConnection() as conn:
+            rows = await conn.fetch(query, patientId, vitalType, hoursBack)
+            return [{'timestamp': row['timestamp'], 'value': row['value']} for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Failed to get historical vitals for {patientId}/{vitalType}: {e}")
+        return []
+
+async def getVitalsTimeBuckets(
+    patientId: str,
+    vitalType: str,
+    hoursBack: float = 24,
+    bucketMinutes: int = 5
+) -> list:
+    """
+    Get vitals aggregated into time buckets (for efficient trend analysis)
+
+    Args:
+        patientId: Patient identifier
+        vitalType: Type of vital
+        hoursBack: Number of hours to look back
+        bucketMinutes: Size of time buckets in minutes
+
+    Returns:
+        List of dicts with 'bucket', 'avgValue', 'minValue', 'maxValue', 'count'
+    """
+    query = """
+        SELECT time_bucket('%s minutes', time) AS bucket,
+               AVG(value) as "avgValue",
+               MIN(value) as "minValue",
+               MAX(value) as "maxValue",
+               COUNT(*) as count
+        FROM vitals_timeseries
+        WHERE "patientId" = $1
+          AND "vitalType" = $2
+          AND time > NOW() - INTERVAL '%s hours'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+    """
+
+    try:
+        async with getTimescaleConnection() as conn:
+            rows = await conn.fetch(query, bucketMinutes, patientId, vitalType, hoursBack)
+            return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Failed to get vitals time buckets for {patientId}/{vitalType}: {e}")
+        return []
+
+# ========================================
+# CROSS-PATIENT ANALYSIS METHODS
+# For Component 2: System-Level Alerts
+# ========================================
+
+async def getDevicePoolStatus() -> dict:
+    """
+    Get current device pool availability status
+
+    Returns:
+        Dict with 'available', 'assigned', 'total', 'availabilityPercent'
+    """
+    query = """
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'available') as available,
+            COUNT(*) FILTER (WHERE status = 'assigned') as assigned,
+            COUNT(*) as total
+        FROM devices
+        WHERE "deviceType" = 'ESP32_WATCH'
+    """
+
+    try:
+        async with getDbConnection() as conn:
+            result = await conn.fetchrow(query)
+            total = result['total'] or 0
+            available = result['available'] or 0
+            assigned = result['assigned'] or 0
+
+            return {
+                'available': available,
+                'assigned': assigned,
+                'total': total,
+                'availabilityPercent': (available / total * 100) if total > 0 else 0
+            }
+    except Exception as e:
+        logger.error(f"❌ Failed to get device pool status: {e}")
+        return {'available': 0, 'assigned': 0, 'total': 0, 'availabilityPercent': 0}
+
+async def countPatientsWithCondition(
+    wardId: str = None,
+    condition: str = 'fever',
+    timeWindowMinutes: int = 60
+) -> int:
+    """
+    Count patients meeting a specific condition in time window
+
+    Args:
+        wardId: Optional ward filter (None = all wards)
+        condition: 'fever' or 'spo2_declining'
+        timeWindowMinutes: Time window to check
+
+    Returns:
+        Count of affected patients
+    """
+
+    if condition == 'fever':
+        query = """
+            SELECT COUNT(DISTINCT p.id)
+            FROM patients p
+            JOIN vitals_timeseries v ON p.id = v."patientId"
+            WHERE ($1::TEXT IS NULL OR p."roomNumber" LIKE $1 || '%')
+              AND v."vitalType" = 'temperature'
+              AND v.value > 38.3
+              AND v.time > NOW() - INTERVAL '%s minutes'
+              AND p.status = 'active'
+        """
+    elif condition == 'spo2_declining':
+        query = """
+            WITH patient_spo2_trends AS (
+                SELECT
+                    p.id as "patientId",
+                    FIRST_VALUE(v.value) OVER (PARTITION BY p.id ORDER BY v.time ASC) as "firstSpo2",
+                    LAST_VALUE(v.value) OVER (PARTITION BY p.id ORDER BY v.time DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as "lastSpo2"
+                FROM patients p
+                JOIN vitals_timeseries v ON p.id = v."patientId"
+                WHERE ($1::TEXT IS NULL OR p."roomNumber" LIKE $1 || '%')
+                  AND v."vitalType" = 'oxygenSaturation'
+                  AND v.time > NOW() - INTERVAL '%s minutes'
+                  AND p.status = 'active'
+            )
+            SELECT COUNT(DISTINCT "patientId")
+            FROM patient_spo2_trends
+            WHERE ("firstSpo2" - "lastSpo2") / "firstSpo2" > 0.05
+        """
+    else:
+        return 0
+
+    try:
+        async with getTimescaleConnection() as conn:
+            result = await conn.fetchval(query, wardId, timeWindowMinutes)
+            return result or 0
+    except Exception as e:
+        logger.error(f"❌ Failed to count patients with condition {condition}: {e}")
+        return 0
+
+async def countRecentAdmissions(hoursBack: int = 24) -> int:
+    """
+    Count patients admitted in recent time period
+
+    Args:
+        hoursBack: Hours to look back
+
+    Returns:
+        Count of recent admissions
+    """
+    query = """
+        SELECT COUNT(*)
+        FROM patients
+        WHERE "admissionDate" > NOW() - INTERVAL '%s hours'
+          AND status = 'active'
+    """
+
+    try:
+        async with getDbConnection() as conn:
+            result = await conn.fetchval(query, hoursBack)
+            return result or 0
+    except Exception as e:
+        logger.error(f"❌ Failed to count recent admissions: {e}")
+        return 0

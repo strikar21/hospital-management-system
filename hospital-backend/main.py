@@ -93,11 +93,13 @@ from app.api.v1.system_admin import router as systemAdminRouter
 from app.api.v1.nursing import router as nursingRouter
 from app.api.v1.watch_management import router as watchManagementRouter
 from app.api.v1.device_management import router as deviceManagementRouter
+from app.api.v1.provisioning import router as provisioningRouter
 
 # Import v2 repository-based API endpoints
 from app.api.v2.patients import router as patientsV2Router
 from app.api.v2.medications import router as medicationsV2Router
 from app.api.v2.atomic_medical import router as atomicMedicalRouter
+from app.api.v2.devices import router as devicesV2Router
 
 # Configure logging with environment-based level
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")  # Default INFO for production
@@ -273,15 +275,20 @@ logger.info(f"✅ Watch management router registered successfully at {settings.a
 logger.info(f"🔄 Attempting to register device management router at {settings.apiV1Str}/devices")
 app.include_router(deviceManagementRouter, prefix=f"{settings.apiV1Str}/devices", tags=["Device Management"])
 logger.info(f"✅ Device management router registered successfully at {settings.apiV1Str}/devices")
+logger.info(f"🔄 Attempting to register provisioning router at {settings.apiV1Str}/provisioning")
+app.include_router(provisioningRouter, prefix=f"{settings.apiV1Str}/provisioning", tags=["Device Provisioning"])
+logger.info(f"✅ Provisioning router registered successfully at {settings.apiV1Str}/provisioning")
 
 # Register v2 repository-based API endpoints
 logger.info("🔄 Registering v2 repository-based API endpoints...")
 app.include_router(patientsV2Router, prefix="/api/v2/patients", tags=["Patients v2 (Repository)"])
 app.include_router(medicationsV2Router, prefix="/api/v2/medications", tags=["Medications v2 (Repository)"])
 app.include_router(atomicMedicalRouter, prefix="/api/v2", tags=["Atomic Medical Operations"])
+app.include_router(devicesV2Router, prefix="/api/v2/devices", tags=["Devices v2 (Unified SSOT)"])
 logger.info("✅ Patient API registered successfully")
 logger.info("✅ Medications API registered successfully")
 logger.info("✅ Atomic medical operations API registered successfully (replacing individual APIs)")
+logger.info("✅ Devices v2 API registered successfully (Single Source of Truth)")
 
 @app.on_event("startup")
 async def startup_event():
@@ -301,7 +308,17 @@ async def startup_event():
         # Seed staff credentials for authentication
         await seedStaffCredentials()
         logger.info("✅ Staff credentials seeded successfully")
-        
+
+        # Initialize Certificate Service for device mTLS authentication
+        try:
+            from app.services.certificate_service import CertificateService
+            ca_cert_path = os.path.join(os.path.dirname(__file__), "..", "mosquitto", "certs", "hospital_ca.crt")
+            ca_key_path = os.path.join(os.path.dirname(__file__), "..", "mosquitto", "certs", "hospital_ca.key")
+            app.state.certificate_service = CertificateService(ca_cert_path, ca_key_path)
+            logger.info("✅ Certificate service initialized for device provisioning")
+        except Exception as e:
+            logger.error(f"❌ Certificate service initialization failed: {e}")
+
         # Start WebSocket keepalive task
         from app.services.websocket_manager import startKeepaliveTask
         startKeepaliveTask()
@@ -333,6 +350,22 @@ async def startup_event():
         except Exception as e:
             logger.error(f"❌ Watch monitoring service startup error: {e}")
 
+        # Start system-level alert scheduler (Component 2)
+        try:
+            from app.services.alert_scheduler import start_system_alert_scheduler
+            asyncio.create_task(start_system_alert_scheduler())
+            logger.info("✅ System alert scheduler started - periodic checks every 5 minutes")
+        except Exception as e:
+            logger.error(f"❌ System alert scheduler startup error: {e}")
+
+        # Start patient state monitor (Component 4)
+        try:
+            from app.services.state_monitor import stateMonitor
+            await stateMonitor.start()
+            logger.info("✅ Patient state monitor started - vitals timeout detection active")
+        except Exception as e:
+            logger.error(f"❌ Patient state monitor startup error: {e}")
+
     except Exception as e:
         logger.error(f"❌ Startup failed: {e}")
         raise
@@ -361,6 +394,16 @@ async def shutdown_event():
         pass  # Service not available
     except Exception as e:
         logger.error(f"Error stopping watch monitor service: {e}")
+
+    # Stop patient state monitor
+    try:
+        from app.services.state_monitor import stateMonitor
+        await stateMonitor.stop()
+        logger.info("✅ Patient state monitor stopped")
+    except ImportError:
+        pass  # Service not available
+    except Exception as e:
+        logger.error(f"Error stopping state monitor service: {e}")
 
 @app.get("/health")
 async def healthCheck():

@@ -48,6 +48,50 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
         </div>
       </div>
 
+      {/* Device & Monitoring Section */}
+      {patient.assignedDeviceId && (
+        <div className="bg-blue-50 rounded-lg p-3 mb-2 flex-shrink-0">
+          <h3 className="text-sm font-semibold text-blue-800 mb-2">📟 Assigned Watch</h3>
+          <div className="grid grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="font-medium text-gray-600">Device ID:</span>{' '}
+              <span className="text-gray-900">{patient.assignedDeviceId}</span>
+            </div>
+            <div>
+              <span className="font-medium text-gray-600">Status:</span>
+              <span className={`ml-1 px-2 py-0.5 rounded font-medium ${
+                patient.deviceStatus === 'connected'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}>
+                {patient.deviceStatus === 'connected' ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium text-gray-600">Battery:</span>{' '}
+              <span className={`font-medium ${
+                (patient.deviceBatteryLevel || 0) <= 20 ? 'text-red-600' :
+                (patient.deviceBatteryLevel || 0) <= 40 ? 'text-amber-600' :
+                'text-green-600'
+              }`}>
+                {patient.deviceBatteryLevel || '--'}%
+              </span>
+            </div>
+            <div>
+              <span className="font-medium text-gray-600">Last Seen:</span>{' '}
+              <span className="text-gray-900">
+                {patient.deviceLastSeen
+                  ? new Date(patient.deviceLastSeen).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : '--'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Vital Trends Quick View */}
       <div className="bg-blue-50 rounded-lg p-3 mb-2 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">

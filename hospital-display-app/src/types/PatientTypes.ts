@@ -23,7 +23,19 @@ export interface patient {
   nurseInCharge: string;
   assignedDeviceId?: string;  // ID of assigned ESP32 watch device
   deviceStatus?: 'connected' | 'disconnected' | 'offline' | 'lowBattery';  // Real-time device status
-  deviceBattery?: number;  // Device battery level (0-100)
+  deviceBatteryLevel?: number;  // Device battery level (0-100) - matches backend field
+  deviceLastSeen?: string;  // Device last seen timestamp - matches backend field
+  deviceSerialNumber?: string;  // Device serial number
+  deviceName?: string;  // Device display name
+  deviceModel?: string;  // Device model
+  deviceManufacturer?: string;  // Device manufacturer
+  deviceMacAddress?: string;  // Device MAC address
+  deviceFirmwareVersion?: string;  // Device firmware version
+  deviceLocation?: string;  // Device location
+  deviceAssignedAt?: string;  // When device was assigned
+  deviceAssignedBy?: string;  // Who assigned the device
+  deviceCalibrationDate?: string;  // Last calibration date
+  deviceNextMaintenanceDate?: string;  // Next maintenance due date
   // Enhanced patient safety fields
   allergies?: allergy[];
   codeStatus?: 'fullcode' | 'dnr' | 'dnrcca' | 'comfortcare';
@@ -52,6 +64,27 @@ export interface patient {
     bioelectricalImpedance: number; // Ohms - bioelectrical impedance
     tremorIntensity: number; // 0-10 scale tremor intensity
     fallRisk: 'low' | 'medium' | 'high'; // Fall risk assessment
+
+    // Nested ECG/EEG Analysis Objects (8-12 Channel Support)
+    ecg?: {
+      // Computed ECG metrics (backend calculates)
+      rrInterval?: number; // RR interval in ms
+      qrsDuration?: number; // QRS duration in ms
+      qtInterval?: number; // QT interval in ms
+      axis?: number; // Heart axis in degrees
+      rhythm?: string; // Detected rhythm (sinus, afib, etc.)
+      stSegment?: 'normal' | 'elevated' | 'depressed'; // ST segment analysis
+    };
+    eeg?: {
+      // EEG band powers (backend calculates)
+      alphaPower?: number; // Alpha band (8-13 Hz)
+      betaPower?: number; // Beta band (13-30 Hz)
+      thetaPower?: number; // Theta band (4-8 Hz)
+      deltaPower?: number; // Delta band (0.5-4 Hz)
+      gammaPower?: number; // Gamma band (30-100 Hz)
+      dominantFrequency?: number; // Dominant frequency in Hz
+      seizureActivity?: boolean; // Seizure detection flag
+    };
 
     // Metadata - STANDARDIZED NAMES
     lastDataReceived: string;

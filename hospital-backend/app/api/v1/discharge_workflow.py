@@ -225,13 +225,17 @@ async def nurseCompleteDischarge(
 
                 now = datetime.now()
 
-                # Get assigned device ID before clearing it
-                assignedDeviceId = patient.get('assignedDeviceId')
+                # Get assigned device ID from deviceassignments table
+                assignment = await conn.fetchrow(
+                    'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
+                    patientId
+                )
+                assignedDeviceId = assignment['deviceId'] if assignment else None
                 deviceUnassigned = False
 
                 # Complete discharge: update status to 'discharged' and dischargestatus to 'completed'
                 await conn.execute(
-                    'UPDATE patients SET status = \'discharged\', "dischargeStatus" = \'completed\', "dischargeDate" = $1, "assignedDeviceId" = NULL, "updatedAt" = $2 WHERE id = $3',
+                    'UPDATE patients SET status = \'discharged\', "dischargeStatus" = \'completed\', "dischargeDate" = $1, "updatedAt" = $2 WHERE id = $3',
                     now, now, patientId
                 )
                 logger.info(f"✅ Patient {patientId} marked as discharged")
@@ -244,9 +248,9 @@ async def nurseCompleteDischarge(
                         now, assignedDeviceId, patientId
                     )
 
-                    # Update device status to available and clear patient assignment
+                    # Update device status to available (assignment tracked in deviceassignments table)
                     await conn.execute(
-                        'UPDATE devices SET "assignedPatientId" = NULL, status = \'available\' WHERE id = $1',
+                        'UPDATE devices SET status = \'available\' WHERE id = $1',
                         assignedDeviceId
                     )
 

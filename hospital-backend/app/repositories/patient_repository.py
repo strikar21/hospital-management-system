@@ -24,6 +24,44 @@ class PatientRepository(BaseRepository[Patient]):
     # PATIENT CORE OPERATIONS
     # ================================
 
+    async def get_by_id(self, patient_id: str) -> Optional[Dict[str, Any]]:
+        """Override get_by_id to include device assignment data via JOIN"""
+        try:
+            # JOIN with deviceassignments AND devices to get assigned device info and connection status
+            query = """
+                SELECT p.*,
+                       da."deviceId" as "assignedDeviceId",
+                       da."assignedAt" as "deviceAssignedAt",
+                       da."assignedBy" as "deviceAssignedBy",
+                       d."serialNumber" as "deviceSerialNumber",
+                       d."name" as "deviceName",
+                       d."model" as "deviceModel",
+                       d."manufacturer" as "deviceManufacturer",
+                       d."macAddress" as "deviceMacAddress",
+                       d."firmwareVersion" as "deviceFirmwareVersion",
+                       d."lastSeen" as "deviceLastSeen",
+                       d."batteryLevel" as "deviceBatteryLevel",
+                       d."location" as "deviceLocation",
+                       d."calibrationDate" as "deviceCalibrationDate",
+                       d."nextMaintenanceDate" as "deviceNextMaintenanceDate",
+                       CASE
+                           WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                           WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
+                           ELSE 'offline'
+                       END as "deviceStatus"
+                FROM patients p
+                LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
+                LEFT JOIN devices d ON da."deviceId" = d.id
+                WHERE p.id = $1
+            """
+
+            results = await self.execute_custom_query(query, [patient_id])
+            return results[0] if results else None
+
+        except Exception as e:
+            self.logger.error(f"Error fetching patient {patient_id} with device assignment: {e}")
+            raise
+
     async def get_by_patient_id(self, patient_id: str) -> List[Dict[str, Any]]:
         """Get patient records by patient ID (implements base class abstract method)"""
         # For patients, this is the same as get_by_id since patient_id IS the id
@@ -53,8 +91,18 @@ class PatientRepository(BaseRepository[Patient]):
                 SELECT p.*,
                        da."deviceId" as "assignedDeviceId",
                        da."assignedAt" as "deviceAssignedAt",
+                       da."assignedBy" as "deviceAssignedBy",
+                       d."serialNumber" as "deviceSerialNumber",
+                       d."name" as "deviceName",
+                       d."model" as "deviceModel",
+                       d."manufacturer" as "deviceManufacturer",
+                       d."macAddress" as "deviceMacAddress",
+                       d."firmwareVersion" as "deviceFirmwareVersion",
                        d."lastSeen" as "deviceLastSeen",
                        d."batteryLevel" as "deviceBatteryLevel",
+                       d."location" as "deviceLocation",
+                       d."calibrationDate" as "deviceCalibrationDate",
+                       d."nextMaintenanceDate" as "deviceNextMaintenanceDate",
                        CASE
                            WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
                            WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'

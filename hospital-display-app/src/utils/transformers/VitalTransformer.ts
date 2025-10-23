@@ -23,7 +23,7 @@ export class VitalTransformer extends BaseTransformer {
     const systolic = vitals.systolicPressure || 0;
     const diastolic = vitals.diastolicPressure || (systolic > 0 ? Math.round(systolic * 0.67) : 0);
 
-    return {
+    const result: any = {
       heartRate: this.transformField(vitals, 'heartRate', 0),
       systolicPressure: systolic,
       diastolicPressure: diastolic,
@@ -40,6 +40,33 @@ export class VitalTransformer extends BaseTransformer {
       dataQualityScore: this.transformField(vitals, 'dataQualityScore', 0),
       timestamp: this.transformField(vitals, 'timestamp', new Date().toISOString())
     };
+
+    // Add nested ECG object if present (8-12 channel support)
+    if (vitals.ecg) {
+      result.ecg = {
+        rrInterval: vitals.ecg.rrInterval,
+        qrsDuration: vitals.ecg.qrsDuration,
+        qtInterval: vitals.ecg.qtInterval,
+        axis: vitals.ecg.axis,
+        rhythm: vitals.ecg.rhythm,
+        stSegment: vitals.ecg.stSegment
+      };
+    }
+
+    // Add nested EEG object if present (8-channel support)
+    if (vitals.eeg) {
+      result.eeg = {
+        alphaPower: vitals.eeg.alphaPower,
+        betaPower: vitals.eeg.betaPower,
+        thetaPower: vitals.eeg.thetaPower,
+        deltaPower: vitals.eeg.deltaPower,
+        gammaPower: vitals.eeg.gammaPower,
+        dominantFrequency: vitals.eeg.dominantFrequency,
+        seizureActivity: vitals.eeg.seizureActivity
+      };
+    }
+
+    return result;
   }
 
   /**

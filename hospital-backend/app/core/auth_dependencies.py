@@ -178,6 +178,16 @@ async def require_medical_staff(current_user: dict = Depends(get_current_user)) 
         )
     return current_user
 
+async def require_admin_or_medical(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require Administrator, Doctor, or Nurse role - for device management"""
+    if current_user.get("role") not in ["Administrator", "Doctor", "Nurse"]:
+        logger.warning(f"Access denied: {current_user.get('id')} with role {current_user.get('role')}, required Administrator, Doctor, or Nurse")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Required role: Administrator, Doctor, or Nurse"
+        )
+    return current_user
+
 async def require_any_staff(current_user: dict = Depends(get_current_user)) -> dict:
     """Require any staff role"""
     allowed_roles = ["Doctor", "Nurse", "Administrator", "Technician", "Lab Technician", "Radiologist"]
@@ -247,7 +257,7 @@ async def verify_device_key(device_key: str = None) -> dict:
 
     # Verify device key exists in database
     async with getDbConnection() as conn:
-        query = '''SELECT id, name, "deviceType", status, "assignedPatientId"
+        query = '''SELECT id, name, "deviceType", status
                    FROM devices
                    WHERE "deviceKey" = $1'''
         device_row = await conn.fetchrow(query, device_key)
@@ -270,6 +280,12 @@ async def verify_device_key(device_key: str = None) -> dict:
                 detail="Device is not active",
             )
 
+        # Get assigned patient from deviceassignments table
+        assignment = await conn.fetchrow(
+            'SELECT "patientId" FROM deviceassignments WHERE "deviceId" = $1 AND status = \'active\'',
+            device_dict["id"]
+        )
+
         # Update last seen timestamp
         await conn.execute(
             'UPDATE devices SET "lastSeen" = NOW() WHERE id = $1',
@@ -284,5 +300,5 @@ async def verify_device_key(device_key: str = None) -> dict:
             "name": device_dict["name"],
             "deviceType": device_dict["deviceType"],
             "status": device_dict["status"],
-            "assignedPatientId": device_dict.get("assignedPatientId"),
+            "assignedPatientId": assignment['patientId'] if assignment else None,
         }

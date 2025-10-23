@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     accessTokenExpireMinutes: int = Field(default=30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
+    # ESP32 Device Authentication (HMAC-SHA256)
+    esp32FactorySecret: str = Field(
+        default="CHANGE_THIS_IN_PRODUCTION_ESP32_HMAC_SECRET_KEY_MIN_64_CHARS_REQUIRED",
+        validation_alias="ESP32_FACTORY_SECRET"
+    )
+    esp32TimestampWindow: int = Field(
+        default=300,  # 5 minutes - maximum age of timestamp in seconds
+        validation_alias="ESP32_TIMESTAMP_WINDOW"
+    )
+
     # API Settings
     apiV1Str: str = Field(default="/api/v1", validation_alias="API_V1_STR")
     projectName: str = Field(default="Hospital Management System", validation_alias="PROJECT_NAME")

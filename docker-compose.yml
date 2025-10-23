@@ -38,6 +38,24 @@ services:
       timeout: 5s
       retries: 5
 
+  mosquitto:
+    image: eclipse-mosquitto:1.6
+    container_name: hospital_mosquitto
+    ports:
+      - "8883:8883"  # TLS MQTT
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - ./mosquitto/certs:/mosquitto/certs:ro
+      - ./mosquitto/data:/mosquitto/data
+    restart: unless-stopped
+    # Healthcheck disabled - certificate-based auth requires client certificate
+    # Manual check: docker logs hospital_mosquitto
+    # healthcheck:
+    #   test: ["CMD-SHELL", "mosquitto_sub -h localhost -p 8883 --cafile /mosquitto/certs/hospital_ca.crt --cert /path/to/client.crt --key /path/to/client.key -t '$$SYS/#' -C 1 || exit 1"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
 volumes:
   postgres_data:
   timescale_data:

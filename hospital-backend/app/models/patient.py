@@ -54,7 +54,7 @@ class Patient(PatientBase):
     id: str
     admissionDate: Optional[datetime] = None
     dischargeDate: Optional[datetime] = None
-    assignedDeviceId: Optional[str] = None
+    # Note: Device assignments are tracked in deviceassignments table, not here
     status: str = "active"
     createdAt: datetime
     updatedAt: datetime
@@ -144,11 +144,16 @@ class Patient(PatientBase):
 
     @property
     def deviceStatus(self) -> str:
-        """Device status for frontend compatibility"""
-        # This would be populated from device assignment data
-        if self.assignedDeviceId:
-            return "connected"  # Default assumption
-        return "disconnected"
+        """Device status for frontend compatibility
+
+        Note: Device assignments are tracked in deviceassignments table.
+        This property returns a default value. For actual device status,
+        query the deviceassignments table and check device.lastSeen timestamp.
+        Use API endpoints like /api/v1/watchmanagement/assigned for accurate status.
+        """
+        # Device status should be queried separately via deviceassignments table
+        # This is a placeholder for backward compatibility
+        return "unknown"
 
     @property
     def age(self) -> int:

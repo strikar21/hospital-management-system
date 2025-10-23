@@ -49,17 +49,32 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
       const authInfo = await AuthService.checkAuthType(staffIdtocheck);
 
       if (authInfo) {
-        if (authInfo.requiresPin) {
-          setAuthType('pin');
-        } else if (authInfo.requiresPassword) {
-          setAuthType('password');
+        // ROLE-BASED AUTH METHOD PRIORITY
+        // Administrator (ADM) and Provisioner (PRV) → Always use PASSWORD
+        // Doctor (DOC), Nurse (NUR), Technician (TEC) → Always use PIN
+        // This handles cases where users have both PIN and password in database
+
+        if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
+          // Admin/Provisioner: Prefer password over PIN
+          if (authInfo.requiresPassword) {
+            setAuthType('password');
+          } else if (authInfo.requiresPin) {
+            setAuthType('pin');  // Fallback if no password
+          }
+        } else {
+          // Everyone else (doctors, nurses, technicians): Prefer PIN over password
+          if (authInfo.requiresPin) {
+            setAuthType('pin');
+          } else if (authInfo.requiresPassword) {
+            setAuthType('password');  // Fallback if no PIN
+          }
         }
       } else {
         // If staff endpoint fails, default based on staff ID pattern
-        if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
-          setAuthType('pin');
-        } else if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
+        if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
           setAuthType('password');
+        } else if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
+          setAuthType('pin');
         } else {
           setError('Staff ID not found. Please check and try again.');
           setAuthType('unknown');
@@ -67,10 +82,10 @@ export const HybridLogin: React.FC<HybridLoginProps> = ({ onLogin }) => {
       }
     } catch (err) {
       // If staff endpoint fails, default based on staff ID pattern
-      if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
-        setAuthType('pin');
-      } else if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
+      if (staffIdtocheck.startsWith('ADM') || staffIdtocheck.startsWith('PRV')) {
         setAuthType('password');
+      } else if (staffIdtocheck.startsWith('DOC') || staffIdtocheck.startsWith('NUR') || staffIdtocheck.startsWith('TEC')) {
+        setAuthType('pin');
       } else {
         setError('');
         setAuthType('unknown');

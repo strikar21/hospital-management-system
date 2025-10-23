@@ -33,7 +33,8 @@ async def getWardDashboard(
                     p."attendingPhysician", p."nurseInCharge", p."admissionDate",
                     d.id as "deviceId", d."deviceType", d.status as devicestatus
                 FROM patients p
-                LEFT JOIN devices d ON p."assignedDeviceId" = d.id
+                LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da.status = 'active'
+                LEFT JOIN devices d ON da."deviceId" = d.id
                 WHERE p.status = 'active'
                 AND (p."roomNumber" LIKE $1 OR $1 IS NULL)
                 ORDER BY p."roomNumber", p."bedNumber"

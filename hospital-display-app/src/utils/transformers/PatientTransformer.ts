@@ -93,14 +93,32 @@ export class PatientTransformer extends BaseTransformer {
   }
 
   /**
-   * Transform device information
+   * Transform device information - ALL DEVICE FIELDS FROM BACKEND
    */
   private static transformDeviceInfo(data: any): any {
     return {
+      // Device assignment fields
       assignedDeviceId: PatientTransformer.transformField(data, 'assignedDeviceId'),
-      deviceStatus: PatientTransformer.transformField(data, 'deviceStatus', 'disconnected'),
-      deviceType: PatientTransformer.transformField(data, 'deviceType'),
-      deviceBattery: PatientTransformer.transformField(data, 'deviceBattery', 0)
+      deviceAssignedAt: PatientTransformer.transformField(data, 'deviceAssignedAt'),
+      deviceAssignedBy: PatientTransformer.transformField(data, 'deviceAssignedBy'),
+
+      // Device status and monitoring
+      deviceStatus: PatientTransformer.transformField(data, 'deviceStatus', 'offline'),
+      deviceBatteryLevel: PatientTransformer.transformField(data, 'deviceBatteryLevel'),
+      deviceLastSeen: PatientTransformer.transformField(data, 'deviceLastSeen'),
+
+      // Device specifications
+      deviceSerialNumber: PatientTransformer.transformField(data, 'deviceSerialNumber'),
+      deviceName: PatientTransformer.transformField(data, 'deviceName'),
+      deviceModel: PatientTransformer.transformField(data, 'deviceModel'),
+      deviceManufacturer: PatientTransformer.transformField(data, 'deviceManufacturer'),
+      deviceMacAddress: PatientTransformer.transformField(data, 'deviceMacAddress'),
+      deviceFirmwareVersion: PatientTransformer.transformField(data, 'deviceFirmwareVersion'),
+      deviceLocation: PatientTransformer.transformField(data, 'deviceLocation'),
+
+      // Device maintenance
+      deviceCalibrationDate: PatientTransformer.transformField(data, 'deviceCalibrationDate'),
+      deviceNextMaintenanceDate: PatientTransformer.transformField(data, 'deviceNextMaintenanceDate')
     };
   }
 
