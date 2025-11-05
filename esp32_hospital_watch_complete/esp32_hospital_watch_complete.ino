@@ -1,6 +1,6 @@
 /*
  * ESP32 Hospital Watch - Certificate-Based Authentication + Waveform Streaming
- * Version: 5.2.12
+ * Version: 5.2.13
  *
  * Features:
  * - Automatic captive portal when connecting to hotspot
@@ -30,6 +30,8 @@
  * - ✅ v5.2.9: CRITICAL BUGFIX - Simulator mode initialization (GPIO-based ECG/EEG selection)
  * - ✅ v5.2.10: CRITICAL BUGFIX - EEG timing fix (phase increments once per sample, not per channel)
  * - ✅ v5.2.11: MEDICAL ACCURACY FIX - Channel-specific frequency mixing (frontal=beta, occipital=alpha)
+ * - ✅ v5.2.13: CRITICAL BUGFIX - Non-blocking calibration (removes 3.7s freeze, waveforms stream during calibration)
+ * - ✅ v5.2.13: FEATURE - EEG calibration pulse support (100μV pulse, mode-specific calibration)
  *
  * CHANGES FROM v5.0:
  * ✅ v5.1: PhysiologicalSimulator for realistic patient vitals
@@ -224,6 +226,11 @@ bool wasMqttConnected = false;
 unsigned long disconnectTrackerLastCheck = 0;
 unsigned long lastCommandReceivedAt = 0;
 bool waveformCalibrationDue = false;
+
+// ✅ v5.2.13: Non-blocking calibration tracking
+bool calibrationRequested = false;
+String calibrationCommandId = "";
+unsigned long calibrationStartMillis = 0;
 
 // ====================================
 // SYSTEM ALERTS
@@ -941,35 +948,28 @@ void handlePingCommand(String commandId) {
 void handleWaveformCalibrationCommand(String commandId) {
   Serial.println("🔧 Waveform calibration command received");
 
-  // ✅ Trigger physiological simulator waveform calibration (3000ms: 1000ms head + 1000ms pulse + 1000ms tail)
+  // ✅ v5.2.13: NON-BLOCKING calibration - set flags and return immediately
+  // PhysiologicalSimulator will generate calibration waveforms for next 3 seconds
+  // loop() will detect completion and publish result
   simulator.startCalibrationPulse();
+  calibrationRequested = true;
+  calibrationCommandId = commandId;
+  calibrationStartMillis = millis();
 
-  // Flash LED to indicate waveform calibration in progress (non-blocking pattern)
-  for (int i = 0; i < 3; i++) {
+  // Flash LED briefly (200ms total - acceptable blocking for visual feedback)
+  for (int i = 0; i < 2; i++) {
     digitalWrite(2, HIGH);
-    delay(100);
+    delay(50);
     digitalWrite(2, LOW);
-    delay(100);
+    delay(50);
   }
 
-  // Wait for waveform calibration to complete (3000ms + margin)
-  delay(3100);
-
-  // Publish completion notification
-  String topic = "hospital/devices/" + deviceId + "/waveform_calibration_complete";
-  JsonDocument doc;
-  doc["timestamp"] = getISO8601Timestamp();
-  doc["success"] = true;
-  doc["duration"] = 3000;  // ms (1000ms head + 1000ms pulse + 1000ms tail)
-
-  String payload;
-  serializeJson(doc, payload);
-  publishWithRetry(topic.c_str(), payload.c_str());  // ✅ v5.2.1: QoS 1 with retry
-
   waveformCalibrationDue = false;
-  sendCommandAck(commandId, true, "Waveform calibration sent to all ECG leads (3000ms)");
 
-  Serial.println("✅ Waveform calibration complete - waveforms will contain calibration data");
+  // Send immediate acknowledgment (calibration started)
+  sendCommandAck(commandId, true, "Waveform calibration started (3000ms non-blocking)");
+
+  Serial.println("✅ Waveform calibration started - waveforms will stream during calibration");
   digitalWrite(2, HIGH);
 }
 
@@ -1134,6 +1134,35 @@ void loop() {
 
     sendVitals();  // Already handles offline queueing internally
     lastVitals = millis();
+  }
+
+  // ✅ v5.2.13: Check if calibration completed (non-blocking detection)
+  if (calibrationRequested && !simulator.isCalibrationActive()) {
+    Serial.println("🔧 Calibration pulse complete - publishing completion message");
+
+    // Detect current mode from GPIO
+    bool isECGMode = (digitalRead(MODE_SELECT_PIN) == HIGH);
+    String mode = isECGMode ? "ecg" : "eeg";
+
+    // Publish completion notification
+    String topic = "hospital/devices/" + deviceId + "/waveform_calibration_complete";
+    JsonDocument doc;
+    doc["timestamp"] = getISO8601Timestamp();
+    doc["success"] = true;
+    doc["duration"] = 3000;  // ms (1000ms head + 1000ms pulse + 1000ms tail)
+    doc["mode"] = mode;      // ✅ NEW: Report which mode was calibrated
+
+    String payload;
+    serializeJson(doc, payload);
+    publishWithRetry(topic.c_str(), payload.c_str());
+
+    Serial.print("✅ Calibration complete - mode: ");
+    Serial.println(mode);
+
+    // Reset flags
+    calibrationRequested = false;
+    calibrationCommandId = "";
+    calibrationStartMillis = 0;
   }
 
   // ✅ v5.2.4: Generate micro-batches even when offline (ECG/EEG never stops)

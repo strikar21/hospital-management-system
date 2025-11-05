@@ -545,6 +545,24 @@ PhysiologicalSimulator::WaveformMode PhysiologicalSimulator::getMode() {
 
 // ✅ v5.2.10: Generate EEG sample WITHOUT updating phase (phase is managed externally like ECG)
 void PhysiologicalSimulator::generateEEGSampleWithPhase(int channel, int32_t& sample) {
+    // ✅ v5.2.13: Check if calibration pulse is active (takes priority over normal EEG)
+    if (isCalibrationActive()) {
+        unsigned long elapsed = (unsigned long)(millis() - calibrationStartTime);
+
+        // Extended calibration: 1000ms head (flat) → 1000ms pulse (100μV) → 1000ms tail (flat)
+        if (elapsed < 1000) {
+            // Head: baseline (0μV)
+            sample = 8388608;  // ADC midpoint
+        } else if (elapsed < 2000) {
+            // Pulse: 100μV square wave (1/10th of ECG's 1mV for proper scaling)
+            sample = 8388608 + 10000;  // 100μV above baseline
+        } else {
+            // Tail: baseline (0μV)
+            sample = 8388608;
+        }
+        return;  // Skip normal EEG generation during calibration
+    }
+
     // Generate waveform based on activity state and channel (using current phase)
     float amplitude = generateEEGWaveform(eegPhase, channel);
 
