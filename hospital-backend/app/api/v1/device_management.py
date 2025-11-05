@@ -13,6 +13,7 @@ import uuid
 
 from ...core.database import getDbConnection
 from ...services.audit import logAuditEvent
+from ...services.mqtt_service import mqttService
 from ...core.auth_dependencies import require_admin, require_medical_staff, get_current_user
 from ...middleware.staff_resolution_middleware import resolve_staff_in_response
 
@@ -459,6 +460,11 @@ async def removeDevice(
                     'UPDATE deviceassignments SET status = \'forceRemoved\', "unassignedAt" = $1 WHERE "deviceId" = $2 AND status = \'active\'',
                     datetime.now(), deviceId
                 )
+
+                # Notify device via MQTT to stop operations
+                mqttSuccess = await mqttService.publishDeassignment(deviceId)
+                if not mqttSuccess:
+                    logger.warning(f"⚠️ MQTT deassignment notification failed for {deviceId}")
 
             # Get device info before deletion
             deviceInfo = await conn.fetchrow('SELECT name, "deviceType" FROM devices WHERE id = $1', deviceId)

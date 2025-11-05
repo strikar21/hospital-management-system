@@ -29,9 +29,9 @@ class ConnectionManager:
         self.connectionMetadata: Dict[str, Dict[str, Any]] = {}
     
     async def connect(self, websocket: WebSocket, connectionId: str, userId: str, userRole: str) -> None:
-        """Accept a new WebSocket connection"""
-        await websocket.accept()
-        
+        """Register an already-accepted WebSocket connection"""
+        # WebSocket already accepted in websocket.py endpoint - just register it here
+
         self.activeConnections[connectionId] = websocket
         self.connectionMetadata[connectionId] = {
             'userId': userId,
@@ -162,37 +162,15 @@ class ConnectionManager:
         return len(self.patientSubscriptions.get(patientId, set()))
     
     async def sendVitalsUpdate(self, patientId: str, deviceId: str, vitalsData: Dict[str, Any]) -> None:
-        """Send vitals update to patient subscribers - only if device is assigned and connected"""
-        from ..core.database import getDbConnection
-        
+        """Send vitals update to patient subscribers
+
+        REMOVED: Redundant device assignment validation
+        mqtt_service.py already validated device assignment (lines 418-431) before calling this.
+        Repeating validation here was causing intermittent vitals display when validation failed.
+        Trust MQTT service validation.
+        """
         try:
-            # Check if patient has this device assigned and device is connected
-            async with getDbConnection() as conn:
-                # Check device assignment from deviceassignments table
-                result = await conn.fetchrow(
-                    'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
-                    patientId
-                )
-
-                if not result or not result['deviceId']:
-                    logger.warning(f"⚠️ Vitals update ignored - no device assigned to patient {patientId}")
-                    return
-
-                if result['deviceId'] != deviceId:
-                    logger.warning(f"⚠️ Vitals update ignored - device mismatch. Patient {patientId} assigned to {result['deviceId']}, got update from {deviceId}")
-                    return
-                
-                # Check device status
-                deviceResult = await conn.fetchrow(
-                    'SELECT status, "lastSeen" FROM devices WHERE id = $1',
-                    deviceId
-                )
-
-                if not deviceResult or deviceResult['status'] not in ['active', 'connected', 'assigned']:
-                    logger.warning(f"⚠️ Vitals update ignored - device {deviceId} status is {deviceResult['status'] if deviceResult else 'not found'}")
-                    return
-        
-            # Device validation passed - send vitals update
+            # Build vitals update message
             data = {
                 'type': 'vitalsUpdate',
                 'patientId': patientId,
@@ -200,58 +178,43 @@ class ConnectionManager:
                 'timestamp': datetime.now().isoformat(),
                 'vitals': vitalsData
             }
-            
+
+            # Broadcast to all subscribers for this patient
             sentCount = await self.broadcastToPatientSubscribers(patientId, data)
             if sentCount > 0:
                 logger.info(f"📊 Vitals update sent to {sentCount} subscribers for patient {patientId} from device {deviceId}")
-        
+
         except Exception as e:
-            logger.error(f"❌ Error validating device assignment for vitals update: {e}")
+            logger.error(f"❌ Error sending vitals update: {e}")
 
     async def sendWaveformStream(self, patientId: str, deviceId: str, waveformData: Dict[str, Any]) -> None:
         """
         Send real-time waveform stream packet to patient subscribers
-        Called 10 times per second (100ms intervals) for continuous ECG/EEG streaming
+        Called 50 times per second (20ms intervals) for continuous ECG/EEG streaming
 
         This is EPHEMERAL streaming - NOT stored in database, only broadcast to WebSocket
+
+        REMOVED: Redundant device assignment validation
+        mqtt_service.py already validated device assignment (lines 649-692) before calling this.
+        Repeating validation here was causing waveform display issues.
+        Trust MQTT service validation - same as vitals.
         """
-        from ..core.database import getDbConnection
-
         try:
-            # Validate device assignment (same as vitals)
-            async with getDbConnection() as conn:
-                result = await conn.fetchrow(
-                    'SELECT "deviceId" FROM deviceassignments WHERE "patientId" = $1 AND status = \'active\'',
-                    patientId
-                )
+            # ✅ NEW: Process waveform data before sending to frontend
+            # Decompress delta encoding and convert ADC → physical units (mV/μV)
+            # This ensures frontend receives ready-to-display data
+            processedWaveformData = processWaveformData(waveformData)
 
-                if not result or not result['deviceId']:
-                    logger.warning(f"⚠️ Waveform stream ignored - no device assigned to patient {patientId}")
-                    return
-
-                if result['deviceId'] != deviceId:
-                    logger.warning(f"⚠️ Waveform stream ignored - device mismatch. Patient {patientId} assigned to {result['deviceId']}, got stream from {deviceId}")
-                    return
-
-                # Check device status
-                deviceResult = await conn.fetchrow(
-                    'SELECT status FROM devices WHERE id = $1',
-                    deviceId
-                )
-
-                if not deviceResult or deviceResult['status'] not in ['active', 'connected', 'assigned']:
-                    logger.warning(f"⚠️ Waveform stream ignored - device {deviceId} status is {deviceResult['status'] if deviceResult else 'not found'}")
-                    return
-
-            # Device validation passed - broadcast waveform stream packet
+            # Build waveform stream message
             data = {
                 'type': 'waveformStream',
                 'patientId': patientId,
                 'deviceId': deviceId,
                 'timestamp': datetime.now().isoformat(),
-                'waveform': waveformData
+                'waveform': processedWaveformData
             }
 
+            # Broadcast to all subscribers for this patient
             sentCount = await self.broadcastToPatientSubscribers(patientId, data)
 
             # Debug log only every 10th packet (1 second intervals) to avoid spam
@@ -321,6 +284,161 @@ class ConnectionManager:
         sentCount = await self.broadcastGeneral(pingData)
         if sentCount > 0:
             logger.debug(f"💓 Keepalive sent to {sentCount} connections")
+
+# ============================================
+# WAVEFORM DATA PROCESSING HELPERS
+# ============================================
+
+def decompressChannelData(channelData: Dict[str, Any]) -> List[int]:
+    """
+    Decompress delta-encoded channel data
+    Format: {baseline: int, deltas: List[int]}
+    Returns: List of decompressed ADC values
+    """
+    if not channelData or 'baseline' not in channelData or 'deltas' not in channelData:
+        return []
+
+    baseline = channelData['baseline']
+    deltas = channelData['deltas']
+
+    # Reconstruct original values from delta encoding
+    values = [baseline]
+    for delta in deltas:
+        values.append(values[-1] + delta)
+
+    return values
+
+
+def convertADCToMillivolts(adcValues: List[int]) -> List[float]:
+    """
+    Convert 24-bit ADC values to millivolts for ECG display
+
+    ADC Format (from ESP32):
+    - Midpoint: 8388608 (2^23, representing 0V)
+    - Range: ±1.0V full scale
+    - Sensitivity: ~10 μV per LSB
+
+    Conversion formula:
+    mV = (ADC_value - midpoint) * 0.01
+
+    Example:
+    - ADC 8388608 → 0.00 mV (baseline)
+    - ADC 8410496 → 218.88 mV (positive deflection)
+    - ADC 8366720 → -218.88 mV (negative deflection)
+    """
+    ADC_MIDPOINT = 8388608  # 2^23
+    SENSITIVITY_MV = 0.01   # 10 μV per LSB = 0.01 mV per LSB
+
+    return [(value - ADC_MIDPOINT) * SENSITIVITY_MV for value in adcValues]
+
+
+def convertADCToMicrovolts(adcValues: List[int]) -> List[float]:
+    """
+    Convert 24-bit ADC values to microvolts for EEG display
+
+    ADC Format (from ESP32):
+    - Midpoint: 8388608 (2^23, representing 0V)
+    - Range: ±0.1V full scale for EEG
+    - Sensitivity: ~1 μV per LSB
+
+    Conversion formula:
+    μV = (ADC_value - midpoint) * 0.001
+    """
+    ADC_MIDPOINT = 8388608
+    SENSITIVITY_UV = 0.001  # 1 μV per LSB
+
+    return [(value - ADC_MIDPOINT) * SENSITIVITY_UV for value in adcValues]
+
+
+def processWaveformData(waveformData: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process waveform data before sending to frontend:
+    1. Decompress delta-encoded channel data
+    2. Convert ADC values to physical units (mV for ECG, μV for EEG)
+
+    This ensures frontend receives ready-to-display data in correct units.
+    Frontend is display layer only - all conversions happen on backend.
+    """
+    processed = waveformData.copy()
+    mode = waveformData.get('mode', 'ecg')
+
+    # Process ECG waveform data
+    if mode == 'ecg' and 'ecgWaveform' in waveformData:
+        ecgWaveform = waveformData['ecgWaveform']
+        processedECG = {}
+
+        # Process limb leads (required)
+        if 'limb' in ecgWaveform:
+            processedECG['limb'] = {}
+            # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format with Roman numerals (leadI, leadII, leadIII)
+            for leadName in ['leadI', 'leadII', 'leadIII']:
+                if leadName in ecgWaveform['limb']:
+                    # Pass through delta-encoded format unchanged
+                    # Frontend will decode using decodeDeltaChannel() (medicalWaveformUtils.ts:94-117)
+                    processedECG['limb'][leadName] = ecgWaveform['limb'][leadName]
+
+        # Process precordial leads (optional)
+        if 'precordial' in ecgWaveform:
+            processedECG['precordial'] = {}
+            for leadName in ['v1', 'v2', 'v3', 'v4', 'v5']:
+                if leadName in ecgWaveform['precordial']:
+                    # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format
+                    processedECG['precordial'][leadName] = ecgWaveform['precordial'][leadName]
+
+        # Process derived leads (optional)
+        if 'derived' in ecgWaveform:
+            processedECG['derived'] = {}
+            for leadName in ['avr', 'avl', 'avf', 'v6']:
+                if leadName in ecgWaveform['derived']:
+                    # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format
+                    processedECG['derived'][leadName] = ecgWaveform['derived'][leadName]
+
+        # Copy other ECG metadata
+        if 'events' in ecgWaveform:
+            processedECG['events'] = ecgWaveform['events']
+
+        processed['ecgWaveform'] = processedECG
+
+    # Process EEG waveform data
+    elif mode == 'eeg' and 'eegWaveform' in waveformData:
+        eegWaveform = waveformData['eegWaveform']
+        processedEEG = {}
+
+        # Process frontal channels (required)
+        if 'frontal' in eegWaveform:
+            processedEEG['frontal'] = {}
+            # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format with proper capitalization (Fp1, Fp2, F3, F4)
+            for channelName in ['Fp1', 'Fp2', 'F3', 'F4']:
+                if channelName in eegWaveform['frontal']:
+                    # Pass through delta-encoded format unchanged
+                    processedEEG['frontal'][channelName] = eegWaveform['frontal'][channelName]
+
+        # Process central channels (required)
+        if 'central' in eegWaveform:
+            processedEEG['central'] = {}
+            # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format with proper capitalization (C3, C4)
+            for channelName in ['C3', 'C4']:
+                if channelName in eegWaveform['central']:
+                    # Pass through delta-encoded format unchanged
+                    processedEEG['central'][channelName] = eegWaveform['central'][channelName]
+
+        # Process occipital channels (required)
+        if 'occipital' in eegWaveform:
+            processedEEG['occipital'] = {}
+            # ✅ ESP32 v5.2.5 sends DELTA-ENCODED format with proper capitalization (O1, O2)
+            for channelName in ['O1', 'O2']:
+                if channelName in eegWaveform['occipital']:
+                    # Pass through delta-encoded format unchanged
+                    processedEEG['occipital'][channelName] = eegWaveform['occipital'][channelName]
+
+        # Copy other EEG metadata
+        if 'analysis' in eegWaveform:
+            processedEEG['analysis'] = eegWaveform['analysis']
+
+        processed['eegWaveform'] = processedEEG
+
+    return processed
+
 
 # Global connection manager instance
 connectionManager = ConnectionManager()

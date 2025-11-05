@@ -225,7 +225,30 @@ export class DeviceService extends BaseService {
       if (patientId) params.append('patientId', patientId);
 
       const response = await this.fetchFromBackend(`/v2/devices/?${params.toString()}`);
-      return response?.devices || [];
+
+      // Transform V2 API device format to deviceAssignmentRecord format
+      const devices = response?.devices || [];
+      const transformed = devices
+        .filter((device: any) => device.assignmentStatus === 'active' && device.assignedPatientId)
+        .map((device: any) => ({
+          id: device.assignmentId,
+          deviceId: device.deviceId || device.id,
+          patientId: device.assignedPatientId,
+          performedBy: device.assignedBy,
+          assignmentReason: device.assignmentReason || 'N/A',
+          assignedAt: device.assignedAt,
+          status: device.assignmentStatus,
+          deviceName: device.name || `Watch ${device.serialNumber}`,
+          deviceType: device.deviceType,
+          patientName: device.patientName,
+          location: device.patientLocation,
+          watchDisplay: `Watch ${device.serialNumber}`,
+          serialNumber: device.serialNumber,
+          connectionStatus: device.connectionStatus,
+          batteryLevel: device.batteryLevel
+        }));
+
+      return transformed;
     } catch (error) {
       // Error fetching assignment history - handle silently
       return [];

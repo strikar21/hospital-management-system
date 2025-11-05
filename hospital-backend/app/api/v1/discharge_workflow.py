@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ...core.database import getDbConnection
 from ...services.audit import logAuditEvent
+from ...services.mqtt_service import mqttService
 from ...core.auth_dependencies import require_doctor, require_admin, require_nurse, get_current_user, require_any_staff
 
 router = APIRouter(dependencies=[Depends(require_any_staff)])
@@ -256,6 +257,11 @@ async def nurseCompleteDischarge(
 
                     deviceUnassigned = True
                     logger.info(f"📱 Device {assignedDeviceId} unassigned from patient {patientId} and marked as available")
+
+                    # Notify device via MQTT to stop sending vitals
+                    mqttSuccess = await mqttService.publishDeassignment(assignedDeviceId)
+                    if not mqttSuccess:
+                        logger.warning(f"⚠️ MQTT deassignment notification failed for {assignedDeviceId}")
                 else:
                     logger.info(f"ℹ️ No device was assigned to patient {patientId}")
 

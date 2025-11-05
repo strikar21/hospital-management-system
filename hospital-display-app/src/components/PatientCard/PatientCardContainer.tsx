@@ -14,6 +14,7 @@ import { PatientCardHeader } from './PatientCardHeader';
 import { PatientCardAlerts } from './PatientCardAlerts';
 import { PatientCardWaveform } from './PatientCardWaveform';
 import { WatchDetailsModal } from '../WatchDetailsModal';
+import { usePatientVitals } from '../../hooks/usePatientVitals';
 
 interface PatientCardContainerProps {
   patient: patient;
@@ -35,6 +36,24 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
   onToggleECGMode
 }) => {
 
+  // DEBUG: Log what we're receiving
+  // console.log(`🔍 [${patient.id.substring(0,8)}] patient.vitals from API:`, patient.vitals);
+
+  // WebSocket real-time vitals subscription - initialize with API vitals for instant display
+  const { vitals: realtimeVitals, isConnected: wsConnected } = usePatientVitals(patient.id, patient.vitals);
+
+  // console.log(`🔍 [${patient.id.substring(0,8)}] realtimeVitals from hook:`, realtimeVitals, 'wsConnected:', wsConnected);
+
+  // Merge real-time vitals with patient prop vitals (WebSocket takes precedence)
+  const currentVitals = useMemo(() => {
+    if (realtimeVitals && wsConnected) {
+      // console.log(`✅ [${patient.id.substring(0,8)}] Using WebSocket vitals`);
+      return { ...patient.vitals, ...realtimeVitals };
+    }
+    // console.log(`⚠️ [${patient.id.substring(0,8)}] Falling back to patient.vitals:`, patient.vitals);
+    return patient.vitals;
+  }, [patient.vitals, realtimeVitals, wsConnected, patient.id]);
+
   // State management - no mock alerts, only real backend alerts
   const [displayedAlerts, setDisplayedAlerts] = useState<any[]>([]);
   const [watchDetailsPatient, setWatchDetailsPatient] = useState<patient | null>(null);
@@ -45,7 +64,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
   }, [patient.alerts]);
 
   // ECG/EEG mode detection
-  const isECGMode: boolean = patient.vitals?.isEcgMode !== undefined ? patient.vitals?.isEcgMode : true;
+  const isECGMode: boolean = currentVitals?.isEcgMode !== undefined ? currentVitals?.isEcgMode : true;
 
   // Medical calculations disabled - no mock alerts
   const arrhythmiaDetected = false;
@@ -76,22 +95,22 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
   // Memoize vital alert status calculation
   const getVitalAlertStatus = useCallback((vitalKey: string) => {
     let vitalStatus = 'normal';
-    if (patient.vitals) {
+    if (currentVitals) {
       switch (vitalKey) {
         case 'heartRate':
-          vitalStatus = patient.vitals.heartRate ? MedicalUtils.getVitalStatus(patient.vitals.heartRate, 'heartRate') : 'normal';
+          vitalStatus = currentVitals.heartRate ? MedicalUtils.getVitalStatus(currentVitals.heartRate, 'heartRate') : 'normal';
           break;
         case 'oxygenSaturation':
-          vitalStatus = patient.vitals.oxygenSaturation ? MedicalUtils.getVitalStatus(patient.vitals.oxygenSaturation, 'oxygenSaturation') : 'normal';
+          vitalStatus = currentVitals.oxygenSaturation ? MedicalUtils.getVitalStatus(currentVitals.oxygenSaturation, 'oxygenSaturation') : 'normal';
           break;
         case 'skinTemperature':
-          vitalStatus = patient.vitals.skinTemperature ? MedicalUtils.getVitalStatus(patient.vitals.skinTemperature, 'skinTemperature') : 'normal';
+          vitalStatus = currentVitals.skinTemperature ? MedicalUtils.getVitalStatus(currentVitals.skinTemperature, 'skinTemperature') : 'normal';
           break;
         case 'systolicPressure':
-          vitalStatus = patient.vitals.systolicPressure ? MedicalUtils.getVitalStatus(patient.vitals.systolicPressure, 'systolicPressure', patient.vitals.diastolicPressure) : 'normal';
+          vitalStatus = currentVitals.systolicPressure ? MedicalUtils.getVitalStatus(currentVitals.systolicPressure, 'systolicPressure', currentVitals.diastolicPressure) : 'normal';
           break;
         case 'respiratoryRate':
-          vitalStatus = patient.vitals.respiratoryRate ? MedicalUtils.getVitalStatus(patient.vitals.respiratoryRate, 'respiratoryRate') : 'normal';
+          vitalStatus = currentVitals.respiratoryRate ? MedicalUtils.getVitalStatus(currentVitals.respiratoryRate, 'respiratoryRate') : 'normal';
           break;
       }
     }
@@ -114,7 +133,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
     if (vitalAlerts.some(alert => alert.severity === 'medium')) return 'warning';
     if (vitalAlerts.some(alert => alert.severity === 'low')) return 'warning';
     return vitalStatus;
-  }, [patient.vitals, allCombinedAlerts]);
+  }, [currentVitals, allCombinedAlerts]);
 
   // Memoize watch assignment status
   const hasWatchAssigned = useMemo(() => patient.assignedDeviceId, [patient.assignedDeviceId]);
@@ -124,30 +143,36 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
     setWatchDetailsPatient(patient);
   }, []);
 
+  // Create updated patient object with real-time vitals for child components
+  const patientWithCurrentVitals = useMemo(() => ({
+    ...patient,
+    vitals: currentVitals
+  }), [patient, currentVitals]);
+
   // Memoize all vitals calculation - expensive operation with alert status computation
   const allVitals = useMemo(() => [
     {
       key: 'heartRate',
       icon: Heart,
       label: 'HR',
-      value: hasWatchAssigned ? (patient.vitals?.heartRate || '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.heartRate ? 'BPM' : '',
+      value: hasWatchAssigned ? (currentVitals?.heartRate ?? '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.heartRate ? 'BPM' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('heartRate') : 'normal'
     },
     {
       key: 'oxygenSaturation',
       icon: Activity,
       label: 'SpO2',
-      value: hasWatchAssigned ? (patient.vitals?.oxygenSaturation || '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.oxygenSaturation ? '%' : '',
+      value: hasWatchAssigned ? (currentVitals?.oxygenSaturation ?? '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.oxygenSaturation ? '%' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('oxygenSaturation') : 'normal'
     },
     {
       key: 'skinTemperature',
       icon: Thermometer,
       label: 'Temp',
-      value: hasWatchAssigned ? (patient.vitals?.skinTemperature ? patient.vitals.skinTemperature.toFixed(1) : '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.skinTemperature ? '°F' : '',
+      value: hasWatchAssigned ? (currentVitals?.skinTemperature ? currentVitals.skinTemperature.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.skinTemperature ? '°F' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('skinTemperature') : 'normal'
     },
     {
@@ -155,36 +180,36 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       icon: Droplets,
       label: 'BP',
       value: hasWatchAssigned ?
-        (patient.vitals?.systolicPressure && patient.vitals?.diastolicPressure ?
-          `${patient.vitals.systolicPressure}/${patient.vitals.diastolicPressure}` : '--/--') : '--/--',
-      unit: hasWatchAssigned && patient.vitals?.systolicPressure && patient.vitals?.diastolicPressure ? 'mmHg' : '',
+        (currentVitals?.systolicPressure && currentVitals?.diastolicPressure ?
+          `${currentVitals.systolicPressure}/${currentVitals.diastolicPressure}` : '--/--') : '--/--',
+      unit: hasWatchAssigned && currentVitals?.systolicPressure && currentVitals?.diastolicPressure ? 'mmHg' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('systolicPressure') : 'normal'
     },
     {
       key: 'respiratoryRate',
       icon: Wind,
       label: 'RR',
-      value: hasWatchAssigned ? (patient.vitals?.respiratoryRate || '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.respiratoryRate ? '/min' : '',
+      value: hasWatchAssigned ? (currentVitals?.respiratoryRate ?? '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.respiratoryRate ? '/min' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('respiratoryRate') : 'normal'
     },
     {
       key: 'bioelectricalImpedance',
       icon: Waves,
       label: 'BioZ',
-      value: hasWatchAssigned ? (patient.vitals?.bioelectricalImpedance || '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.bioelectricalImpedance ? 'Ω' : '',
+      value: hasWatchAssigned ? (currentVitals?.bioelectricalImpedance ?? '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.bioelectricalImpedance ? 'Ω' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('bioelectricalImpedance') : 'normal'
     },
     {
       key: 'tremorIntensity',
       icon: Activity,
       label: 'Tremor',
-      value: hasWatchAssigned ? (patient.vitals?.tremorIntensity ? patient.vitals.tremorIntensity.toFixed(1) : '--') : '--',
-      unit: hasWatchAssigned && patient.vitals?.tremorIntensity ? '/10' : '',
+      value: hasWatchAssigned ? (currentVitals?.tremorIntensity ? currentVitals.tremorIntensity.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.tremorIntensity ? '/10' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('tremorIntensity') : 'normal'
     }
-  ], [hasWatchAssigned, patient.vitals, getVitalAlertStatus]);
+  ], [hasWatchAssigned, currentVitals, getVitalAlertStatus]);
 
   return (
     <div
@@ -209,7 +234,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
     >
       {/* Alert Status and Management */}
       <PatientCardAlerts
-        patient={patient}
+        patient={patientWithCurrentVitals}
         currentUser={currentUser}
         unacknowledgedAlerts={allCombinedAlerts}
         arrhythmiaDetected={arrhythmiaDetected}
@@ -219,7 +244,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
 
       {/* Patient Header and Info */}
       <PatientCardHeader
-        patient={patient}
+        patient={patientWithCurrentVitals}
         currentUser={currentUser}
         onBedsideMode={onBedsideMode}
         unacknowledgedAlerts={allCombinedAlerts}
@@ -231,7 +256,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       <div className="px-3 py-1 flex-1 flex flex-col min-h-0 overflow-hidden space-y-1">
         {/* Vital Signs Strip */}
         <PatientVitalStrip
-          patient={patient}
+          patient={patientWithCurrentVitals}
           currentUser={currentUser}
           allVitals={allVitals}
           isECGMode={isECGMode}
@@ -242,7 +267,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
 
         {/* ECG/EEG Waveform Display */}
         <PatientCardWaveform
-          patient={patient}
+          patient={patientWithCurrentVitals}
           currentUser={currentUser}
           isECGMode={isECGMode}
           arrhythmiaDetected={arrhythmiaDetected}

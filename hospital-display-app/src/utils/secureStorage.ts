@@ -6,35 +6,36 @@ class SecureStorage {
   private static readonly USER_KEY = 'hospital_user';
 
   /**
+   * SECURITY FIX: Store encryption key in memory only
+   * Previous vulnerability: Key was stored in sessionStorage (XSS risk)
+   * Fix: Memory-only storage, regenerate on page load
+   */
+  private static encryptionKeyCache: CryptoKey | null = null;
+
+  /**
    * Generate or retrieve encryption key for medical data
    * Uses Web Crypto API for HIPAA compliance
+   *
+   * SECURITY: Key stored in memory only (not sessionStorage)
+   * Implication: Encrypted data in localStorage cannot be decrypted after page reload
+   * This is CORRECT behavior - user must re-authenticate to get fresh data from backend
    */
   private static async getEncryptionKey(): Promise<CryptoKey> {
     try {
-      // Try to retrieve existing key from session storage
-      const existingKey = sessionStorage.getItem('medical_encryption_key');
-
-      if (existingKey) {
-        const keyData = JSON.parse(existingKey);
-        return await crypto.subtle.importKey(
-          'raw',
-          new Uint8Array(keyData),
-          { name: 'AES-GCM', length: 256 },
-          false,
-          ['encrypt', 'decrypt']
-        );
+      // Return cached key if available (memory only)
+      if (this.encryptionKeyCache) {
+        return this.encryptionKeyCache;
       }
 
-      // Generate new key for this session
+      // Generate new non-extractable key for this session
       const key = await crypto.subtle.generateKey(
         { name: 'AES-GCM', length: 256 },
-        true,
+        false, // non-extractable for security
         ['encrypt', 'decrypt']
       );
 
-      // Export and store key for session
-      const keyData = await crypto.subtle.exportKey('raw', key);
-      sessionStorage.setItem('medical_encryption_key', JSON.stringify(Array.from(new Uint8Array(keyData))));
+      // Cache in memory only (NOT sessionStorage)
+      this.encryptionKeyCache = key;
 
       return key;
     } catch (error) {
@@ -277,8 +278,8 @@ class SecureStorage {
     localStorage.removeItem(this.USER_KEY);
     localStorage.removeItem('currentUser');
 
-    // Remove medical encryption key from session
-    sessionStorage.removeItem('medical_encryption_key');
+    // Clear encryption key from memory (SECURITY FIX)
+    this.encryptionKeyCache = null;
 
     // Remove any other sensitive PHI data (HIPAA compliance)
     const keysToRemove = [];

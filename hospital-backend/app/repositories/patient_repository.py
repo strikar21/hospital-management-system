@@ -86,7 +86,7 @@ class PatientRepository(BaseRepository[Patient]):
                         where_conditions.append(f"{quoted_key} = ${param_count}")
                         params.append(value)
 
-            # JOIN with deviceassignments AND devices to get assigned device info and connection status
+            # JOIN with deviceassignments and devices
             query = """
                 SELECT p.*,
                        da."deviceId" as "assignedDeviceId",
@@ -137,23 +137,36 @@ class PatientRepository(BaseRepository[Patient]):
             raise
 
     async def get_complete_patient_data(self, patient_id: str) -> Optional[Dict[str, Any]]:
-        """Get patient with all associated medical records"""
+        """Get patient with all associated medical records including device assignment"""
         try:
-            # Use actual tables with data (patientnotes has 10 records, therapy is standard)
+            # Include device assignment data for ECG viewer functionality
             query = """
                 SELECT
                     p.*,
+                    da."deviceId" as "assignedDeviceId",
+                    da."assignedAt" as "deviceAssignedAt",
+                    da."assignedBy" as "deviceAssignedBy",
+                    d."batteryLevel" as "deviceBatteryLevel",
+                    d."lastSeen" as "deviceLastSeen",
+                    d."serialNumber" as "deviceSerialNumber",
+                    CASE
+                        WHEN d."lastSeen" >= NOW() - INTERVAL '5 minutes' THEN 'connected'
+                        WHEN d."lastSeen" >= NOW() - INTERVAL '30 minutes' THEN 'recentlySeen'
+                        ELSE 'offline'
+                    END as "deviceStatus",
                     json_agg(DISTINCT pn.*) FILTER (WHERE pn.id IS NOT NULL) as notes,
                     json_agg(DISTINCT m.*) FILTER (WHERE m.id IS NOT NULL) as medications,
                     json_agg(DISTINCT i.*) FILTER (WHERE i.id IS NOT NULL) as investigations,
                     json_agg(DISTINCT t.*) FILTER (WHERE t.id IS NOT NULL) as therapies
                 FROM patients p
+                LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
+                LEFT JOIN devices d ON da."deviceId" = d.id
                 LEFT JOIN patientnotes pn ON p.id = pn."patientId"
                 LEFT JOIN medications m ON p.id = m."patientId"
                 LEFT JOIN investigations i ON p.id = i."patientId"
                 LEFT JOIN therapy t ON p.id = t."patientId"
                 WHERE p.id = $1
-                GROUP BY p.id
+                GROUP BY p.id, da."deviceId", da."assignedAt", da."assignedBy", d."batteryLevel", d."lastSeen", d."serialNumber"
             """
 
             results = await self.execute_custom_query(query, [patient_id])
@@ -361,6 +374,51 @@ class PatientRepository(BaseRepository[Patient]):
 
         except Exception as e:
             self.logger.error(f"Error acknowledging alert {alert_id} for patient {patient_id}: {e}")
+            raise
+
+    async def get_patient_alerts(self, patient_id: str, status: str = 'active', limit: int = 50) -> List[Dict[str, Any]]:
+        """Get patient alerts from database"""
+        try:
+            if status == 'active':
+                query = """
+                    SELECT * FROM patient_alerts
+                    WHERE "patientId" = $1 AND status = 'active'
+                    ORDER BY "alertTimestamp" DESC
+                    LIMIT $2
+                """
+            else:
+                query = """
+                    SELECT * FROM patient_alerts
+                    WHERE "patientId" = $1
+                    ORDER BY "alertTimestamp" DESC
+                    LIMIT $2
+                """
+
+            result = await self.execute_custom_query(query, [patient_id, limit])
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error getting alerts for patient {patient_id}: {e}")
+            raise
+
+    async def resolve_alert(self, patient_id: str, alert_id: str, resolved_by: str) -> bool:
+        """Resolve patient alert"""
+        try:
+            query = """
+                UPDATE patient_alerts
+                SET
+                    status = 'resolved',
+                    "updatedAt" = $1
+                WHERE id = $2 AND "patientId" = $3
+                RETURNING id
+            """
+
+            now = datetime.utcnow().isoformat()
+            result = await self.execute_custom_query(query, [now, alert_id, patient_id])
+            return len(result) > 0
+
+        except Exception as e:
+            self.logger.error(f"Error resolving alert {alert_id} for patient {patient_id}: {e}")
             raise
 
     # ================================
@@ -659,4 +717,47 @@ class PatientRepository(BaseRepository[Patient]):
 
         except Exception as e:
             self.logger.error(f"Error getting staff names: {e}")
+            return {}
+
+    async def getLatestVitalsForPatients(self, patientIds: List[str]) -> Dict[str, Dict]:
+        """
+        Fetch latest vitals from TimescaleDB for multiple patients
+        Returns dict mapping patientId → vitals data
+        """
+        if not patientIds:
+            return {}
+
+        try:
+            # Use TimescaleDB connection
+            from ..core.database import getTimescaleConnection
+
+            async with getTimescaleConnection() as tsConn:
+                # Query latest vitals per patient using DISTINCT ON
+                query = """
+                    SELECT DISTINCT ON ("patientId")
+                        "patientId", time, "deviceId", mode,
+                        "heartRate", "respiratoryRate", "skinTemperature",
+                        "oxygenSaturation", "batteryLevel", "signalQuality",
+                        "rrInterval", "qrsDuration", "qtInterval", axis, rhythm, "stSegment",
+                        "alphaPower", "betaPower", "thetaPower", "deltaPower", "gammaPower",
+                        "dominantFrequency", "seizureActivity"
+                    FROM vitals_realtime
+                    WHERE "patientId" = ANY($1)
+                    AND time > NOW() - INTERVAL '5 minutes'
+                    ORDER BY "patientId", time DESC
+                """
+
+                rows = await tsConn.fetch(query, patientIds)
+
+                # Convert to dict mapping patientId → vitals
+                vitals_map = {}
+                for row in rows:
+                    patient_id = row['patientId']
+                    vitals_map[patient_id] = dict(row)
+
+                self.logger.info(f"✅ Fetched latest vitals for {len(vitals_map)}/{len(patientIds)} patients from TimescaleDB")
+                return vitals_map
+
+        except Exception as e:
+            self.logger.error(f"Error fetching latest vitals from TimescaleDB: {e}")
             return {}

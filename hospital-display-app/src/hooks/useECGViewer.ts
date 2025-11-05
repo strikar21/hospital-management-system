@@ -1,11 +1,22 @@
 /**
- * useECGViewer - Custom hook for ECG/EEG viewer state management and data generation
+ * useECGViewer - Custom hook for ECG/EEG viewer state management and real waveform streaming
  * STRICT CAMELCASE ONLY - No snake_case, no PascalCase, no kebab-case
- * Medical-grade ECG/EEG monitoring with real-time waveform generation
+ * Medical-grade ECG/EEG monitoring with real-time waveform data from ESP32 watches
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { patient } from '../types';
+import { useWebSocket } from './useWebSocket';
+import waveformCacheService from '../services/WaveformCacheService';
+import { logger } from '../utils/logger';
+import { adcToMillivolts, adcToMicrovolts, decodeDeltaChannel } from '../utils/medicalWaveformUtils';
+import {
+  BUFFER_TIME_SECONDS,
+  ECG_DEFAULT_SPEED,
+  EEG_DEFAULT_SPEED,
+  ECG_DEFAULT_GAIN,
+  EEG_DEFAULT_GAIN
+} from '../config/ecgConfig';
 
 interface UseECGViewerProps {
   patient: patient;
@@ -13,144 +24,273 @@ interface UseECGViewerProps {
 
 export const useECGViewer = ({ patient }: UseECGViewerProps) => {
   const [isECGMode, setIsECGMode] = useState(true); // true = ECG, false = EEG
-  const [speed, setSpeed] = useState(25); // mm/s
-  const [gain, setGain] = useState(10); // mm/mV for ECG, μV/mm for EEG
+  // ✅ Mode-specific defaults (ECG: 25mm/s @ 10mm/mV, EEG: 30mm/s @ 7μV/mm)
+  const [speed, setSpeed] = useState(ECG_DEFAULT_SPEED); // mm/s - changes per mode
+  const [gain, setGain] = useState(ECG_DEFAULT_GAIN); // mm/mV for ECG, μV/mm for EEG - changes per mode
   const [isPaused, setIsPaused] = useState(false);
   const [selectedLead, setSelectedLead] = useState<string>('II'); // Default to Lead II for ECG
   const [layout, setLayout] = useState(1); // 1, 4, or 9 views
+  const [showCalibration, setShowCalibration] = useState(true); // ✅ NEW: Calibration pulse state (vestigial - not used by canvas)
 
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
-  const animationRef = useRef<number | null>(null);
-  const dataBufferRef = useRef<number[][]>([]);
-  const calibrationPulseRef = useRef<boolean[]>([]);
+  // ✅ FIX: Always allocate 22 buffers (ECG: 0-11, EEG: 12-21) regardless of mode
+  const dataBufferRef = useRef<number[][]>(Array(22).fill(null).map(() => []));
+  const calibrationStartRef = useRef<number>(Date.now()); // ✅ NEW: Track calibration start time
 
   // Define leads for ECG and EEG
   const ecgLeads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
-  const eegLeads = ['F3-C3', 'F4-C4', 'C3-P3', 'C4-P4', 'P3-O1', 'P4-O2', 'F7-T3', 'F8-T4', 'T5-O1'];
+  // ✅ FIXED: 8 monopolar channels matching ADS1298 hardware (Fp1, Fp2, F3, F4, C3, C4, O1, O2)
+  const eegLeads = ['Fp1', 'Fp2', 'F3', 'F4', 'C3', 'C4', 'O1', 'O2'];
   const leads = isECGMode ? ecgLeads : eegLeads;
 
-  // Update selected lead and reset data buffers when switching modes
+  // WebSocket subscription for real waveform data
+  const { subscribe, unsubscribe } = useWebSocket();
+
+  // Update selected lead AND speed/gain defaults when switching modes
   useEffect(() => {
-    const newSelectedLead = isECGMode ? 'II' : 'F3-C3';
+    const newSelectedLead = isECGMode ? 'II' : 'Fp1';
     setSelectedLead(newSelectedLead);
-    dataBufferRef.current = Array(leads.length).fill(null).map(() => []);
-    calibrationPulseRef.current = Array(leads.length).fill(true);
-  }, [isECGMode, leads.length]);
+
+    // ✅ Update speed/gain to mode-specific medical standards
+    setSpeed(isECGMode ? ECG_DEFAULT_SPEED : EEG_DEFAULT_SPEED);
+    setGain(isECGMode ? ECG_DEFAULT_GAIN : EEG_DEFAULT_GAIN);
+
+    // ✅ FIX: Don't reset buffers - they're pre-allocated with 22 elements
+  }, [isECGMode]);
+
+  // ✅ NEW: Reset calibration when patient, mode, or layout changes
+  useEffect(() => {
+    calibrationStartRef.current = Date.now();
+    setShowCalibration(true);
+    logger.log('🔧 Calibration pulse enabled (permanent display)');
+  }, [patient.id, isECGMode, layout]);
 
   // Handle layout changes: adjust canvas refs
   useEffect(() => {
     canvasRefs.current = Array(layout).fill(null);
   }, [layout]);
 
-  // Generate continuous real-time data for all leads using patient vital data
+  // ✅ Clear buffers when PATIENT or MODE changes to prevent stale/wrong data
+  // Physical cable swap (ECG ↔ EEG) requires fresh buffers for new sensor configuration
   useEffect(() => {
-    const generateRealTimeData = () => {
-      if (isPaused) return;
+    // Clear any existing cache
+    waveformCacheService.invalidateCache(patient.id, isECGMode ? 'ecg' : 'eeg').catch(err => {
+      logger.warn(`⚠️ Failed to invalidate cache: ${err}`);
+    });
 
-      const sampleRate = 250; // 250 Hz
-      const samplesPerFrame = Math.round(sampleRate / 60); // ~60 FPS
+    // Clear existing data in all 22 buffers
+    for (let i = 0; i < 22; i++) {
+      dataBufferRef.current[i] = [];
+    }
+    logger.log(`🆕 Blank canvas initialized - 22 empty buffers ready for fresh ${isECGMode ? 'ECG' : 'EEG'} data`);
+  }, [patient.id, isECGMode]); // ✅ Clear on both patient AND mode changes
 
-      for (let i = 0; i < samplesPerFrame; i++) {
-        const timeIndex = (Date.now() / 1000) * sampleRate + i;
+  // Subscribe to real waveform data from WebSocket
+  useEffect(() => {
+    if (!patient.id || !patient.assignedDeviceId) {
+      if (!patient.assignedDeviceId) {
+        logger.log('⚠️ No device assigned - waveform display unavailable');
+      }
+      return;
+    }
+    // Cache loads in parallel - don't block streaming
 
-        for (let leadIdx = 0; leadIdx < leads.length; leadIdx++) {
-          let value = 0;
+    logger.log(`🔌 Subscribing to waveform data for patient ${patient.id.substring(0, 8)} with calibration trigger`);
 
-          if (calibrationPulseRef.current[leadIdx]) {
-            if (isECGMode) {
-              // ECG calibration pulse: 1 mV for 0.2 s (50 samples at 250 Hz)
-              if (timeIndex < 50) {
-                value = timeIndex < 10 ? (timeIndex / 10) * 1.0 : timeIndex < 40 ? 1.0 : (50 - timeIndex) / 10;
-              } else {
-                calibrationPulseRef.current[leadIdx] = false;
-              }
-            } else {
-              // EEG calibration pulse: 50 μV for 1 s (250 samples at 250 Hz)
-              if (timeIndex < 250) {
-                value = timeIndex < 50 ? (timeIndex / 50) * 50 : timeIndex < 200 ? 50 : (250 - timeIndex) / 50 * 50;
-              } else {
-                calibrationPulseRef.current[leadIdx] = false;
-              }
-            }
-          } else {
-            // Generate realistic waveform data
-            if (isECGMode) {
-              // Generate realistic ECG waveform for different leads
-              const lead = leads[leadIdx];
-              const heartRate = patient.vitals?.heartRate || 0; // BPM
-              const beatPeriod = heartRate > 0 ? 60.0 / heartRate : 1.0; // Default 1s period if no heartRate
-              const phase = ((timeIndex / sampleRate) % beatPeriod) / beatPeriod;
+    const subscriptionId = subscribe((message: any) => {
+      // Only process waveformStream messages for this patient
+      if (message.type !== 'waveformStream' || message.patientId !== patient.id) return;
+      if (isPaused) return; // Don't update buffers if paused
 
-              if (lead === 'II') {
-                // Lead II - prominent P wave, R wave, T wave
-                // P wave (0.05-0.15 phase)
-                const pWave = (0.05 <= phase && phase <= 0.15) ?
-                  0.2 * Math.exp(-Math.pow((phase - 0.1) * 20, 2)) : 0;
-
-                // QRS complex (0.25-0.35 phase)
-                let qrsWave = 0;
-                if (0.25 <= phase && phase <= 0.35) {
-                  const qrsPhase = (phase - 0.25) * 40;
-                  if (qrsPhase < 2) {
-                    qrsWave = -0.3 * Math.sin(qrsPhase * Math.PI); // Q wave
-                  } else if (qrsPhase < 6) {
-                    qrsWave = 1.2 * Math.sin((qrsPhase - 2) * Math.PI / 4); // R wave
-                  } else {
-                    qrsWave = -0.4 * Math.sin((qrsPhase - 6) * Math.PI / 4); // S wave
-                  }
-                }
-
-                // T wave (0.5-0.7 phase)
-                const tWave = (0.5 <= phase && phase <= 0.7) ?
-                  0.3 * Math.exp(-Math.pow((phase - 0.6) * 15, 2)) : 0;
-
-                // Add small noise
-                const noise = 0.02 * (Math.sin(timeIndex * 0.4) + Math.sin(timeIndex * 0.6) * 0.5);
-
-                value = pWave + qrsWave + tWave + noise;
-              } else if (['I', 'III', 'aVR', 'aVL', 'aVF'].includes(lead)) {
-                // Other limb leads - similar but different amplitudes
-                const amplitudeFactor = ['I', 'III'].includes(lead) ? 0.7 : 0.5;
-                value = amplitudeFactor * Math.sin(phase * 2 * Math.PI) * Math.exp(-Math.pow((phase - 0.3) * 8, 2));
-              } else {
-                // Precordial leads V1-V6
-                value = 0.8 * Math.sin(phase * 2 * Math.PI) * Math.exp(-Math.pow((phase - 0.3) * 10, 2));
-              }
-            } else {
-              // Generate realistic EEG patterns
-              const t = timeIndex / sampleRate;
-              // Alpha waves (8-12 Hz), Beta waves (13-30 Hz), etc.
-              const alpha = 0.5 * Math.sin(2 * Math.PI * 10 * t);
-              const beta = 0.2 * Math.sin(2 * Math.PI * 20 * t);
-              const theta = 0.3 * Math.sin(2 * Math.PI * 6 * t);
-
-              // Add some random noise
-              const noise = 0.1 * Math.sin(2 * Math.PI * 50 * t) * Math.sin(2 * Math.PI * 0.1 * t);
-
-              value = alpha + beta + theta + noise;
-            }
-          }
-
-          dataBufferRef.current[leadIdx].push(value);
-
-          const maxBufferSize = sampleRate * 10;
-          if (dataBufferRef.current[leadIdx].length > maxBufferSize) {
-            dataBufferRef.current[leadIdx].shift();
-          }
-        }
+      const waveformData = message.waveform;
+      if (!waveformData) {
+        logger.warn('⚠️ Received waveform message without data');
+        return;
       }
 
-      animationRef.current = requestAnimationFrame(generateRealTimeData);
-    };
+      // Auto-detect mode from ESP32 and switch display accordingly
+      if (waveformData.mode === 'ecg' && !isECGMode) {
+        logger.log('🔄 Auto-switching to ECG mode (detected from device)');
+        setIsECGMode(true);
+      } else if (waveformData.mode === 'eeg' && isECGMode) {
+        logger.log('🔄 Auto-switching to EEG mode (detected from device)');
+        setIsECGMode(false);
+      }
 
-    generateRealTimeData();
+      // Process ECG waveform data (12 leads) - ALWAYS process if present
+      // ECG uses buffer indices 0-11
+      // ✅ v5.2.5: Supports delta-encoded format from ESP32
+      if (waveformData.ecgWaveform) {
+        const { limb, precordial, derived } = waveformData.ecgWaveform;
+        // ✅ Use centralized buffer configuration from ecgConfig
+        const maxBufferSize = Math.ceil((waveformData.sampleRate || 500) * BUFFER_TIME_SECONDS);
+
+        // Helper: Check if data is delta-encoded or raw array
+        const getData = (leadData: any, leadName?: string) => {
+          if (!leadData) return [];
+          // Delta-encoded: {baseline: number, deltas: number[]}
+          if (leadData.baseline !== undefined && leadData.deltas !== undefined) {
+            return decodeDeltaChannel(leadData);
+          }
+          // Raw array (legacy v5.2.4 and earlier)
+          if (Array.isArray(leadData)) {
+            return leadData;
+          }
+          return [];
+        };
+
+        // Limb leads (I, II, III) - REQUIRED
+        // ✅ v5.2.5: leadI, leadII, leadIII (camelCase with Roman numerals)
+        if (limb?.leadI) {
+          const samples = getData(limb.leadI, 'Lead I');
+          dataBufferRef.current[0] = [...dataBufferRef.current[0], ...samples].slice(-maxBufferSize);
+        }
+        if (limb?.leadII) {
+          const samples = getData(limb.leadII, 'Lead II');
+          dataBufferRef.current[1] = [...dataBufferRef.current[1], ...samples].slice(-maxBufferSize);
+        }
+        if (limb?.leadIII) {
+          const samples = getData(limb.leadIII, 'Lead III');
+          dataBufferRef.current[2] = [...dataBufferRef.current[2], ...samples].slice(-maxBufferSize);
+        }
+
+        // Derived leads (aVR, aVL, aVF) - OPTIONAL
+        if (derived?.avr) {
+          const samples = getData(derived.avr);
+          dataBufferRef.current[3] = [...dataBufferRef.current[3], ...samples].slice(-maxBufferSize);
+        }
+        if (derived?.avl) {
+          const samples = getData(derived.avl);
+          dataBufferRef.current[4] = [...dataBufferRef.current[4], ...samples].slice(-maxBufferSize);
+        }
+        if (derived?.avf) {
+          const samples = getData(derived.avf);
+          dataBufferRef.current[5] = [...dataBufferRef.current[5], ...samples].slice(-maxBufferSize);
+        }
+
+        // Precordial leads (V1-V6) - OPTIONAL
+        if (precordial?.v1) {
+          const samples = getData(precordial.v1, 'V1');
+          dataBufferRef.current[6] = [...dataBufferRef.current[6], ...samples].slice(-maxBufferSize);
+        }
+        if (precordial?.v2) {
+          const samples = getData(precordial.v2, 'V2');
+          dataBufferRef.current[7] = [...dataBufferRef.current[7], ...samples].slice(-maxBufferSize);
+        }
+        if (precordial?.v3) {
+          const samples = getData(precordial.v3, 'V3');
+          dataBufferRef.current[8] = [...dataBufferRef.current[8], ...samples].slice(-maxBufferSize);
+        }
+        if (precordial?.v4) {
+          const samples = getData(precordial.v4, 'V4');
+          dataBufferRef.current[9] = [...dataBufferRef.current[9], ...samples].slice(-maxBufferSize);
+        }
+        if (precordial?.v5) {
+          const samples = getData(precordial.v5, 'V5');
+          dataBufferRef.current[10] = [...dataBufferRef.current[10], ...samples].slice(-maxBufferSize);
+        }
+        if (derived?.v6) {
+          const samples = getData(derived.v6, 'V6');
+          dataBufferRef.current[11] = [...dataBufferRef.current[11], ...samples].slice(-maxBufferSize);
+        }
+
+        // Save ECG waveforms to cache
+        waveformCacheService.saveWaveform(
+          patient.id,
+          'ecg',
+          dataBufferRef.current.slice(0, 12),
+          waveformData.sampleRate || 250
+        );
+      }
+
+      // Process EEG waveform data (9 channels) - ALWAYS process if present
+      // EEG uses buffer indices 12-20 to avoid collision with ECG
+      // ✅ v5.2.5: Supports delta-encoded format from ESP32
+      if (waveformData.eegWaveform) {
+        const { frontal, central, temporal, occipital } = waveformData.eegWaveform;
+        // ✅ Use centralized buffer configuration from ecgConfig
+        const maxBufferSize = Math.ceil((waveformData.sampleRate || 500) * BUFFER_TIME_SECONDS);
+
+        // Helper: Check if data is delta-encoded or raw array
+        const getData = (channelData: any) => {
+          if (!channelData) return [];
+          // Delta-encoded: {baseline: number, deltas: number[]}
+          if (channelData.baseline !== undefined && channelData.deltas !== undefined) {
+            return decodeDeltaChannel(channelData);
+          }
+          // Raw array (legacy v5.2.4 and earlier)
+          if (Array.isArray(channelData)) {
+            return channelData;
+          }
+          return [];
+        };
+
+        // Frontal channels (Fp1, Fp2, F3, F4) - REQUIRED
+        // ✅ v5.2.5: Fp1, Fp2, F3, F4 (proper capitalization)
+        if (frontal?.Fp1) {
+          const samples = getData(frontal.Fp1);
+          dataBufferRef.current[12] = [...dataBufferRef.current[12], ...samples].slice(-maxBufferSize);
+        }
+        if (frontal?.Fp2) {
+          const samples = getData(frontal.Fp2);
+          dataBufferRef.current[13] = [...dataBufferRef.current[13], ...samples].slice(-maxBufferSize);
+        }
+        if (frontal?.F3) {
+          const samples = getData(frontal.F3);
+          dataBufferRef.current[14] = [...dataBufferRef.current[14], ...samples].slice(-maxBufferSize);
+        }
+        if (frontal?.F4) {
+          const samples = getData(frontal.F4);
+          dataBufferRef.current[15] = [...dataBufferRef.current[15], ...samples].slice(-maxBufferSize);
+        }
+
+        // Central channels (C3, C4) - REQUIRED
+        // ✅ v5.2.5: C3, C4 (proper capitalization)
+        if (central?.C3) {
+          const samples = getData(central.C3);
+          dataBufferRef.current[16] = [...dataBufferRef.current[16], ...samples].slice(-maxBufferSize);
+        }
+        if (central?.C4) {
+          const samples = getData(central.C4);
+          dataBufferRef.current[17] = [...dataBufferRef.current[17], ...samples].slice(-maxBufferSize);
+        }
+
+        // Temporal channels (T3, T4) - OPTIONAL
+        if (temporal?.T3) {
+          const samples = getData(temporal.T3);
+          dataBufferRef.current[18] = [...dataBufferRef.current[18], ...samples].slice(-maxBufferSize);
+        }
+        if (temporal?.T4) {
+          const samples = getData(temporal.T4);
+          dataBufferRef.current[19] = [...dataBufferRef.current[19], ...samples].slice(-maxBufferSize);
+        }
+
+        // Occipital channels (O1, O2) - OPTIONAL
+        // ✅ v5.2.5: O1, O2 (proper capitalization)
+        if (occipital?.O1) {
+          const samples = getData(occipital.O1);
+          dataBufferRef.current[20] = [...dataBufferRef.current[20], ...samples].slice(-maxBufferSize);
+        }
+        if (occipital?.O2) {
+          const samples = getData(occipital.O2);
+          dataBufferRef.current[21] = [...dataBufferRef.current[21], ...samples].slice(-maxBufferSize);
+        }
+
+        // Save EEG waveforms to cache
+        waveformCacheService.saveWaveform(
+          patient.id,
+          'eeg',
+          dataBufferRef.current.slice(12, 21),
+          waveformData.sampleRate || 250
+        );
+      }
+    }, patient.id, true); // ← ADD patientId and triggerCalibration=true for calibration pulse
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      logger.log(`🔌 Unsubscribing from waveform data for patient ${patient.id.substring(0, 8)}`);
+      unsubscribe(subscriptionId);
     };
-  }, [patient.vitals.heartRate, patient.vitals.ecgReading, patient.vitals.eegReading, isPaused, isECGMode, speed, gain, leads, layout, selectedLead]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [patient.id, patient.assignedDeviceId, isECGMode, isPaused, subscribe, unsubscribe]);
 
   // Get the latest value for the displayed lead(s)
   const getLatestValue = () => {
@@ -163,7 +303,10 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
     const data = dataBufferRef.current[leadIdx];
     const lead = leads[leadIdx] || 'N/A';
     if (!data || data.length === 0) return `${lead}: N/A`;
-    const latestValue = data[data.length - 1];
+
+    // ✅ FIX: Convert RAW ADC value to mV/μV before displaying
+    const rawADC = data[data.length - 1];
+    const latestValue = isECGMode ? adcToMillivolts(rawADC) : adcToMicrovolts(rawADC);
     const timestamp = new Date().toLocaleTimeString();
     return `${lead}: ${latestValue.toFixed(2)} ${isECGMode ? 'mV' : 'μV'} (${timestamp})`;
   };
@@ -177,10 +320,12 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
     selectedLead,
     layout,
     leads,
+    showCalibration, // ✅ NEW: Calibration pulse visibility
 
     // Refs
     canvasRefs,
     dataBufferRef,
+    calibrationStartRef, // ✅ NEW: Calibration timing
 
     // Setters
     setIsECGMode,

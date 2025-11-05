@@ -7,16 +7,18 @@ interface UsePatientDataOptions {
   selectedWard: string;
   showAllDepartments: boolean;
   refreshInterval?: number; // Auto-refresh interval in milliseconds
+  initialPatients?: patient[]; // Preloaded patients from cache/API
 }
 
 export const usePatientData = ({
   userId,
   selectedWard,
   showAllDepartments,
-  refreshInterval = 30000 // Default: 30 seconds
+  refreshInterval = 30000, // Default: 30 seconds
+  initialPatients = []
 }: UsePatientDataOptions) => {
-  const [patients, setPatients] = useState<patient[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<patient[]>(initialPatients);
+  const [loading, setLoading] = useState(initialPatients.length === 0);
   const [lastSync, setLastSync] = useState(new Date());
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,15 @@ export const usePatientData = ({
 
   // Initial load and reload when dependencies change
   useEffect(() => {
-    loadPatients();
+    // Only load if no initial patients provided
+    if (initialPatients.length === 0) {
+      console.log('📡 No preloaded patients - fetching from API');
+      loadPatients();
+    } else {
+      console.log('📦 Using preloaded patients:', initialPatients.length);
+      setLastSync(new Date());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadPatients]);
 
   // Auto-refresh patients

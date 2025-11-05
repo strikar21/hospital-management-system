@@ -95,6 +95,48 @@ class PatientService(BaseService):
             # Resolve staff IDs in medical records
             await self._resolve_medical_record_staff_names(camel_result)
 
+            # Fetch latest vitals from TimescaleDB
+            vitals_map = await self.patient_repository.getLatestVitalsForPatients([patient_id])
+
+            if patient_id in vitals_map:
+                vitals_row = vitals_map[patient_id]
+
+                # Transform to frontend format (same as mqtt_service._convertVitalsToFrontendFormat)
+                camel_result['vitals'] = {
+                    'heartRate': vitals_row.get('heartRate'),
+                    'respiratoryRate': vitals_row.get('respiratoryRate'),
+                    'skinTemperature': vitals_row.get('skinTemperature'),
+                    'oxygenSaturation': vitals_row.get('oxygenSaturation'),
+                    'batteryLevel': vitals_row.get('batteryLevel'),
+                    'signalQuality': vitals_row.get('signalQuality'),
+                    'lastDataReceived': vitals_row.get('time').isoformat() if vitals_row.get('time') else None,
+                    'lastUpdated': vitals_row.get('time').isoformat() if vitals_row.get('time') else None,
+                    'isEcgMode': vitals_row.get('mode') == 'ecg',
+                    'ecgReading': vitals_row.get('rrInterval') if vitals_row.get('mode') == 'ecg' else 0,
+                    'eegReading': vitals_row.get('alphaPower') if vitals_row.get('mode') == 'eeg' else 0,
+                }
+
+                # Add nested ECG/EEG objects if present
+                if vitals_row.get('mode') == 'ecg':
+                    camel_result['vitals']['ecg'] = {
+                        'rrInterval': vitals_row.get('rrInterval'),
+                        'qrsDuration': vitals_row.get('qrsDuration'),
+                        'qtInterval': vitals_row.get('qtInterval'),
+                        'axis': vitals_row.get('axis'),
+                        'rhythm': vitals_row.get('rhythm'),
+                        'stSegment': vitals_row.get('stSegment')
+                    }
+                elif vitals_row.get('mode') == 'eeg':
+                    camel_result['vitals']['eeg'] = {
+                        'alphaPower': vitals_row.get('alphaPower'),
+                        'betaPower': vitals_row.get('betaPower'),
+                        'thetaPower': vitals_row.get('thetaPower'),
+                        'deltaPower': vitals_row.get('deltaPower'),
+                        'gammaPower': vitals_row.get('gammaPower'),
+                        'dominantFrequency': vitals_row.get('dominantFrequency'),
+                        'seizureActivity': vitals_row.get('seizureActivity')
+                    }
+
             return camel_result
 
         except (ValidationException, NotFoundException):
@@ -349,6 +391,79 @@ class PatientService(BaseService):
         results = await self.patient_repository.get_patients_by_ward(ward.strip())
         return [self.repository.transform_to_camel_case(item) for item in results]
 
+    async def get_all(self, filters: Optional[Dict[str, Any]] = None,
+                     limit: Optional[int] = None,
+                     offset: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Override get_all to include latest vitals from TimescaleDB"""
+        try:
+            # Get patients from PostgreSQL (includes device assignment data)
+            patients = await self.patient_repository.get_all(filters, limit, offset)
+
+            if not patients:
+                return []
+
+            # Extract patient IDs
+            patient_ids = [p.get('id') for p in patients if p.get('id')]
+
+            if not patient_ids:
+                return patients
+
+            # Fetch latest vitals from TimescaleDB
+            vitals_map = await self.patient_repository.getLatestVitalsForPatients(patient_ids)
+
+            # Merge vitals into patient data
+            for patient in patients:
+                patient_id = patient.get('id')
+                if patient_id and patient_id in vitals_map:
+                    vitals_row = vitals_map[patient_id]
+
+                    # Transform to frontend format (same as mqtt_service._convertVitalsToFrontendFormat)
+                    patient['vitals'] = {
+                        'heartRate': vitals_row.get('heartRate'),
+                        'respiratoryRate': vitals_row.get('respiratoryRate'),
+                        'skinTemperature': vitals_row.get('skinTemperature'),
+                        'oxygenSaturation': vitals_row.get('oxygenSaturation'),
+                        'batteryLevel': vitals_row.get('batteryLevel'),
+                        'signalQuality': vitals_row.get('signalQuality'),
+                        'lastDataReceived': vitals_row.get('time').isoformat() if vitals_row.get('time') else None,
+                        'lastUpdated': vitals_row.get('time').isoformat() if vitals_row.get('time') else None,
+                        'isEcgMode': vitals_row.get('mode') == 'ecg',
+                        'ecgReading': vitals_row.get('rrInterval') if vitals_row.get('mode') == 'ecg' else 0,
+                        'eegReading': vitals_row.get('alphaPower') if vitals_row.get('mode') == 'eeg' else 0,
+                    }
+
+                    # Add nested ECG/EEG objects if present
+                    if vitals_row.get('mode') == 'ecg':
+                        patient['vitals']['ecg'] = {
+                            'rrInterval': vitals_row.get('rrInterval'),
+                            'qrsDuration': vitals_row.get('qrsDuration'),
+                            'qtInterval': vitals_row.get('qtInterval'),
+                            'axis': vitals_row.get('axis'),
+                            'rhythm': vitals_row.get('rhythm'),
+                            'stSegment': vitals_row.get('stSegment')
+                        }
+                    elif vitals_row.get('mode') == 'eeg':
+                        patient['vitals']['eeg'] = {
+                            'alphaPower': vitals_row.get('alphaPower'),
+                            'betaPower': vitals_row.get('betaPower'),
+                            'thetaPower': vitals_row.get('thetaPower'),
+                            'deltaPower': vitals_row.get('deltaPower'),
+                            'gammaPower': vitals_row.get('gammaPower'),
+                            'dominantFrequency': vitals_row.get('dominantFrequency'),
+                            'seizureActivity': vitals_row.get('seizureActivity')
+                        }
+
+            self.logger.info(f"✅ Retrieved {len(patients)} patients with vitals merged from TimescaleDB")
+            return patients
+
+        except Exception as e:
+            self.logger.error(f"Service get_all error: {e}")
+            # Don't fail the whole request if vitals fetch fails - return patients without vitals
+            try:
+                return await self.patient_repository.get_all(filters, limit, offset)
+            except:
+                raise
+
     # ================================
     # PATIENT NOTES OPERATIONS
     # ================================
@@ -533,6 +648,30 @@ class PatientService(BaseService):
 
         except Exception as e:
             self.logger.error(f"Service error acknowledging alert: {e}")
+            raise
+
+    async def get_patient_alerts(self, patient_id: str, status: str = 'active', limit: int = 50) -> List[Dict[str, Any]]:
+        """Get patient alerts from database"""
+        try:
+            if not await self.patient_repository.exists(patient_id):
+                raise ValueError(f"Patient {patient_id} not found")
+
+            return await self.patient_repository.get_patient_alerts(patient_id, status, limit)
+
+        except Exception as e:
+            self.logger.error(f"Service error getting alerts: {e}")
+            raise
+
+    async def resolve_alert(self, patient_id: str, alert_id: str, resolved_by: str) -> bool:
+        """Resolve alert with validation"""
+        try:
+            if not await self.patient_repository.exists(patient_id):
+                raise ValueError(f"Patient {patient_id} not found")
+
+            return await self.patient_repository.resolve_alert(patient_id, alert_id, resolved_by)
+
+        except Exception as e:
+            self.logger.error(f"Service error resolving alert: {e}")
             raise
 
     # ================================

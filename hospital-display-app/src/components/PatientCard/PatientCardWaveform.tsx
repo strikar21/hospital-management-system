@@ -4,8 +4,11 @@
  * Medical-grade waveform visualization with lead selection
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { patient, user } from '../../types';
+import { useECGViewer } from '../../hooks/useECGViewer';
+import { renderWaveform, adcToMillivolts, adcToMicrovolts } from '../../utils/medicalWaveformUtils';
+import { WaveformErrorBoundary } from '../ErrorBoundary';
 
 interface PatientCardWaveformProps {
   patient: patient;
@@ -19,33 +22,64 @@ interface PatientCardWaveformProps {
 
 export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.memo(({
   patient,
-  currentUser,
   isECGMode,
   arrhythmiaDetected,
   seizureActivity,
   onVitalClick,
   onToggleECGMode
 }) => {
-  const [selectedLead, setSelectedLead] = useState<string>(isECGMode ? 'II' : 'C3-C4');
+  // Subscribe to real-time waveform data using WebSocket
+  const { dataBufferRef } = useECGViewer({ patient });
 
-  // Update selected lead when ECG/EEG mode changes
-  useEffect(() => {
-    setSelectedLead(isECGMode ? 'II' : 'C3-C4');
-  }, [isECGMode]);
+  console.log(`[PatientCardWaveform] Component render for patient ${patient.id.substring(0, 8)}`);
 
-  // BACKEND INTEGRATION NEEDED: Replace with VitalService.getWaveformData(patientId, isECGMode)
-  // Expected endpoint: GET /api/v1/patients/{id}/waveform?mode=ecg|eeg&lead={selectedLead}
-  const pathData = "M 0 25 L 250 25"; // Flat line placeholder until real-time waveform data available
+  // Generate SVG path from real waveform data (Lead II for ECG, F3 for EEG)
+  // Uses MEDICAL-GRADE FIXED SCALE rendering (NOT auto-scaling)
+  const generatePathData = () => {
+    if (!patient.assignedDeviceId) {
+      console.log(`[PatientCardWaveform ${patient.id.substring(0, 8)}] No device assigned - showing flat line`);
+      return "M 0 30 L 250 30"; // No device - flat line
+    }
+
+    // Get Lead II (ECG) at index 1 or F3 (EEG) at index 14
+    // ECG uses indices 0-11, EEG uses indices 12-20
+    const leadIndex = isECGMode ? 1 : 14;
+    const data = dataBufferRef.current[leadIndex];
+
+    if (!data || data.length === 0) {
+      return "M 0 30 L 250 30"; // No data yet - flat line
+    }
+
+    // Use last 125 samples for 250px width (500Hz × 0.25s = 125 samples)
+    const samples = data.slice(-125);
+
+    // MEDICAL-GRADE RENDERING: Fixed 10mm/mV for ECG, 50μV/mm for EEG
+    // NO auto-scaling - preserves clinical amplitude information
+    const path = renderWaveform(
+      samples,
+      250,  // viewport width
+      60,   // viewport height
+      isECGMode,
+      true  // useFixedScale = true (medical-grade)
+    );
+
+    return path;
+  };
+
+  // Call the function to generate path data
+  // This runs on every render (which happens every 1 second when vitals update)
+  const pathData = generatePathData();
 
   return (
-    <div className="flex-shrink-0">
-      <div
-        className="h-[85px] p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer flex flex-col"
-        onClick={(e) => {
-          e.stopPropagation();
-          onVitalClick(patient, isECGMode ? 'ecgReading' : 'eegReading');
-        }}
-      >
+    <WaveformErrorBoundary waveformType={isECGMode ? 'ECG' : 'EEG'}>
+      <div className="flex-shrink-0">
+        <div
+          className="h-[85px] p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer flex flex-col"
+          onClick={(e) => {
+            e.stopPropagation();
+            onVitalClick(patient, isECGMode ? 'ecgReading' : 'eegReading');
+          }}
+        >
         {/* All ECG/EEG text consolidated at top with smaller font */}
         <div className="flex items-center justify-between mb-0.5 flex-shrink-0">
           <div className="flex items-center space-x-1.5">
@@ -57,46 +91,9 @@ export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.mem
             <span className={`text-[10px] ${
               isECGMode ? 'text-green-400' : 'text-blue-400'
             }`}>
-              {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecgReading || '--') : (patient.vitals?.eegReading || '--')}{isECGMode ? 'mV' : 'μV'}
+              {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecgReading ?? '--') : (patient.vitals?.eegReading ?? '--')}{isECGMode ? 'mV' : 'μV'}
             </span>
             <span className="text-green-300 text-[10px]">25mm/s</span>
-            <select
-              value={selectedLead}
-              onChange={(e) => {
-                e.stopPropagation();
-                setSelectedLead(e.target.value);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="text-[9px] bg-gray-800 text-green-300 border border-gray-600 rounded px-1"
-            >
-              {isECGMode ? (
-                <>
-                  <option value="I">Lead I</option>
-                  <option value="II">Lead II</option>
-                  <option value="III">Lead III</option>
-                  <option value="aVR">aVR</option>
-                  <option value="aVL">aVL</option>
-                  <option value="aVF">aVF</option>
-                  <option value="V1">V1</option>
-                  <option value="V2">V2</option>
-                  <option value="V3">V3</option>
-                  <option value="V4">V4</option>
-                  <option value="V5">V5</option>
-                  <option value="V6">V6</option>
-                </>
-              ) : (
-                <>
-                  <option value="F3-F4">F3-F4</option>
-                  <option value="C3-C4">C3-C4</option>
-                  <option value="P3-P4">P3-P4</option>
-                  <option value="O1-O2">O1-O2</option>
-                  <option value="T3-T4">T3-T4</option>
-                  <option value="T5-T6">T5-T6</option>
-                  <option value="Fp1-Fp2">Fp1-Fp2</option>
-                  <option value="F7-F8">F7-F8</option>
-                </>
-              )}
-            </select>
             {isECGMode && arrhythmiaDetected && (
               <span className="text-yellow-400 text-[10px]">⚠️</span>
             )}
@@ -160,7 +157,8 @@ export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.mem
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </WaveformErrorBoundary>
   );
 });
 

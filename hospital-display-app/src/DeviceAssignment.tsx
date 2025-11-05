@@ -126,7 +126,13 @@ export const DeviceAssignment: React.FC<DeviceAssignmentProps> = ({
   const loadAssignedDevices = async () => {
     try {
       const assignedData = await DeviceService.getAssignmentHistory(currentUser.staffId);
-      const assignedWithPatients = (assignedData || []).map((assignment: deviceAssignmentRecord) => ({
+
+      // Filter out inactive assignments (safety net - backend should already filter)
+      const activeOnly = (assignedData || []).filter((assignment: deviceAssignmentRecord) =>
+        assignment.status === 'active' && assignment.patientId
+      );
+
+      const assignedWithPatients = activeOnly.map((assignment: deviceAssignmentRecord) => ({
         ...assignment,
         patientName: assignment.patientName || 'Unknown Patient',
         location: assignment.location || 'N/A',

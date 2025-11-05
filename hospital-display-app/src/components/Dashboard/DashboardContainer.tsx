@@ -18,6 +18,7 @@ interface DashboardContainerProps {
   settings: appsettings;
   onUpdateSettings: (settings: appsettings) => void;
   onBedsideMode: (patients: patient[], displayCount?: 1 | 2) => void;
+  preloadedPatients?: patient[];
 }
 
 export const DashboardContainer: React.FC<DashboardContainerProps> = ({
@@ -25,7 +26,8 @@ export const DashboardContainer: React.FC<DashboardContainerProps> = ({
   onLogout,
   settings,
   onUpdateSettings,
-  onBedsideMode
+  onBedsideMode,
+  preloadedPatients = []
 }) => {
   const {
     // State
@@ -77,58 +79,19 @@ export const DashboardContainer: React.FC<DashboardContainerProps> = ({
     handlePatientSelection,
     getWardOptions,
     detectProximity,
-    loadPatients,
-    closeAllModals
+    loadPatients
   } = useDashboard({
     currentUser,
     onLogout,
     settings,
-    onBedsideMode
+    onBedsideMode,
+    preloadedPatients
   });
 
-  // Check if any modal is open
+  // Check if any modal is open (excluding settings which is handled separately)
   const hasActiveModal = selectedPatient || showVitalChart || showECGViewer ||
     showDeviceAssignment || showPatientAdmission || showDeviceProvisioning ||
     showNurseAdmission || showStaffManagement;
-
-  if (hasActiveModal) {
-    return (
-      <DashboardModals
-        currentUser={currentUser}
-        settings={settings}
-        isOnline={isOnline}
-        lastSync={lastSync}
-        loading={loading}
-        patients={patients}
-        selectedPatient={selectedPatient}
-        showVitalChart={showVitalChart}
-        showECGViewer={showECGViewer}
-        showSettings={showSettings}
-        showDeviceAssignment={showDeviceAssignment}
-        showPatientAdmission={showPatientAdmission}
-        showDeviceProvisioning={showDeviceProvisioning}
-        showNurseAdmission={showNurseAdmission}
-        showStaffManagement={showStaffManagement}
-        onUpdateSettings={onUpdateSettings}
-        onLogout={onLogout}
-        onBedsideMode={onBedsideMode}
-        onVitalClick={handleVitalClick}
-        onPatientDischarge={handlePatientDischarge}
-        onCloseModal={() => setSelectedPatient(null)}
-        onCloseVitalChart={() => setShowVitalChart(null)}
-        onCloseECGViewer={() => setShowECGViewer(null)}
-        onCloseSettings={() => setShowSettings(false)}
-        onCloseDeviceAssignment={() => setShowDeviceAssignment(false)}
-        onClosePatientAdmission={() => setShowPatientAdmission(false)}
-        onCloseDeviceProvisioning={() => setShowDeviceProvisioning(false)}
-        onCloseNurseAdmission={() => setShowNurseAdmission(false)}
-        onCloseStaffManagement={() => setShowStaffManagement(false)}
-        onSetShowECGViewer={setShowECGViewer}
-        onToggleECGMode={handleToggleECGMode}
-        onDualBedsideMode={handleDualBedsideMode}
-      />
-    );
-  }
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
@@ -182,6 +145,47 @@ export const DashboardContainer: React.FC<DashboardContainerProps> = ({
         onDetectProximity={detectProximity}
         onRefreshData={loadPatients}
       />
+
+      {/* Modal Overlays - Always render dashboard content, overlay modals on top */}
+      {/* This preserves WebSocket subscriptions and component state */}
+      {hasActiveModal && (
+        <div className="fixed inset-0 z-50">
+          <DashboardModals
+            currentUser={currentUser}
+            settings={settings}
+            isOnline={isOnline}
+            lastSync={lastSync}
+            loading={loading}
+            patients={patients}
+            selectedPatient={selectedPatient}
+            showVitalChart={showVitalChart}
+            showECGViewer={showECGViewer}
+            showSettings={false}
+            showDeviceAssignment={showDeviceAssignment}
+            showPatientAdmission={showPatientAdmission}
+            showDeviceProvisioning={showDeviceProvisioning}
+            showNurseAdmission={showNurseAdmission}
+            showStaffManagement={showStaffManagement}
+            onUpdateSettings={onUpdateSettings}
+            onLogout={onLogout}
+            onBedsideMode={onBedsideMode}
+            onVitalClick={handleVitalClick}
+            onPatientDischarge={handlePatientDischarge}
+            onCloseModal={() => setSelectedPatient(null)}
+            onCloseVitalChart={() => setShowVitalChart(null)}
+            onCloseECGViewer={() => setShowECGViewer(null)}
+            onCloseSettings={() => setShowSettings(false)}
+            onCloseDeviceAssignment={() => setShowDeviceAssignment(false)}
+            onClosePatientAdmission={() => setShowPatientAdmission(false)}
+            onCloseDeviceProvisioning={() => setShowDeviceProvisioning(false)}
+            onCloseNurseAdmission={() => setShowNurseAdmission(false)}
+            onCloseStaffManagement={() => setShowStaffManagement(false)}
+            onSetShowECGViewer={setShowECGViewer}
+            onToggleECGMode={handleToggleECGMode}
+            onDualBedsideMode={handleDualBedsideMode}
+          />
+        </div>
+      )}
 
       {/* Settings Panel - renders separately to maintain modal behavior */}
       {showSettings && (

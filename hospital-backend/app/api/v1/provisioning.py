@@ -142,7 +142,7 @@ async def generate_provisioning_code(
         async with getDbConnection() as conn:
             await conn.execute(
                 """
-                INSERT INTO provisioning_codes (code, technician_id, expires_at)
+                INSERT INTO provisioning_codes (code, "technicianId", "expiresAt")
                 VALUES ($1, $2, $3)
                 """,
                 code,
@@ -202,7 +202,7 @@ async def provision_device_with_certificate(
             # Step 1: Validate provisioning code
             code_row = await conn.fetchrow(
                 """
-                SELECT code, technician_id, expires_at, used, device_id
+                SELECT code, "technicianId", "expiresAt", used, "deviceId"
                 FROM provisioning_codes
                 WHERE code = $1
                 """,
@@ -226,7 +226,7 @@ async def provision_device_with_certificate(
 
             # Check if code is expired
             # Make both datetimes timezone-aware for comparison
-            expires_at_aware = code_row["expires_at"].replace(tzinfo=timezone.utc)
+            expires_at_aware = code_row["expiresAt"].replace(tzinfo=timezone.utc)
             if datetime.now(timezone.utc) > expires_at_aware:
                 logger.warning(f"❌ Expired provisioning code attempted: {request.code}")
                 raise HTTPException(
@@ -237,13 +237,13 @@ async def provision_device_with_certificate(
             # Step 2: Assign sequential device ID based on MAC address
             # Check if MAC already has an assigned device ID
             mac_mapping = await conn.fetchrow(
-                'SELECT device_id FROM device_mac_mapping WHERE mac_address = $1',
+                'SELECT "deviceId" FROM device_mac_mapping WHERE "macAddress" = $1',
                 request.macAddress
             )
 
             if mac_mapping:
                 # MAC already mapped - use existing device ID
-                device_id_to_use = mac_mapping["device_id"]
+                device_id_to_use = mac_mapping["deviceId"]
                 logger.info(f"📍 MAC {request.macAddress} already mapped to {device_id_to_use}")
             else:
                 # Generate new sequential device ID
@@ -290,7 +290,7 @@ async def provision_device_with_certificate(
 
                 # Store MAC → Device ID mapping
                 await conn.execute(
-                    "INSERT INTO device_mac_mapping (mac_address, device_id) VALUES ($1, $2)",
+                    'INSERT INTO device_mac_mapping ("macAddress", "deviceId") VALUES ($1, $2)',
                     request.macAddress,
                     device_id_to_use
                 )
@@ -299,7 +299,7 @@ async def provision_device_with_certificate(
 
             # Step 3: Check certificate status (for logging only - ON CONFLICT handles re-provisioning)
             existing_cert = await conn.fetchrow(
-                'SELECT id, revoked FROM device_certificates WHERE device_id = $1',
+                'SELECT id, revoked FROM device_certificates WHERE "deviceId" = $1',
                 device_id_to_use
             )
 
@@ -326,19 +326,19 @@ async def provision_device_with_certificate(
             await conn.execute(
                 """
                 INSERT INTO device_certificates
-                (device_id, certificate_pem, expires_at, mac_address, serial_number)
+                ("deviceId", "certificatePem", "expiresAt", "macAddress", "serialNumber")
                 VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (device_id)
+                ON CONFLICT ("deviceId")
                 DO UPDATE SET
-                    certificate_pem = EXCLUDED.certificate_pem,
-                    expires_at = EXCLUDED.expires_at,
-                    mac_address = EXCLUDED.mac_address,
-                    serial_number = EXCLUDED.serial_number,
-                    issued_at = NOW(),
+                    "certificatePem" = EXCLUDED."certificatePem",
+                    "expiresAt" = EXCLUDED."expiresAt",
+                    "macAddress" = EXCLUDED."macAddress",
+                    "serialNumber" = EXCLUDED."serialNumber",
+                    "issuedAt" = NOW(),
                     revoked = false,
-                    revoked_at = NULL,
-                    revoked_by = NULL,
-                    revocation_reason = NULL
+                    "revokedAt" = NULL,
+                    "revokedBy" = NULL,
+                    "revocationReason" = NULL
                 """,
                 device_id_to_use,
                 certificate_pem,
@@ -351,7 +351,7 @@ async def provision_device_with_certificate(
             await conn.execute(
                 """
                 UPDATE provisioning_codes
-                SET used = true, used_at = NOW(), device_id = $1
+                SET used = true, "usedAt" = NOW(), "deviceId" = $1
                 WHERE code = $2
                 """,
                 device_id_to_use,
@@ -367,7 +367,7 @@ async def provision_device_with_certificate(
                 ca_certificate_pem = f.read()
 
             logger.info(f"✅ Device {device_id_to_use} provisioned successfully with certificate")
-            logger.info(f"   Technician: {code_row['technician_id']}, MAC: {request.macAddress}")
+            logger.info(f"   Technician: {code_row['technicianId']}, MAC: {request.macAddress}")
 
             return DeviceCertificateResponse(
                 deviceId=device_id_to_use,  # Return backend-assigned ID (fit-00001)
@@ -421,7 +421,7 @@ async def revoke_device_certificate(
         async with getDbConnection() as conn:
             # Check if certificate exists
             cert_row = await conn.fetchrow(
-                'SELECT id, revoked FROM device_certificates WHERE device_id = $1',
+                'SELECT id, revoked FROM device_certificates WHERE "deviceId" = $1',
                 device_id
             )
 
@@ -442,10 +442,10 @@ async def revoke_device_certificate(
                 """
                 UPDATE device_certificates
                 SET revoked = true,
-                    revoked_at = NOW(),
-                    revoked_by = $1,
-                    revocation_reason = $2
-                WHERE device_id = $3
+                    "revokedAt" = NOW(),
+                    "revokedBy" = $1,
+                    "revocationReason" = $2
+                WHERE "deviceId" = $3
                 """,
                 current_user["id"],
                 request.reason,
@@ -499,14 +499,14 @@ async def list_provisioning_codes(
                 """
                 SELECT
                     code,
-                    technician_id,
-                    created_at,
-                    expires_at,
+                    "technicianId",
+                    "createdAt",
+                    "expiresAt",
                     used,
-                    used_at,
-                    device_id
+                    "usedAt",
+                    "deviceId"
                 FROM provisioning_codes
-                ORDER BY created_at DESC
+                ORDER BY "createdAt" DESC
                 LIMIT $1
                 """,
                 limit
@@ -517,20 +517,19 @@ async def list_provisioning_codes(
                 code_dict = dict(row)
                 # Add computed fields
                 now = datetime.now(timezone.utc)
-                # Make expires_at timezone-aware for comparison
-                expires_at_aware = code_dict["expires_at"].replace(tzinfo=timezone.utc)
+                # Make expiresAt timezone-aware for comparison
+                expires_at_aware = code_dict["expiresAt"].replace(tzinfo=timezone.utc)
                 code_dict["isExpired"] = now > expires_at_aware
                 code_dict["status"] = (
                     "used" if code_dict["used"]
                     else "expired" if code_dict["isExpired"]
                     else "active"
                 )
-                # Convert timestamps to ISO strings
-                code_dict["createdAt"] = code_dict.pop("created_at").isoformat() + "Z"
-                code_dict["expiresAt"] = code_dict.pop("expires_at").isoformat() + "Z"
-                code_dict["usedAt"] = code_dict.pop("used_at").isoformat() + "Z" if code_dict["used_at"] else None
-                code_dict["technicianId"] = code_dict.pop("technician_id")
-                code_dict["deviceId"] = code_dict.pop("device_id")
+                # Convert timestamps to ISO strings (already camelCase from SELECT)
+                code_dict["createdAt"] = code_dict["createdAt"].isoformat() + "Z"
+                code_dict["expiresAt"] = code_dict["expiresAt"].isoformat() + "Z"
+                code_dict["usedAt"] = code_dict["usedAt"].isoformat() + "Z" if code_dict["usedAt"] else None
+                # technicianId and deviceId already camelCase from SELECT
 
                 codes.append(code_dict)
 

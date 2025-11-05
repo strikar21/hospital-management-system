@@ -45,8 +45,8 @@ export interface patient {
   vitals: {
     // Cardiovascular - STANDARDIZED NAMES
     heartRate: number; // Always integer - BPM
-    systolicPressure: number; // Always integer - systolic pressure in mmHg
-    diastolicPressure: number; // Always integer - diastolic pressure in mmHg
+    systolicPressure: number; // mmHg
+    diastolicPressure: number; // mmHg
 
     // Respiratory - STANDARDIZED NAMES
     respiratoryRate: number; // Always integer - breaths per minute
@@ -61,9 +61,9 @@ export interface patient {
     isEcgMode: boolean; // true = ECG, false = EEG
 
     // Advanced Monitoring - STANDARDIZED NAMES
-    bioelectricalImpedance: number; // Ohms - bioelectrical impedance
-    tremorIntensity: number; // 0-10 scale tremor intensity
-    fallRisk: 'low' | 'medium' | 'high'; // Fall risk assessment
+    bioelectricalImpedance: number; // Ohms
+    tremorIntensity: number; // 0-10 scale
+    fallRisk: 'low' | 'medium' | 'high'; // Calculated from IMU data
 
     // Nested ECG/EEG Analysis Objects (8-12 Channel Support)
     ecg?: {
@@ -172,12 +172,12 @@ export interface vitalhistory {
   skinTemperature: number;
   oxygenSaturation: number;
   respiratoryRate: number;
-  systolicPressure: number; // systolic pressure in mmHg
-  diastolicPressure: number; // diastolic pressure in mmHg
+  systolicPressure: number; // mmHg
+  diastolicPressure: number; // mmHg
   ecgReading: number;
   eegReading: number;
-  bioelectricalImpedance: number;
-  tremorIntensity: number;
+  bioelectricalImpedance: number; // Ohms
+  tremorIntensity: number; // 0-10 scale
 }
 
 export interface ecgreading {

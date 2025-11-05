@@ -62,8 +62,10 @@ async def websocketEndpoint(
         
         # Handle incoming messages from client
         async for data in websocket.iter_text():
+            logger.info(f"🟢 RAW WebSocket data received from {connectionId}: {data[:500]}")
             try:
                 message = json.loads(data)
+                logger.info(f"🟢 Parsed WebSocket message from {connectionId}: type={message.get('type')}, keys={list(message.keys())}")
                 await handleClientMessage(connectionId, message)
                 
             except json.JSONDecodeError:
@@ -87,18 +89,30 @@ async def websocketEndpoint(
 
 async def handleClientMessage(connectionId: str, message: Dict[str, Any]) -> None:
     """Handle incoming messages from WebSocket clients"""
-    
+
+    logger.info(f"🔵 DEBUG: Received WebSocket message: type={message.get('type')}, keys={list(message.keys())}")
+
     messageType = message.get('type')
-    
+
     if messageType == 'subscribePatient':
         # Subscribe to patient-specific updates
         patientId = message.get('patientId')
+        triggerWaveformCalibration = message.get('triggerWaveformCalibration', False)  # ✅ NEW: ECG viewer can request waveform calibration
+
+        logger.info(f"🔵 DEBUG: subscribePatient - patientId={patientId}, triggerWaveformCalibration={triggerWaveformCalibration}")
+
         if patientId:
             # Verify patient exists and user has access
             async with getDbConnection() as conn:
                 patient = await fetchOne(conn, "SELECT id FROM patients WHERE id = $1 AND status = 'active'", (patientId,))
+
+                logger.info(f"🔵 DEBUG: Patient lookup - found={patient is not None}")
+
                 if patient:
                     success = connectionManager.subscribeToPatient(connectionId, patientId)
+
+                    logger.info(f"🔵 DEBUG: subscribeToPatient returned success={success}")
+
                     await connectionManager.sendToConnection(connectionId, {
                         'type': 'subscriptionResult',
                         'action': 'subscribePatient',
@@ -106,6 +120,27 @@ async def handleClientMessage(connectionId: str, message: Dict[str, Any]) -> Non
                         'success': success,
                         'message': f'Subscribed to patient {patientId}' if success else 'Subscription failed'
                     })
+
+                    # ✅ NEW: Trigger waveform calibration on ECG viewer open
+                    logger.info(f"🔵 DEBUG: Checking waveform calibration - success={success}, trigger={triggerWaveformCalibration}")
+
+                    if success and triggerWaveformCalibration:
+                        logger.info(f"🔵 DEBUG: About to trigger waveform calibration for patient {patientId}")
+                        try:
+                            deviceId = await _getDeviceForPatient(patientId)
+                            logger.info(f"🔵 DEBUG: Device lookup returned deviceId={deviceId}")
+
+                            if deviceId:
+                                logger.info(f"🔵 DEBUG: Calling _triggerWaveformCalibration for device {deviceId}")
+                                await _triggerWaveformCalibration(deviceId, patientId)
+                                logger.info(f"🔧 Waveform calibration triggered for device {deviceId} (patient {patientId})")
+                            else:
+                                logger.warning(f"⚠️  No device found for patient {patientId}")
+                        except Exception as e:
+                            logger.error(f"⚠️  Could not trigger waveform calibration for patient {patientId}: {e}", exc_info=True)
+                    else:
+                        logger.info(f"🔵 DEBUG: Waveform calibration NOT triggered - success={success}, trigger={triggerWaveformCalibration}")
+
                 else:
                     await connectionManager.sendToConnection(connectionId, {
                         'type': 'subscriptionResult',
@@ -124,7 +159,7 @@ async def handleClientMessage(connectionId: str, message: Dict[str, Any]) -> Non
         # Unsubscribe from patient-specific updates
         patientId = message.get('patientId')
         if patientId:
-            success = connectionManager.unsubscribe_from_patient(connectionId, patientId)
+            success = connectionManager.unsubscribeFromPatient(connectionId, patientId)
             await connectionManager.sendToConnection(connectionId, {
                 'type': 'subscriptionResult',
                 'action': 'unsubscribePatient',
@@ -211,12 +246,12 @@ async def broadcastAlert(alertData: Dict[str, Any]):
     try:
         patientId = alertData.get('patientId')
         await connectionManager.sendAlert(patientId, alertData)
-        
+
         if patientId:
             subscriberCount = connectionManager.getPatientSubscriberCount(patientId)
         else:
             subscriberCount = len(connectionManager.generalSubscriptions)
-        
+
         return JSONResponse({
             'success': True,
             'message': f'Alert broadcasted{f" for patient {patientId}" if patientId else " to all subscribers"}',
@@ -225,3 +260,39 @@ async def broadcastAlert(alertData: Dict[str, Any]):
     except Exception as e:
         logger.error(f"❌ Failed to broadcast alert: {e}")
         raise HTTPException(status_code=500, detail="Failed to broadcast alert")
+
+# ====================================
+# ✅ NEW: WAVEFORM CALIBRATION HELPERS
+# ====================================
+
+async def _getDeviceForPatient(patientId: str) -> str | None:
+    """Get device ID assigned to a patient"""
+    async with getDbConnection() as conn:
+        result = await fetchOne(conn, """
+            SELECT d.id as deviceId
+            FROM deviceassignments da
+            JOIN devices d ON da."deviceId" = d.id
+            WHERE da."patientId" = $1
+            AND da."assignedAt" IS NOT NULL
+            AND da."unassignedAt" IS NULL
+            ORDER BY da."assignedAt" DESC
+            LIMIT 1
+        """, (patientId,))
+        return result['deviceid'] if result else None
+
+async def _triggerWaveformCalibration(deviceId: str, patientId: str) -> None:
+    """Send MQTT waveform calibration command to device"""
+    from ...services.mqtt_service import mqttService
+    from datetime import datetime, timezone
+
+    commandId = str(uuid.uuid4())
+    command = {
+        'command': 'waveformCalibrate',
+        'commandId': commandId,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'triggeredBy': 'ecgViewerOpen',
+        'patientId': patientId
+    }
+
+    await mqttService.publishCommand(deviceId, command)
+    logger.info(f"📤 Waveform calibration command sent to device {deviceId} (commandId: {commandId})")

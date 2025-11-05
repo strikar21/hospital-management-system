@@ -14,6 +14,7 @@ interface DashboardProps {
   settings: appsettings;
   onUpdateSettings: (settings: appsettings) => void;
   onBedsideMode: (patients: patient[], displayCount?: 1 | 2) => void;
+  preloadedPatients?: patient[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = (props) => {

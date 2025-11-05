@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from datetime import datetime
 from typing import Dict, Any, Callable, Optional
 import ssl
@@ -133,7 +134,7 @@ class MQTTService:
     async def _wait_for_connection(self):
         """Wait for MQTT connection to be established"""
         while not self.connected:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.01)  # Reduced from 0.1s to 0.01s for lower latency
 
     async def stop(self):
         """Stop MQTT service"""
@@ -165,10 +166,10 @@ class MQTTService:
     async def _subscribeTopic(self, topic: str):
         """Subscribe to MQTT topic"""
         if self.client and self.connected:
-            result, mid = self.client.subscribe(topic)
+            result, mid = self.client.subscribe(topic, qos=1)  # QoS 1 for end-to-end reliability with ESP32
             if result == mqtt.MQTT_ERR_SUCCESS:
                 self.subscribedTopics.add(topic)
-                logger.info(f"📡 Subscribed to: {topic}")
+                logger.info(f"📡 Subscribed to: {topic} (QoS 1)")
             else:
                 logger.error(f"❌ Failed to subscribe to: {topic}")
 
@@ -291,7 +292,14 @@ class MQTTService:
             topic = msg.topic
             payload = json.loads(msg.payload.decode())
 
-            logger.debug(f"📨 MQTT message: {topic} -> {payload}")
+            # Log ALL incoming messages at INFO level to diagnose waveform stream issue
+            if '/stream' in topic:
+                logger.info(f"📨 MQTT STREAM MESSAGE RECEIVED: {topic}")
+                logger.info(f"   Payload keys: {list(payload.keys())}")
+                logger.info(f"   Has ecgWaveform: {'ecgWaveform' in payload}")
+                logger.info(f"   Has eegWaveform: {'eegWaveform' in payload}")
+            else:
+                logger.debug(f"📨 MQTT message: {topic} -> {payload}")
 
             # Schedule coroutine in main event loop (thread-safe from MQTT callback thread)
             asyncio.run_coroutine_threadsafe(
@@ -307,6 +315,10 @@ class MQTTService:
         try:
             topicParts = topic.split('/')
 
+            # DEBUG: Log routing for stream messages
+            if '/stream' in topic:
+                logger.info(f"🔀 ROUTING stream message: topic={topic}, topicParts={topicParts}")
+
             # Handle provisioning requests (no authentication needed yet)
             if topic == 'hospital/provisioning/request':
                 await self._handleProvisioningRequest(payload)
@@ -315,6 +327,10 @@ class MQTTService:
             if len(topicParts) >= 4 and topicParts[0] == 'hospital' and topicParts[1] == 'devices':
                 deviceId = topicParts[2]
                 messageType = topicParts[3]
+
+                # DEBUG: Log stream message routing
+                if messageType == 'stream':
+                    logger.info(f"🔀 Stream message identified: deviceId={deviceId}, messageType={messageType}")
 
                 # ========================================
                 # SECURITY VALIDATION LAYER
@@ -336,16 +352,45 @@ class MQTTService:
                         logger.warning(f"🚨 SECURITY: Message from {device['status']} device {deviceId}")
                         return
 
-                # Rate limiting: Max 1 message per second per device per topic
-                rateLimitKey = f"{deviceId}:{messageType}"
-                now = time.time()
-                lastMsg = self.deviceLastMessage.get(rateLimitKey, 0)
+                    # DEBUG: Log security validation for stream messages
+                    if messageType == 'stream':
+                        logger.info(f"✅ Security validation passed for stream: deviceId={deviceId}, status={device['status']}")
 
-                if (now - lastMsg) < 1.0:  # Less than 1 second
-                    logger.warning(f"🚨 SECURITY: Rate limit exceeded for {deviceId}/{messageType}")
-                    return
+                # Rate limiting: Max 1 message per second per device per topic (except 'stream' which sends 10/sec)
+                if messageType != 'stream':  # Waveform streaming sends 10 msg/sec, skip rate limit
+                    # DETECT OFFLINE QUEUE: If message timestamp is > 5 seconds old, it's from offline buffer
+                    # ESP32 offline queue sends old messages in batch after reconnection
+                    now = time.time()
+                    messageTimestamp = payload.get('timestamp')
 
-                self.deviceLastMessage[rateLimitKey] = now
+                    # Convert ISO timestamp to Unix epoch if needed
+                    if messageTimestamp:
+                        try:
+                            from datetime import datetime
+                            if isinstance(messageTimestamp, str):
+                                messageTimestamp = datetime.fromisoformat(messageTimestamp.replace('Z', '+00:00')).timestamp()
+                            elif isinstance(messageTimestamp, datetime):
+                                messageTimestamp = messageTimestamp.timestamp()
+                        except Exception:
+                            messageTimestamp = now  # Fallback to current time if parsing fails
+                    else:
+                        messageTimestamp = now  # No timestamp = treat as real-time
+
+                    messageAge = now - messageTimestamp
+
+                    # Only rate-limit REAL-TIME messages (< 5 seconds old)
+                    if messageAge < 5.0:  # Real-time message
+                        rateLimitKey = f"{deviceId}:{messageType}"
+                        lastMsg = self.deviceLastMessage.get(rateLimitKey, 0)
+
+                        if (now - lastMsg) < 1.0:  # Less than 1 second
+                            logger.warning(f"🚨 SECURITY: Rate limit exceeded for {deviceId}/{messageType}")
+                            return
+
+                        self.deviceLastMessage[rateLimitKey] = now
+                    else:
+                        # Offline queue message - accept without rate limiting
+                        logger.info(f"📦 OFFLINE QUEUE: Accepting old message from {deviceId}/{messageType} (age: {messageAge:.1f}s)")
 
                 # Validate data ranges for vitals
                 if messageType == 'vitals':
@@ -538,11 +583,25 @@ class MQTTService:
 
             alerts = await alertDetectionService.detectAlerts(vitalsDict, patientId, deviceId)
 
-            # Broadcast alerts via WebSocket
-            for alert in alerts:
-                alertPayload = alertDetectionService.createAlertPayload(alert)
-                await connectionManager.sendAlert(patientId, alertPayload)
-                # TODO: Store alert in database once alerts table is created
+            # Store alerts in database and broadcast via WebSocket
+            async with getDbConnection() as conn:
+                for alert in alerts:
+                    # Generate unique alert ID
+                    alert_id = str(uuid.uuid4())
+
+                    # Store alert in patient_alerts table
+                    await conn.execute('''
+                        INSERT INTO patient_alerts
+                        (id, "patientId", "deviceId", type, severity, message, source, "alertTimestamp", status, "createdAt", "updatedAt")
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW(), NOW())
+                    ''', alert_id, patientId, deviceId, alert.alertType, alert.severity, alert.message, alert.source, datetime.now())
+
+                    # Broadcast with ID for frontend acknowledgment tracking
+                    alertPayload = alertDetectionService.createAlertPayload(alert)
+                    alertPayload['id'] = alert_id
+                    await connectionManager.sendAlert(patientId, alertPayload)
+
+                    logger.debug(f"Alert stored: {alert.alertType} (ID: {alert_id}) for patient {patientId}")
 
             # Broadcast to frontend via WebSocket
             frontendVitals = self._convertVitalsToFrontendFormat(vitalsMsg)
@@ -639,8 +698,13 @@ class MQTTService:
         """
         try:
             # Basic validation
-            if not all(k in payload for k in ['deviceId', 'patientId', 'timestamp', 'mode', 'samples']):
+            if not all(k in payload for k in ['deviceId', 'patientId', 'timestamp', 'mode']):
                 logger.warning(f"⚠️ Incomplete waveform stream message from {deviceId}")
+                return
+
+            # Must have waveform data (either ECG or EEG)
+            if 'ecgWaveform' not in payload and 'eegWaveform' not in payload:
+                logger.warning(f"⚠️ Waveform stream from {deviceId} missing waveform data")
                 return
 
             patientId = payload.get('patientId')
@@ -662,10 +726,35 @@ class MQTTService:
                 waveformData=payload
             )
 
-            # Debug log every 10th packet (1 second intervals) to avoid spam
-            sequence = payload.get('sequence', 0)
-            if sequence % 10 == 0:
-                logger.debug(f"📊 Waveform stream: {deviceId} → patient {patientId} (seq: {sequence})")
+            # ✅ NEW: Store stream packet to database for historical analysis
+            try:
+                # Prepare waveform data for storage
+                # ESP32 stream format is compatible with WaveformSnapshotMessage schema
+                # Set duration to 0.1 seconds (100ms packet = 0.1s)
+                payload['duration'] = 0.1
+
+                # Parse timestamp if needed
+                if 'timestamp' in payload:
+                    timestampStr = payload['timestamp']
+                    if isinstance(timestampStr, str):
+                        if timestampStr.endswith('Z'):
+                            timestampStr = timestampStr.replace('Z', '+00:00')
+                        payload['timestamp'] = datetime.fromisoformat(timestampStr)
+
+                # Create WaveformSnapshotMessage and store using existing function
+                waveformMsg = WaveformSnapshotMessage(**payload)
+                await self._storeWaveformSnapshot(waveformMsg)
+
+                # Log storage success (every 10th packet to avoid spam)
+                sequence = payload.get('sequence', 0)
+                if sequence % 10 == 0:
+                    logger.debug(f"💾 Stream packet #{sequence} stored to database")
+
+            except Exception as e:
+                # Don't fail WebSocket broadcast if storage fails
+                logger.error(f"Stream packet storage failed (non-critical): {e}", exc_info=True)
+
+            # Stream packets logged at DEBUG level only
 
         except Exception as e:
             logger.error(f"❌ Waveform stream processing error: {e}", exc_info=True)
@@ -1114,19 +1203,47 @@ class MQTTService:
         pass
 
     def _convertVitalsToFrontendFormat(self, vitalsMsg: VitalsRealtimeMessage) -> Dict[str, Any]:
-        """Convert VitalsRealtimeMessage to frontend format"""
+        """Convert VitalsRealtimeMessage to frontend format with all fields"""
+
+        # Calculate fallRisk from imuFallRisk (0-10 scale → low/medium/high)
+        fallRisk = 'low'
+        if vitalsMsg.imuFallRisk is not None:
+            if vitalsMsg.imuFallRisk > 6:
+                fallRisk = 'high'
+            elif vitalsMsg.imuFallRisk > 3:
+                fallRisk = 'medium'
+
         result = {
+            # Basic vitals - frontend field names
             'heartRate': vitalsMsg.heartRate,
             'respiratoryRate': vitalsMsg.respiratoryRate,
-            'temperature': vitalsMsg.skinTemperature,
-            'oxygenSat': vitalsMsg.oxygenSaturation,
+            'skinTemperature': vitalsMsg.skinTemperature,  # Celsius from backend
+            'oxygenSaturation': vitalsMsg.oxygenSaturation,
+
+            # Blood pressure - frontend field names
             'systolicPressure': vitalsMsg.bloodPressureSystolic,
             'diastolicPressure': vitalsMsg.bloodPressureDiastolic,
+
+            # Advanced monitoring - frontend field names
+            'bioelectricalImpedance': vitalsMsg.bioimpedance if vitalsMsg.bioimpedance is not None else 0,
+            'tremorIntensity': vitalsMsg.tremor if vitalsMsg.tremor is not None else 0,
+            'fallRisk': fallRisk,
+
+            # ECG/EEG single readings - frontend field names
+            'ecgReading': vitalsMsg.ecgReading if vitalsMsg.ecgReading is not None else 0,
+            'eegReading': vitalsMsg.eegReading if vitalsMsg.eegReading is not None else 0,
+            'isEcgMode': vitalsMsg.mode == 'ecg',
+
+            # Device status
             'batteryLevel': vitalsMsg.batteryLevel,
             'signalQuality': vitalsMsg.signalQuality,
-            'isEcgMode': vitalsMsg.mode == 'ecg',
+            'dataQualityScore': vitalsMsg.signalQuality,  # Alias for compatibility
+
+            # Timestamps
+            'lastDataReceived': vitalsMsg.timestamp.isoformat(),
             'lastUpdated': vitalsMsg.timestamp.isoformat(),
-            'lastSync': datetime.now().isoformat()
+            'lastSync': datetime.now().isoformat(),
+            'timestamp': vitalsMsg.timestamp.isoformat()
         }
 
         # Add nested ECG object if in ECG mode

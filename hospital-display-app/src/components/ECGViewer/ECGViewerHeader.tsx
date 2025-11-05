@@ -57,7 +57,7 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
             Continuous {isECGMode ? 'ECG' : 'EEG'} - Bed {patient.bedNumber}
           </h2>
           <p className="text-sm text-gray-400">
-            Room {patient.room} • {patient.ward} Ward • Auto-scaled to fit window
+            Room {patient.room} • {patient.ward} Ward • Medical-grade display
           </p>
         </div>
       </div>
@@ -96,6 +96,7 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
             <option value={1}>1 View</option>
             <option value={4}>2x2 (4 Views)</option>
             <option value={9}>3x3 (9 Views)</option>
+            {isECGMode && <option value={12}>Complete 12-Lead ECG</option>}
           </select>
         </div>
 
@@ -124,10 +125,11 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
             value={speed}
             onChange={(e) => onSpeedChange(Number(e.target.value))}
             className="bg-gray-700 text-white rounded px-2 py-1 text-sm"
+            title="Display only - for future PDF export feature. Screen rendering auto-adjusts to available data."
           >
             <option value={15}>15mm/s</option>
-            <option value={25}>25mm/s</option>
-            <option value={30}>30mm/s</option>
+            <option value={25}>25mm/s{isECGMode ? ' (ECG Standard)' : ''}</option>
+            <option value={30}>30mm/s{!isECGMode ? ' (EEG Standard)' : ''}</option>
             <option value={50}>50mm/s</option>
           </select>
 
@@ -140,14 +142,16 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
             {isECGMode ? (
               <>
                 <option value={5}>5mm/mV</option>
-                <option value={10}>10mm/mV</option>
+                <option value={10}>10mm/mV (Standard)</option>
                 <option value={20}>20mm/mV</option>
               </>
             ) : (
               <>
                 <option value={5}>5μV/mm</option>
-                <option value={7}>7μV/mm</option>
+                <option value={7}>7μV/mm (ACNS Standard)</option>
                 <option value={10}>10μV/mm</option>
+                <option value={15}>15μV/mm</option>
+                <option value={20}>20μV/mm</option>
               </>
             )}
           </select>
@@ -165,10 +169,15 @@ export const ECGViewerHeader: React.FC<ECGViewerHeaderProps> = ({
         {/* Current Values (Header) */}
         <div className="text-right text-sm">
           <div className="font-medium">
-            {isECGMode ? `HR: ${patient.vitals?.heartRate ?? '--'} BPM` : 'EEG Activity'}
+            {isECGMode ? `HR: ${patient.vitals?.heartRate ?? '--'} BPM` : '8-Channel EEG'}
           </div>
           <div className="text-gray-400">
-            {isECGMode ? `${patient.vitals?.ecgReading ?? '--'} mV` : `${patient.vitals?.eegReading ?? '--'} μV • Auto-scaled`}
+            {isECGMode
+              ? `${patient.vitals?.ecgReading ?? '--'} mV`
+              : (patient.vitals?.eeg?.dominantFrequency
+                  ? `${patient.vitals.eeg.dominantFrequency.toFixed(1)} Hz`
+                  : 'Monitoring')
+            }
           </div>
         </div>
       </div>

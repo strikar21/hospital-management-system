@@ -1,0 +1,46 @@
+# This file contains all the additions needed for v5.2 waveform streaming
+
+## 1. Update version number (line 41)
+OLD: const char* FIRMWARE_VERSION = "5.0.0";
+NEW: const char* FIRMWARE_VERSION = "5.2.0";
+
+## 2. Add global variables after line 113 (after lastNtpSync)
+ADD:
+unsigned long lastWaveformStream = 0;
+uint32_t waveformSequenceCounter = 0;
+unsigned long lastMicroBatch = 0;
+
+// Micro-batch waveform accumulator
+int32_t waveformAccumulator[8][50];
+int accumulatorIndex = 0;
+int32_t microBatch[8][10];  // GLOBAL to prevent stack overflow
+
+## 3. Replace sendWaveformStream() placeholder function (lines 1385-1394)
+Replace entire function with full implementation (see ESP32_V5.2_WAVEFORM_PROPER_FIX.md)
+
+## 4. Add generateMicroBatch() function before sendWaveformStream()
+Add full function (see ESP32_V5.2_WAVEFORM_PROPER_FIX.md)
+
+## 5. Update loop() to add waveform calls after line 657 (after sendVitals call)
+ADD after sendVitals():
+  // Generate micro-batches every 20ms
+  if (wifiConnected && isProvisioned && isAssigned && millis() - lastMicroBatch > 20) {
+    generateMicroBatch();
+    lastMicroBatch = millis();
+  }
+
+  // Send waveform when buffer full (every 100ms)
+  if (wifiConnected && isProvisioned && isAssigned &&
+      accumulatorIndex >= 50 && millis() - lastWaveformStream > 100) {
+    sendWaveformStream();
+    lastWaveformStream = millis();
+    accumulatorIndex = 0;
+  }
+
+## 6. Update setup() message (line 532)
+OLD: Serial.println("\n🏥 ESP32 Hospital Watch v5.0.0 (Certificate Auth)");
+NEW: Serial.println("\n🏥 ESP32 Hospital Watch v5.2.0 (Certificate Auth + Waveforms)");
+
+## 7. Update setup() final message (line 614)
+OLD: Serial.println("✅ v5.0.0 certificate-based auth initialized");
+NEW: Serial.println("✅ v5.2.0 certificate-based auth + waveform streaming initialized");

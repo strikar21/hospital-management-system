@@ -148,7 +148,7 @@ export class PatientTransformer extends BaseTransformer {
       const deviceInfo = PatientTransformer.transformDeviceInfo(data);
 
       // Handle nested data arrays - no mock alerts
-      const vitals = data.vitals || {};
+      const vitals = data.vitals || null;
       const alerts: any[] = []; // Empty alerts - no mock data
       const medications = PatientTransformer.transformArray(data.medications || [], PatientTransformer.transformObject, staffMapping);
       const investigations = PatientTransformer.transformArray(data.investigations || [], PatientTransformer.transformObject, staffMapping);

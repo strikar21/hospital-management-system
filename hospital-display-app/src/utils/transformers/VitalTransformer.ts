@@ -14,19 +14,16 @@ export class VitalTransformer extends BaseTransformer {
 
   /**
    * Transform vital signs with medical accuracy - CAMELCASE ONLY
-   * No fake defaults - only real medical data or zeros
+   * Backend now sends frontend field names - just pass through with defaults
    */
   static transformVitals(vitals: any): any {
     if (!vitals) return {};
 
-    // Extract BP values with proper fallbacks - NO FAKE DEFAULTS
-    const systolic = vitals.systolicPressure || 0;
-    const diastolic = vitals.diastolicPressure || (systolic > 0 ? Math.round(systolic * 0.67) : 0);
-
+    // Backend sends frontend field names - just pass through with defaults
     const result: any = {
       heartRate: this.transformField(vitals, 'heartRate', 0),
-      systolicPressure: systolic,
-      diastolicPressure: diastolic,
+      systolicPressure: this.transformField(vitals, 'systolicPressure', 0),
+      diastolicPressure: this.transformField(vitals, 'diastolicPressure', 0),
       respiratoryRate: this.transformField(vitals, 'respiratoryRate', 0),
       oxygenSaturation: this.transformField(vitals, 'oxygenSaturation', 0),
       skinTemperature: this.transformField(vitals, 'skinTemperature', 0),
@@ -43,27 +40,12 @@ export class VitalTransformer extends BaseTransformer {
 
     // Add nested ECG object if present (8-12 channel support)
     if (vitals.ecg) {
-      result.ecg = {
-        rrInterval: vitals.ecg.rrInterval,
-        qrsDuration: vitals.ecg.qrsDuration,
-        qtInterval: vitals.ecg.qtInterval,
-        axis: vitals.ecg.axis,
-        rhythm: vitals.ecg.rhythm,
-        stSegment: vitals.ecg.stSegment
-      };
+      result.ecg = vitals.ecg;
     }
 
     // Add nested EEG object if present (8-channel support)
     if (vitals.eeg) {
-      result.eeg = {
-        alphaPower: vitals.eeg.alphaPower,
-        betaPower: vitals.eeg.betaPower,
-        thetaPower: vitals.eeg.thetaPower,
-        deltaPower: vitals.eeg.deltaPower,
-        gammaPower: vitals.eeg.gammaPower,
-        dominantFrequency: vitals.eeg.dominantFrequency,
-        seizureActivity: vitals.eeg.seizureActivity
-      };
+      result.eeg = vitals.eeg;
     }
 
     return result;
@@ -232,7 +214,7 @@ export class VitalTransformer extends BaseTransformer {
     return {
       ...transformed,
       validation,
-      bloodPressure: `${transformed.systolicPressure}/${transformed.diastolicPressure}`,
+      bloodPressure: `${transformed.systolicPressure}/${transformed.diastolicPressure}`,  // Use frontend field names
       hasData: Object.values(transformed).some(value =>
         typeof value === 'number' && value > 0
       )

@@ -17,13 +17,15 @@ interface UseDashboardProps {
   onLogout: () => void;
   settings: appsettings;
   onBedsideMode: (patients: patient[], displayCount?: 1 | 2) => void;
+  preloadedPatients?: patient[];
 }
 
 export const useDashboard = ({
   currentUser,
   onLogout,
   settings,
-  onBedsideMode
+  onBedsideMode,
+  preloadedPatients = []
 }: UseDashboardProps) => {
   // Main state management
   const [selectedWard, setSelectedWard] = useState<string>('My Patients');
@@ -69,7 +71,8 @@ export const useDashboard = ({
     userId: currentUser.id,
     selectedWard,
     showAllDepartments,
-    refreshInterval: 30000
+    refreshInterval: undefined, // Disabled auto-refresh - WebSocket provides real-time updates
+    initialPatients: preloadedPatients
   });
 
   // Initialize audit service
@@ -216,30 +219,12 @@ export const useDashboard = ({
     setShowAllDepartments(!showAllDepartments);
   };
 
-  const handlePatientSelection = async (patient: patient) => {
-    try {
-      // Fetching complete details for patient - processing silently
+  const handlePatientSelection = (patient: patient) => {
+    // INSTANT DISPLAY: Show patient details immediately with data we already have
+    setSelectedPatient(patient);
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), 10000);
-      });
-
-      const fullPatientData = await Promise.race([
-        PatientService.getPatient(patient.id),
-        timeoutPromise
-      ]);
-
-      if (fullPatientData) {
-        // Removed console.log for production
-        setSelectedPatient(fullPatientData);
-      } else {
-        // Failed to fetch complete patient data - handle silently
-        setSelectedPatient(patient);
-      }
-    } catch (error) {
-      // Error fetching complete patient data - handle silently
-      setSelectedPatient(patient);
-    }
+    // PatientDetailContainer will handle background refresh with getPatientComplete()
+    // No need for duplicate API call here
   };
 
   const getWardOptions = () => {

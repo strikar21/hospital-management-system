@@ -245,9 +245,16 @@ class VitalsRealtimeMessage(BaseModel):
     batteryLevel: Optional[int] = Field(None, ge=0, le=100, description="Device battery percentage")
     signalQuality: Optional[float] = Field(None, ge=0.0, le=1.0, description="Overall signal quality")
 
+    # Advanced vitals (from ESP32 PhysiologicalSimulator v5.2.0+)
+    bioimpedance: Optional[float] = Field(None, ge=200.0, le=1000.0, description="Bioelectrical impedance in Ohms")
+    tremor: Optional[float] = Field(None, ge=0.0, le=10.0, description="Tremor intensity (0-10 scale)")
+    ecgReading: Optional[float] = Field(None, description="Representative ECG amplitude in mV")
+    eegReading: Optional[float] = Field(None, description="Representative EEG amplitude in μV")
+    imuFallRisk: Optional[float] = Field(None, ge=0.0, le=10.0, description="IMU-based fall risk (0-10 scale)")
+
     # Waveform data (1-second snapshot - 250 samples per channel)
     sampleRate: Optional[int] = Field(None, description="Sampling rate in Hz (typically 250)")
-    duration: Optional[int] = Field(None, description="Duration of waveform snapshot in seconds (typically 1)")
+    duration: Optional[float] = Field(None, description="Duration of waveform snapshot in seconds (e.g., 0.1 for 100ms packets)")
     compression: Optional[str] = Field('delta', description="Compression method")
 
     # ECG waveform (mode='ecg')
@@ -298,7 +305,7 @@ class WaveformSnapshotMessage(BaseModel):
 
     # Waveform parameters
     sampleRate: int = Field(..., description="Sampling rate in Hz (e.g., 250, 500)")
-    duration: int = Field(..., description="Duration of snapshot in seconds")
+    duration: float = Field(..., description="Duration of snapshot in seconds (e.g., 0.1 for 100ms packets)")
     compression: Optional[str] = Field('delta', description="Compression method")
 
     # Waveform data (one or the other based on mode)
@@ -338,7 +345,7 @@ class NeuralEventMessage(BaseModel):
 
     # Context
     sampleRate: Optional[int] = None
-    duration: Optional[int] = None
+    duration: Optional[float] = None
     context: Optional[Dict[str, Any]] = Field(None, description="Event context (vitals at time of event)")
 
     # Waveform snippet (optional - small segment showing the event)
@@ -408,7 +415,7 @@ class WaveformSnapshotDB(BaseModel):
     deviceId: str
     mode: str
     sampleRate: int
-    duration: int
+    duration: float
 
     # ECG channels (JSONB)
     ecgLimbLeads: Optional[Dict[str, Any]] = None
@@ -446,7 +453,7 @@ class NeuralEventDB(BaseModel):
 
     # Optional waveform context
     sampleRate: Optional[int] = None
-    duration: Optional[int] = None
+    duration: Optional[float] = None
     context: Optional[Dict[str, Any]] = None
     waveform: Optional[Dict[str, Any]] = None
     actions: Optional[List[str]] = None
@@ -497,7 +504,7 @@ class WaveformSnapshotResponse(BaseModel):
     timestamp: datetime
     mode: str
     sampleRate: int
-    duration: int
+    duration: float
     waveform: Dict[str, Any]  # ECG or EEG waveform data
     quality: Optional[Dict[str, Any]] = None
 

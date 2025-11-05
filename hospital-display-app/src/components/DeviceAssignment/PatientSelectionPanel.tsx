@@ -41,13 +41,15 @@ export const PatientSelectionPanel: React.FC<PatientSelectionPanelProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        Select Patient ({patients.length})
-      </h2>
+    <div className="bg-white rounded-lg shadow p-6 flex flex-col max-h-[calc(100vh-180px)]">
+      {/* Header and Filters - Fixed at top */}
+      <div className="flex-shrink-0">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Select Patient ({patients.length})
+        </h2>
 
-      {/* Patient Search and Filters */}
-      <div className="mb-4 space-y-3">
+        {/* Patient Search and Filters */}
+        <div className="mb-4 space-y-3">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
           <input
@@ -82,9 +84,10 @@ export const PatientSelectionPanel: React.FC<PatientSelectionPanelProps> = ({
           </select>
         </div>
       </div>
+      </div>
 
-      {/* Patient List */}
-      <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+      {/* Patient List - Scrollable, takes remaining space */}
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-2 mb-4">
         {patients.map((patient) => (
           <div
             key={patient.id}
@@ -137,8 +140,8 @@ export const PatientSelectionPanel: React.FC<PatientSelectionPanelProps> = ({
         )}
       </div>
 
-      {/* Assignment Controls */}
-      <div className="border-t pt-4">
+      {/* Assignment Controls - Fixed at bottom */}
+      <div className="flex-shrink-0 border-t pt-4">
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Assignment Reason

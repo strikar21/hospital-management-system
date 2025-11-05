@@ -42,13 +42,15 @@ export const DeviceSelectionPanel: React.FC<DeviceSelectionPanelProps> = ({
   onLocationFilterChange
 }) => {
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        Available Devices ({devices.length})
-      </h2>
+    <div className="bg-white rounded-lg shadow p-6 flex flex-col max-h-[calc(100vh-180px)]">
+      {/* Header and Filters - Fixed at top */}
+      <div className="flex-shrink-0">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Available Devices ({devices.length})
+        </h2>
 
-      {/* Device Filters */}
-      <div className="flex space-x-4 mb-4">
+        {/* Device Filters */}
+        <div className="flex space-x-4 mb-4">
         <select
           value={deviceFilter}
           onChange={(e) => onDeviceFilterChange(e.target.value)}
@@ -69,8 +71,10 @@ export const DeviceSelectionPanel: React.FC<DeviceSelectionPanelProps> = ({
           <option value="Emergency">Emergency</option>
         </select>
       </div>
+      </div>
 
-      <div className="space-y-3 max-h-96 overflow-y-auto">
+      {/* Device List - Scrollable, takes remaining space */}
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
         {devices.map((device) => (
           <DeviceCard
             key={device.id}
