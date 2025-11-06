@@ -1164,18 +1164,21 @@ class MQTTService:
                         time, "patientId", "deviceId", mode,
                         "heartRate", "respiratoryRate", "skinTemperature",
                         "oxygenSaturation", "batteryLevel", "signalQuality",
+                        "systolicPressure", "diastolicPressure",
                         "rrInterval", "qrsDuration", "qtInterval", axis, rhythm, "stSegment",
                         "alphaPower", "betaPower", "thetaPower", "deltaPower", "gammaPower",
                         "dominantFrequency", "seizureActivity",
+                        tremor, bioimpedance, "imuFallRisk", "perfusionIndex", "stepCount", "watchWorn", "lastMovementTime",
                         quality, sequence, metadata
                     ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                        $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35
                     )
                 """,
                     vitalsMsg.timestamp, vitalsMsg.patientId, vitalsMsg.deviceId, vitalsMsg.mode,
                     vitalsMsg.heartRate, vitalsMsg.respiratoryRate, vitalsMsg.skinTemperature,
                     vitalsMsg.oxygenSaturation, vitalsMsg.batteryLevel, vitalsMsg.signalQuality,
+                    vitalsMsg.bloodPressureSystolic, vitalsMsg.bloodPressureDiastolic,
                     vitalsMsg.ecgAnalysis.rrInterval if vitalsMsg.ecgAnalysis else None,
                     vitalsMsg.ecgAnalysis.qrsDuration if vitalsMsg.ecgAnalysis else None,
                     vitalsMsg.ecgAnalysis.qtInterval if vitalsMsg.ecgAnalysis else None,
@@ -1189,6 +1192,13 @@ class MQTTService:
                     vitalsMsg.eegAnalysis.bandPowers.gamma if vitalsMsg.eegAnalysis else None,
                     vitalsMsg.eegAnalysis.dominantFrequency if vitalsMsg.eegAnalysis else None,
                     vitalsMsg.eegAnalysis.seizureActivity if vitalsMsg.eegAnalysis else None,
+                    vitalsMsg.tremor,
+                    vitalsMsg.bioimpedance,
+                    vitalsMsg.imuFallRisk,
+                    vitalsMsg.perfusionIndex,
+                    vitalsMsg.stepCount,
+                    vitalsMsg.watchWorn,
+                    vitalsMsg.lastMovementTime,
                     json.dumps(qualityJson) if qualityJson else None,
                     vitalsMsg.sequence,
                     json.dumps(vitalsMsg.metadata) if vitalsMsg.metadata else None
