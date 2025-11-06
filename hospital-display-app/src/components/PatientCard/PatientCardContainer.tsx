@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Heart, Activity, Thermometer, Droplets, Wind, Waves } from 'lucide-react';
+import { Heart, Activity, Thermometer, Droplets, Wind, Waves, TrendingUp, AlertTriangle, Watch } from 'lucide-react';
 import { patient, user } from '../../types';
 import { MedicalUtils } from '../../utils/medicalUtils';
 import auditService from '../../services/auditService';
@@ -66,10 +66,9 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
   // ECG/EEG mode detection
   const isECGMode: boolean = currentVitals?.isEcgMode !== undefined ? currentVitals?.isEcgMode : true;
 
-  // Medical calculations disabled - no mock alerts
+  // Medical calculations disabled - no mock alerts (backend generates all alerts)
   const arrhythmiaDetected = false;
   const seizureActivity = false;
-  const fallRisk = 'low' as const;
 
   // Use alerts from backend only - no synthetic fall risk alerts
   const alertsWithFallRisk = useMemo(() => {
@@ -208,6 +207,38 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       value: hasWatchAssigned ? (currentVitals?.tremor ? currentVitals.tremor.toFixed(1) : '--') : '--',
       unit: hasWatchAssigned && currentVitals?.tremor ? '/10' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('tremor') : 'normal'
+    },
+    {
+      key: 'imuFallRisk',
+      icon: AlertTriangle,
+      label: 'Fall Risk',
+      value: hasWatchAssigned ? (currentVitals?.imuFallRisk ? currentVitals.imuFallRisk.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.imuFallRisk ? '/10' : '',
+      alertStatus: hasWatchAssigned && currentVitals?.imuFallRisk && currentVitals.imuFallRisk > 7 ? 'critical' : hasWatchAssigned && currentVitals?.imuFallRisk && currentVitals.imuFallRisk > 5 ? 'warning' : 'normal'
+    },
+    {
+      key: 'perfusionIndex',
+      icon: TrendingUp,
+      label: 'Perfusion',
+      value: hasWatchAssigned ? (currentVitals?.perfusionIndex ? currentVitals.perfusionIndex.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.perfusionIndex ? '%' : '',
+      alertStatus: hasWatchAssigned && currentVitals?.perfusionIndex && currentVitals.perfusionIndex < 0.5 ? 'critical' : hasWatchAssigned && currentVitals?.perfusionIndex && currentVitals.perfusionIndex < 2 ? 'warning' : 'normal'
+    },
+    {
+      key: 'stepCount',
+      icon: Activity,
+      label: 'Steps',
+      value: hasWatchAssigned ? (currentVitals?.stepCount ?? '--') : '--',
+      unit: '',
+      alertStatus: 'normal'
+    },
+    {
+      key: 'watchWorn',
+      icon: Watch,
+      label: 'Watch',
+      value: hasWatchAssigned ? (currentVitals?.watchWorn !== undefined ? (currentVitals.watchWorn ? 'ON' : 'OFF') : '--') : '--',
+      unit: '',
+      alertStatus: hasWatchAssigned && currentVitals?.watchWorn === false ? 'critical' : 'normal'
     }
   ], [hasWatchAssigned, currentVitals, getVitalAlertStatus]);
 
