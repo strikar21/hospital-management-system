@@ -60,12 +60,10 @@ export interface patient {
     eegReading: number; // Always integer - μV (microvolts)
     isEcgMode: boolean; // true = ECG, false = EEG
 
-    // Advanced Monitoring - STANDARDIZED NAMES
-    bioelectricalImpedance: number; // Ohms
-    tremorIntensity: number; // 0-10 scale
-    fallRisk: 'low' | 'medium' | 'high'; // Calculated from IMU data
-
-    // New Sensor Vitals (from MAX86178 and BMI323) - Phase 1
+    // Advanced Monitoring - BACKEND ALIGNED NAMES (Phase 2)
+    bioimpedance: number; // 20-50Ω thoracic impedance from MAX86178
+    tremor: number; // 0-10 scale from BMI323
+    imuFallRisk: number; // 0-10 numeric fall risk from BMI323
     perfusionIndex?: number; // 0-20% perfusion index from MAX86178
     stepCount?: number; // Step count from BMI323 IMU
     watchWorn?: boolean; // Watch worn status from MAX86178 proximity
@@ -182,8 +180,11 @@ export interface vitalhistory {
   diastolicPressure: number; // mmHg
   ecgReading: number;
   eegReading: number;
-  bioelectricalImpedance: number; // Ohms
-  tremorIntensity: number; // 0-10 scale
+  bioimpedance: number; // 20-50Ω thoracic
+  tremor: number; // 0-10 scale
+  imuFallRisk?: number; // 0-10 scale
+  perfusionIndex?: number; // 0-20%
+  stepCount?: number;
 }
 
 export interface ecgreading {
@@ -299,7 +300,7 @@ export interface dischargeRequest {
 }
 
 // Type aliases for patient-related types
-export type vitaltype = 'heartRate' | 'oxygenSaturation' | 'skinTemperature' | 'ecgReading' | 'eegReading' | 'systolicPressure' | 'diastolicPressure' | 'respiratoryRate' | 'bioelectricalImpedance' | 'tremorIntensity' | 'perfusionIndex' | 'stepCount';
+export type vitaltype = 'heartRate' | 'oxygenSaturation' | 'skinTemperature' | 'ecgReading' | 'eegReading' | 'systolicPressure' | 'diastolicPressure' | 'respiratoryRate' | 'bioimpedance' | 'tremor' | 'imuFallRisk' | 'perfusionIndex' | 'stepCount';
 export type vitalstatus = 'normal' | 'warning' | 'critical';
 export type timerange = '1h' | '6h' | '24h' | '7d';
 export type patientstatus = 'stable' | 'critical' | 'emergency';

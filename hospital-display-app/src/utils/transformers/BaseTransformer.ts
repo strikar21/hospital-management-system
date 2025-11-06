@@ -64,8 +64,8 @@ export abstract class BaseTransformer {
     'respiratoryRate': 'respiratoryRate',
     'ecgReading': 'ecgReading',
     'eegReading': 'eegReading',
-    'bioelectricalImpedance': 'bioelectricalImpedance',
-    'tremorIntensity': 'tremorIntensity',
+    'bioimpedance': 'bioimpedance',
+    'tremor': 'tremor',
 
     // Timestamp Fields - camelCase only
     'createdAt': 'createdAt',

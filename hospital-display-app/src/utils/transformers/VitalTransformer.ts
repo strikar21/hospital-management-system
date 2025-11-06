@@ -29,8 +29,8 @@ export class VitalTransformer extends BaseTransformer {
       skinTemperature: this.transformField(vitals, 'skinTemperature', 0),
       ecgReading: this.transformField(vitals, 'ecgReading', 0),
       eegReading: this.transformField(vitals, 'eegReading', 0),
-      bioelectricalImpedance: this.transformField(vitals, 'bioelectricalImpedance', 0),
-      tremorIntensity: this.transformField(vitals, 'tremorIntensity', 0),
+      bioimpedance: this.transformField(vitals, 'bioimpedance', 0),
+      tremor: this.transformField(vitals, 'tremor', 0),
       isEcgMode: this.transformField(vitals, 'isEcgMode', false),
       fallRisk: this.transformField(vitals, 'fallRisk', 'low'),
       lastDataReceived: this.transformField(vitals, 'lastDataReceived', new Date().toISOString()),
@@ -75,8 +75,8 @@ export class VitalTransformer extends BaseTransformer {
           skinTemperature: this.transformField(item, 'skinTemperature', 0),
           ecgReading: this.transformField(item, 'ecgReading', 0),
           eegReading: this.transformField(item, 'eegReading', 0),
-          bioelectricalImpedance: this.transformField(item, 'bioelectricalImpedance', 0),
-          tremorIntensity: this.transformField(item, 'tremorIntensity', 0)
+          bioimpedance: this.transformField(item, 'bioimpedance', 0),
+          tremor: this.transformField(item, 'tremor', 0)
         };
       } else {
         // Update existing entry with non-zero values (latest data wins)
@@ -88,8 +88,8 @@ export class VitalTransformer extends BaseTransformer {
         if (item.skinTemperature) groupedData[timestamp].skinTemperature = item.skinTemperature;
         if (item.ecgReading) groupedData[timestamp].ecgReading = item.ecgReading;
         if (item.eegReading) groupedData[timestamp].eegReading = item.eegReading;
-        if (item.bioelectricalImpedance) groupedData[timestamp].bioelectricalImpedance = item.bioelectricalImpedance;
-        if (item.tremorIntensity) groupedData[timestamp].tremorIntensity = item.tremorIntensity;
+        if (item.bioimpedance) groupedData[timestamp].bioimpedance = item.bioimpedance;
+        if (item.tremor) groupedData[timestamp].tremor = item.tremor;
       }
     });
 

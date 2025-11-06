@@ -238,8 +238,8 @@ export interface vitalDataPoint {
   diastolicPressure?: number;
   ecgReading?: number;
   eegReading?: number;
-  bioelectricalImpedance?: number;
-  tremorIntensity?: number;
+  bioimpedance?: number;
+  tremor?: number;
 }
 
 export interface medicationEvent {

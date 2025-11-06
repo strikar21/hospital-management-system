@@ -85,8 +85,8 @@ export const getVitalDisplayName = (vitalType: string): string => {
     case 'diastolicPressure': return 'Diastolic Pressure';
     case 'ecgReading': return 'ECG';
     case 'eegReading': return 'EEG';
-    case 'bioelectricalImpedance': return 'Bioimpedance';
-    case 'tremorIntensity': return 'Tremor Intensity';
+    case 'bioimpedance': return 'Bioimpedance';
+    case 'tremor': return 'Tremor';
     default: return vitalType;
   }
 };
@@ -101,8 +101,8 @@ export const getVitalUnit = (vitalType: string): string => {
     case 'diastolicPressure': return 'mmHg';
     case 'ecgReading': return 'mV';
     case 'eegReading': return 'μV';
-    case 'bioelectricalImpedance': return 'Ω';
-    case 'tremorIntensity': return '/10';
+    case 'bioimpedance': return 'Ω';
+    case 'tremor': return '/10';
     default: return '';
   }
 };
@@ -250,8 +250,8 @@ const getvitaltrendthreshold = (vitalType: vitaltype): number => {
     case 'diastolicPressure': return 10;
     case 'ecgReading': return 10;
     case 'eegReading': return 5;
-    case 'bioelectricalImpedance': return 25;
-    case 'tremorIntensity': return 0.5;
+    case 'bioimpedance': return 25;
+    case 'tremor': return 0.5;
     default: return 1;
   }
 };
@@ -267,8 +267,8 @@ export const getVitalRangesForCondition = (diagnosis: string) => {
     diastolicPressure: { min: 70, max: 90 },
     ecgReading: { min: 100, max: 150 },
     eegReading: { min: 10, max: 60 },
-    bioelectricalImpedance: { min: 450, max: 650 },
-    tremorIntensity: { min: 0, max: 2 }
+    bioimpedance: { min: 450, max: 650 },
+    tremor: { min: 0, max: 2 }
   };
   
   // Adjust ranges based on diagnosis
@@ -284,7 +284,7 @@ export const getVitalRangesForCondition = (diagnosis: string) => {
   
   if (diagnosis.toLowerCase().includes('stroke') || diagnosis.toLowerCase().includes('neurological')) {
     baseRanges.eegReading = { min: 5, max: 70 };
-    baseRanges.tremorIntensity = { min: 0, max: 5 };
+    baseRanges.tremor = { min: 0, max: 5 };
   }
   
   return baseRanges;

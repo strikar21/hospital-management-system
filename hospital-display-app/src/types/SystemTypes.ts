@@ -38,8 +38,8 @@ export interface monitoringconfig {
     respiratoryRate: { min: number; max: number; criticalMin: number; criticalMax: number };
     ecgReading: { min: number; max: number; criticalMin: number; criticalMax: number };
     eegReading: { min: number; max: number; criticalMin: number; criticalMax: number };
-    bioelectricalImpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
-    tremorIntensity: { maxIntensity: number; maxDuration: number };
+    bioimpedance: { min: number; max: number; criticalMin: number; criticalMax: number };
+    tremor: { maxIntensity: number; maxDuration: number };
   };
   arrhythmiaDetection: {
     enabled: boolean;

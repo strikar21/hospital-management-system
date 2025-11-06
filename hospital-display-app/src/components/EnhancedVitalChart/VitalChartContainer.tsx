@@ -103,8 +103,8 @@ export const VitalChartContainer: React.FC<VitalChartContainerProps> = ({
       'respiratoryRate': 'respiratoryRate',
       'ecgReading': 'ecgReading',
       'eegReading': 'eegReading',
-      'bioelectricalImpedance': 'bioelectricalImpedance',
-      'tremorIntensity': 'tremorIntensity'
+      'bioimpedance': 'bioimpedance',
+      'tremor': 'tremor'
     };
     return mapping[frontendType] || frontendType;
   };
@@ -120,8 +120,8 @@ export const VitalChartContainer: React.FC<VitalChartContainerProps> = ({
       'respiratoryRate': 'Respiratory Rate',
       'ecgReading': 'ECG Reading',
       'eegReading': 'EEG Reading',
-      'bioelectricalImpedance': 'Bioelectrical Impedance',
-      'tremorIntensity': 'Tremor Intensity'
+      'bioimpedance': 'Bioelectrical Impedance',
+      'tremor': 'Tremor Intensity'
     };
     return names[vitalType] || vitalType;
   };
@@ -192,8 +192,8 @@ export const VitalChartContainer: React.FC<VitalChartContainerProps> = ({
             'respiratoryRate': 'respiratoryRate',
             'ecgReading': 'ecgReading',
             'eegReading': 'eegReading',
-            'bioelectricalImpedance': 'bioelectricalImpedance',
-            'tremorIntensity': 'tremorIntensity'
+            'bioimpedance': 'bioimpedance',
+            'tremor': 'tremor'
           };
 
           const vitalKey = vitalKeyMap[vitalType] || 'heartRate';

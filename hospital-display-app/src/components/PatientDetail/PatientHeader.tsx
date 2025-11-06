@@ -164,9 +164,9 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
               )}
 
               {/* Fall Risk */}
-              {patient.vitals?.fallRisk === 'high' && (
+              {patient.vitals?.imuFallRisk && patient.vitals.imuFallRisk > 7 && (
                 <div className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-800 border-2 border-red-400 animate-pulse">
-                  🚨 FALL RISK
+                  🚨 FALL RISK ({patient.vitals.imuFallRisk.toFixed(1)}/10)
                 </div>
               )}
 

@@ -123,8 +123,8 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
         (vitalKey === 'skinTemperature' && (message.includes('temp') || message.includes('fever'))) ||
         (vitalKey === 'systolicPressure' && (message.includes('pressure') || message.includes('bp') || message.includes('hyper') || message.includes('hypo'))) ||
         (vitalKey === 'respiratoryRate' && (message.includes('respiratory') || message.includes('breathing') || message.includes('rr'))) ||
-        (vitalKey === 'bioelectricalImpedance' && message.includes('bioimpedance')) ||
-        (vitalKey === 'tremorIntensity' && message.includes('tremorIntensity'))
+        (vitalKey === 'bioimpedance' && message.includes('bioimpedance')) ||
+        (vitalKey === 'tremor' && message.includes('tremor'))
       );
     });
 
@@ -194,20 +194,20 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('respiratoryRate') : 'normal'
     },
     {
-      key: 'bioelectricalImpedance',
+      key: 'bioimpedance',
       icon: Waves,
       label: 'BioZ',
-      value: hasWatchAssigned ? (currentVitals?.bioelectricalImpedance ?? '--') : '--',
-      unit: hasWatchAssigned && currentVitals?.bioelectricalImpedance ? 'Ω' : '',
-      alertStatus: hasWatchAssigned ? getVitalAlertStatus('bioelectricalImpedance') : 'normal'
+      value: hasWatchAssigned ? (currentVitals?.bioimpedance ?? '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.bioimpedance ? 'Ω' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('bioimpedance') : 'normal'
     },
     {
-      key: 'tremorIntensity',
+      key: 'tremor',
       icon: Activity,
       label: 'Tremor',
-      value: hasWatchAssigned ? (currentVitals?.tremorIntensity ? currentVitals.tremorIntensity.toFixed(1) : '--') : '--',
-      unit: hasWatchAssigned && currentVitals?.tremorIntensity ? '/10' : '',
-      alertStatus: hasWatchAssigned ? getVitalAlertStatus('tremorIntensity') : 'normal'
+      value: hasWatchAssigned ? (currentVitals?.tremor ? currentVitals.tremor.toFixed(1) : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.tremor ? '/10' : '',
+      alertStatus: hasWatchAssigned ? getVitalAlertStatus('tremor') : 'normal'
     }
   ], [hasWatchAssigned, currentVitals, getVitalAlertStatus]);
 

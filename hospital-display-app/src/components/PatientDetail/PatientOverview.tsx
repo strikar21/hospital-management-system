@@ -220,15 +220,15 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
 
           <div
             className="bg-white rounded-lg p-2 cursor-pointer hover:bg-blue-50 transition-colors border"
-            onClick={() => onVitalClick(patient, 'tremorIntensity')}
+            onClick={() => onVitalClick(patient, 'tremor')}
           >
             <p className="text-xs text-gray-600 mb-2 text-center font-medium">Tremor</p>
             <div className="flex items-center justify-between">
-              <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(currentVitals?.tremorIntensity || 0, 'tremorIntensity'))}`}>
+              <div className={`p-1 rounded-lg ${getVitalStatusColor(MedicalUtils.getVitalStatus(currentVitals?.tremor || 0, 'tremor'))}`}>
                 <Activity className="w-5 h-5" />
               </div>
               <div className="text-right">
-                <span className="font-bold text-xl text-pink-600">{currentVitals?.tremorIntensity ? currentVitals.tremorIntensity.toFixed(1) : '--'}</span>
+                <span className="font-bold text-xl text-pink-600">{currentVitals?.tremor ? currentVitals.tremor.toFixed(1) : '--'}</span>
                 <span className="text-xs text-gray-500 ml-1">/10</span>
               </div>
             </div>
