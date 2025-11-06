@@ -65,6 +65,12 @@ export interface patient {
     tremorIntensity: number; // 0-10 scale
     fallRisk: 'low' | 'medium' | 'high'; // Calculated from IMU data
 
+    // New Sensor Vitals (from MAX86178 and BMI323) - Phase 1
+    perfusionIndex?: number; // 0-20% perfusion index from MAX86178
+    stepCount?: number; // Step count from BMI323 IMU
+    watchWorn?: boolean; // Watch worn status from MAX86178 proximity
+    lastMovementTime?: number; // Last movement timestamp in ms from BMI323
+
     // Nested ECG/EEG Analysis Objects (8-12 Channel Support)
     ecg?: {
       // Computed ECG metrics (backend calculates)
@@ -293,7 +299,7 @@ export interface dischargeRequest {
 }
 
 // Type aliases for patient-related types
-export type vitaltype = 'heartRate' | 'oxygenSaturation' | 'skinTemperature' | 'ecgReading' | 'eegReading' | 'systolicPressure' | 'diastolicPressure' | 'respiratoryRate' | 'bioelectricalImpedance' | 'tremorIntensity';
+export type vitaltype = 'heartRate' | 'oxygenSaturation' | 'skinTemperature' | 'ecgReading' | 'eegReading' | 'systolicPressure' | 'diastolicPressure' | 'respiratoryRate' | 'bioelectricalImpedance' | 'tremorIntensity' | 'perfusionIndex' | 'stepCount';
 export type vitalstatus = 'normal' | 'warning' | 'critical';
 export type timerange = '1h' | '6h' | '24h' | '7d';
 export type patientstatus = 'stable' | 'critical' | 'emergency';
