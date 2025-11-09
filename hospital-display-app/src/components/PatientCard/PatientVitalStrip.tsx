@@ -58,30 +58,11 @@ export const PatientVitalStrip: React.FC<PatientVitalStripProps> = ({
     }
   };
 
-  // Get status indicator dot color
-  const getStatusDotClass = (alertStatus: string) => {
-    switch (alertStatus) {
-      case 'critical':
-        return 'bg-red-500 animate-pulse';
-      case 'warning':
-        return 'bg-yellow-500 animate-pulse';
-      case 'high':
-        return 'bg-orange-500 animate-pulse';
-      case 'medium':
-        return 'bg-yellow-500';
-      case 'low':
-        return 'bg-amber-500';
-      case 'normal':
-      default:
-        return 'bg-green-500'; // Green for normal/healthy
-    }
-  };
-
   return (
-    <div className="bg-gray-50 rounded-lg px-2 py-2 flex-shrink-0 h-[80px] flex items-center">
-      <div className="vital-scroll w-full">
+    <div className="bg-gray-50 rounded-lg px-2 py-1 flex-shrink-0 h-[60px] flex items-end">
+      <div className="vital-scroll w-full h-full flex items-end">
         <div
-          className="flex space-x-3 vitals-infinite-scroll"
+          className="flex space-x-1 vitals-infinite-scroll h-full"
           style={{
             minWidth: 'max-content',
             scrollSnapType: 'x mandatory'
@@ -91,7 +72,7 @@ export const PatientVitalStrip: React.FC<PatientVitalStripProps> = ({
           {[...allVitals, ...allVitals, ...allVitals].map((vital, index) => (
             <div
               key={`${vital.key}-${index}`}
-              className={`flex flex-col items-center justify-center py-2 px-2 rounded hover:bg-blue-50 cursor-pointer transition-colors min-w-[65px] flex-shrink-0 h-full ${getVitalColorClass(vital.alertStatus)}`}
+              className={`flex flex-col items-center justify-end p-1 rounded hover:bg-blue-50 cursor-pointer transition-colors min-w-[60px] flex-shrink-0 self-stretch ${getVitalColorClass(vital.alertStatus)}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVitalClick(patient, vital.key);
@@ -103,12 +84,11 @@ export const PatientVitalStrip: React.FC<PatientVitalStripProps> = ({
                 );
               }}
             >
-              <div className="flex items-center space-x-1 mb-1">
+              <div className="flex items-center space-x-1 mb-0.5">
                 <vital.icon className="w-3 h-3" />
-                <span className="text-sm font-medium">{vital.label}</span>
+                <span className="text-xs font-medium">{vital.label}</span>
               </div>
-              <span className="text-sm font-bold">{vital.value}{vital.unit}</span>
-              <div className={`w-1.5 h-1.5 rounded-full mt-1 ${getStatusDotClass(vital.alertStatus)}`}></div>
+              <span className="text-xs font-bold">{vital.value}{vital.unit}</span>
             </div>
           ))}
 
@@ -116,23 +96,19 @@ export const PatientVitalStrip: React.FC<PatientVitalStripProps> = ({
           {[...Array(3)].map((_, repeatIndex) => (
             <div
               key={`ecg-eeg-${repeatIndex}`}
-              className="flex flex-col items-center justify-center py-2 px-2 rounded hover:bg-blue-50 cursor-pointer transition-colors min-w-[65px] flex-shrink-0 h-full bg-green-50 text-green-600"
+              className="flex flex-col items-center justify-end p-1 rounded hover:bg-blue-50 cursor-pointer transition-colors min-w-[60px] flex-shrink-0 self-stretch bg-green-50 text-green-600"
               onClick={(e) => {
                 e.stopPropagation();
                 onVitalClick(patient, isECGMode ? 'eegReading' : 'ecgReading');
               }}
             >
-              <div className="flex items-center space-x-1 mb-1">
+              <div className="flex items-center space-x-1 mb-0.5">
                 {isECGMode ? <Brain className="w-3 h-3" /> : <Heart className="w-3 h-3" />}
-                <span className="text-sm font-medium">{isECGMode ? 'EEG' : 'ECG'}</span>
+                <span className="text-xs font-medium">{isECGMode ? 'EEG' : 'ECG'}</span>
               </div>
-              <span className="text-sm font-bold">
+              <span className="text-xs font-bold">
                 {isECGMode ? (patient.vitals?.eegReading || '--') : (patient.vitals?.ecgReading || '--')}
               </span>
-              <div className={`w-1.5 h-1.5 rounded-full mt-1 ${
-                isECGMode ? (seizureActivity ? 'bg-red-500 animate-pulse' : 'bg-green-500') :
-                (arrhythmiaDetected ? 'bg-yellow-500 animate-pulse' : 'bg-green-500')
-              }`}></div>
             </div>
           ))}
         </div>

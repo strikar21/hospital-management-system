@@ -14,6 +14,8 @@ import PatientTherapies from '../PatientTherapies';
 import { PatientNotesContainer as PatientNotes } from '../PatientNotes';
 import CaseSheetBook from '../../CaseSheetBook';
 import { PatientCaseService, PatientCRUDService } from '../../services/patient';
+import { AlertService } from '../../services/AlertService';
+import { formatTimeOnly } from '../../utils';
 
 interface PatientDetailContainerProps {
   patient: patient;
@@ -139,6 +141,34 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
     setActiveTab(tabId);
   };
 
+  // Load complete alert history when Alerts tab is opened
+  useEffect(() => {
+    const loadAlertHistory = async () => {
+      if (activeTab === 'alerts') {
+        try {
+          // Fetch ALL alerts including acknowledged ones from database
+          const allAlerts = await AlertService.getPatientAlerts(patient.id, true);
+
+          // ✅ NORMALIZE: Map alertTimestamp → timestamp for frontend compatibility
+          const normalizedAlerts = (allAlerts || []).map((alert: any) => ({
+            ...alert,
+            // Fallback chain: timestamp (if exists) → alertTimestamp (backend) → createdAt (default) → now
+            timestamp: alert.timestamp || alert.alertTimestamp || alert.createdAt || new Date().toISOString()
+          }));
+
+          // Always update alerts state, even if empty array (to show "No alerts" message)
+          setAlerts(normalizedAlerts);
+        } catch (error) {
+          console.error('Failed to load alert history:', error);
+          // Set to empty array on error to show proper empty state
+          setAlerts([]);
+        }
+      }
+    };
+
+    loadAlertHistory();
+  }, [activeTab, patient.id]);
+
   // Handle modal click outside to close
   const handleModalClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -182,6 +212,7 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
           activeTab={activeTab}
           onTabChange={handleTabChange}
           notes={notes}
+          alerts={alerts}
         />
 
         {/* Tab Content - Fixed Height to Prevent Scrolling */}
@@ -247,6 +278,65 @@ export const PatientDetailContainer: React.FC<PatientDetailContainerProps> = ({
               setCaseEntries={setCaseSheet}
               refreshPatientData={refreshPatientData}
             />
+          )}
+
+          {/* Alerts Tab */}
+          {activeTab === 'alerts' && (
+            <div className="h-full overflow-y-auto p-3">
+              <h3 className="text-base font-semibold mb-2">Alert History</h3>
+              {alerts.length === 0 ? (
+                <div className="text-center text-gray-500 py-4 text-sm">
+                  No alerts recorded for this patient
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {alerts
+                    .sort((a, b) => {
+                      const timeA = new Date(a.timestamp || 0).getTime();
+                      const timeB = new Date(b.timestamp || 0).getTime();
+                      return timeB - timeA;  // Descending (newest first)
+                    })
+                    .map((alert) => (
+                      <div
+                        key={alert.id}
+                        className={`px-2 py-1 rounded border ${
+                          alert.severity === 'critical' ? 'bg-red-50 border-red-200' :
+                          alert.severity === 'high' ? 'bg-orange-50 border-orange-200' :
+                          alert.severity === 'medium' ? 'bg-yellow-50 border-yellow-200' :
+                          'bg-blue-50 border-blue-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <span className="text-sm flex-shrink-0">
+                              {alert.severity === 'critical' ? '🚨' :
+                               alert.severity === 'high' ? '⚠️' :
+                               alert.severity === 'medium' ? '⚡' : 'ℹ️'}
+                            </span>
+                            <span className={`text-xs font-bold uppercase flex-shrink-0 ${
+                              alert.severity === 'critical' ? 'text-red-700' :
+                              alert.severity === 'high' ? 'text-orange-700' :
+                              alert.severity === 'medium' ? 'text-yellow-700' :
+                              'text-blue-700'
+                            }`}>
+                              {alert.severity}
+                            </span>
+                            <span className="text-xs text-gray-900 truncate">{alert.message}</span>
+                          </div>
+                          <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                            <span className="text-xs text-gray-500">
+                              {formatTimeOnly(alert.timestamp)}
+                            </span>
+                            {alert.acknowledgedBy && (
+                              <span className="text-xs text-green-600">✓</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Case Sheet Tab */}

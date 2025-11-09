@@ -166,9 +166,17 @@ class VitalAlertService:
         severity: str,
         message: str,
         conn
-    ) -> Dict[str, Any]:
-        """Create alert in patient_alerts table"""
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Create alert in patient_alerts table.
 
+        NOTE: This service is DEPRECATED - alerts are now created through
+        alert_detection_service.py → alert_manager_service.py with proper deduplication.
+
+        This code path is kept for backwards compatibility but should not be actively used.
+        """
+
+        # Create alert with new schema (includes vitalType, vitalValue, etc.)
         alert_id = await conn.fetchval('''
             INSERT INTO patient_alerts (
                 "patientId", type, message, severity, status,
@@ -180,7 +188,7 @@ class VitalAlertService:
              vital_type, vital_value, threshold_value,
              datetime.now(), device_id)
 
-        logger.warning(f"🚨 Alert generated: {alert_id} - {severity} - {message}")
+        logger.warning(f"🚨 Alert generated (via deprecated service): {alert_id} - {severity} - {message}")
 
         return {
             'alertId': alert_id,

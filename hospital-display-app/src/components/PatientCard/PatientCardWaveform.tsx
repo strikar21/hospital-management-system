@@ -4,11 +4,12 @@
  * Medical-grade waveform visualization with lead selection
  */
 
-import React from 'react';
+import React, { useRef, useMemo } from 'react';
 import { patient, user } from '../../types';
 import { useECGViewer } from '../../hooks/useECGViewer';
-import { renderWaveform, adcToMillivolts, adcToMicrovolts } from '../../utils/medicalWaveformUtils';
+import { ECGWaveformCanvas } from '../ECGViewer/ECGWaveformCanvas';
 import { WaveformErrorBoundary } from '../ErrorBoundary';
+import { mmToPixels } from '../../utils/medicalWaveformUtils';
 
 interface PatientCardWaveformProps {
   patient: patient;
@@ -29,59 +30,36 @@ export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.mem
   onToggleECGMode
 }) => {
   // Subscribe to real-time waveform data using WebSocket
-  const { dataBufferRef } = useECGViewer({ patient });
+  const { dataBufferRef, speed, gain } = useECGViewer({ patient });
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  console.log(`[PatientCardWaveform] Component render for patient ${patient.id.substring(0, 8)}`);
 
-  // Generate SVG path from real waveform data (Lead II for ECG, F3 for EEG)
-  // Uses MEDICAL-GRADE FIXED SCALE rendering (NOT auto-scaling)
-  const generatePathData = () => {
-    if (!patient.assignedDeviceId) {
-      console.log(`[PatientCardWaveform ${patient.id.substring(0, 8)}] No device assigned - showing flat line`);
-      return "M 0 30 L 250 30"; // No device - flat line
-    }
+  // Get buffer index: Lead II (index 1) for ECG, F3 (index 14) for EEG
+  const leadIndex = isECGMode ? 1 : 14;
+  const leadName = isECGMode ? 'Lead II' : 'F3';
 
-    // Get Lead II (ECG) at index 1 or F3 (EEG) at index 14
-    // ECG uses indices 0-11, EEG uses indices 12-20
-    const leadIndex = isECGMode ? 1 : 14;
-    const data = dataBufferRef.current[leadIndex];
-
-    if (!data || data.length === 0) {
-      return "M 0 30 L 250 30"; // No data yet - flat line
-    }
-
-    // Use last 125 samples for 250px width (500Hz × 0.25s = 125 samples)
-    const samples = data.slice(-125);
-
-    // MEDICAL-GRADE RENDERING: Fixed 10mm/mV for ECG, 50μV/mm for EEG
-    // NO auto-scaling - preserves clinical amplitude information
-    const path = renderWaveform(
-      samples,
-      250,  // viewport width
-      60,   // viewport height
-      isECGMode,
-      true  // useFixedScale = true (medical-grade)
-    );
-
-    return path;
-  };
-
-  // Call the function to generate path data
-  // This runs on every render (which happens every 1 second when vitals update)
-  const pathData = generatePathData();
+  // ✅ Calculate exact container height for 30mm medical-grade display
+  // Extended ECG strip height: 30mm (better visibility for patient cards)
+  const containerHeightPx = useMemo(() => {
+    const waveformHeight = Math.round(mmToPixels(30)); // 30mm at detected DPI
+    const headerHeight = 10; // Fixed header with ECG/EEG label
+    const paddingBottom = 8; // pb-2 = 0.5rem = 8px (only bottom padding, no top)
+    return waveformHeight + headerHeight + paddingBottom;
+  }, []);
 
   return (
     <WaveformErrorBoundary waveformType={isECGMode ? 'ECG' : 'EEG'}>
       <div className="flex-shrink-0">
         <div
-          className="h-[85px] p-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer flex flex-col"
+          style={{ height: `${containerHeightPx}px` }}
+          className="px-2 pb-2 bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer flex flex-col"
           onClick={(e) => {
             e.stopPropagation();
             onVitalClick(patient, isECGMode ? 'ecgReading' : 'eegReading');
           }}
         >
-        {/* All ECG/EEG text consolidated at top with smaller font */}
-        <div className="flex items-center justify-between mb-0.5 flex-shrink-0">
+        {/* All ECG/EEG text consolidated at top with smaller font - Hover for advanced metrics */}
+        <div className="flex items-center justify-between mb-0.5 flex-shrink-0 relative group h-[10px]">
           <div className="flex items-center space-x-1.5">
             <div className={`w-1 h-1 rounded-full animate-pulse ${
               isECGMode
@@ -91,9 +69,8 @@ export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.mem
             <span className={`text-[10px] ${
               isECGMode ? 'text-green-400' : 'text-blue-400'
             }`}>
-              {isECGMode ? 'ECG' : 'EEG'} {isECGMode ? (patient.vitals?.ecgReading ?? '--') : (patient.vitals?.eegReading ?? '--')}{isECGMode ? 'mV' : 'μV'}
+              {isECGMode ? 'ECG' : 'EEG'}
             </span>
-            <span className="text-green-300 text-[10px]">25mm/s</span>
             {isECGMode && arrhythmiaDetected && (
               <span className="text-yellow-400 text-[10px]">⚠️</span>
             )}
@@ -103,58 +80,62 @@ export const PatientCardWaveform: React.FC<PatientCardWaveformProps> = React.mem
           </div>
           <div className="flex items-center space-x-1.5">
             <span className="text-[10px] text-gray-400">{patient.vitals?.heartRate || 0} BPM</span>
-            {/* Compact ECG/EEG Toggle */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleECGMode(patient);
-              }}
-              className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
-                isECGMode
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-              title={`Switch to ${isECGMode ? 'EEG' : 'ECG'} mode`}
-            >
-              {isECGMode ? 'EEG' : 'ECG'}
-            </button>
+          </div>
+
+          {/* Advanced Metrics Tooltip - Shows on hover */}
+          <div className="absolute top-full left-0 right-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-90 rounded p-2 z-10 pointer-events-none">
+            <div className="text-white text-[10px] leading-tight">
+              {isECGMode ? (
+                // ECG Advanced Metrics
+                patient.vitals?.ecg ? (
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-green-400 mb-1">ECG Metrics:</div>
+                    <div>RR: {patient.vitals.ecg.rrInterval ? `${patient.vitals.ecg.rrInterval}ms` : '--'} | QRS: {patient.vitals.ecg.qrsDuration ? `${patient.vitals.ecg.qrsDuration}ms` : '--'} | QT: {patient.vitals.ecg.qtInterval ? `${patient.vitals.ecg.qtInterval}ms` : '--'}</div>
+                    <div>Rhythm: {patient.vitals.ecg.rhythm || '--'} | Axis: {patient.vitals.ecg.axis ? `${patient.vitals.ecg.axis}°` : '--'}</div>
+                    <div>ST: {patient.vitals.ecg.stSegment || '--'}</div>
+                  </div>
+                ) : (
+                  <div>No ECG metrics available</div>
+                )
+              ) : (
+                // EEG Advanced Metrics
+                patient.vitals?.eeg ? (
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-blue-400 mb-1">EEG Bands:</div>
+                    <div>
+                      α: {patient.vitals.eeg.alphaPower ? `${patient.vitals.eeg.alphaPower.toFixed(0)}%` : '--'} |
+                      β: {patient.vitals.eeg.betaPower ? `${patient.vitals.eeg.betaPower.toFixed(0)}%` : '--'} |
+                      θ: {patient.vitals.eeg.thetaPower ? `${patient.vitals.eeg.thetaPower.toFixed(0)}%` : '--'}
+                    </div>
+                    <div>
+                      δ: {patient.vitals.eeg.deltaPower ? `${patient.vitals.eeg.deltaPower.toFixed(0)}%` : '--'} |
+                      γ: {patient.vitals.eeg.gammaPower ? `${patient.vitals.eeg.gammaPower.toFixed(0)}%` : '--'}
+                    </div>
+                    <div>Dominant: {patient.vitals.eeg.dominantFrequency ? `${patient.vitals.eeg.dominantFrequency.toFixed(1)} Hz` : '--'}</div>
+                    {patient.vitals.eeg.seizureActivity && <div className="text-red-400 font-bold">⚠️ Seizure Activity</div>}
+                  </div>
+                ) : (
+                  <div>No EEG metrics available</div>
+                )
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Pure Waveform Area - No bottom text */}
-        <div className="flex-1 min-h-0 relative">
-          <svg
-            width="100%"
-            height="100%"
-            viewBox="0 0 250 60"
-            className="bg-gray-900 w-full h-full"
-            preserveAspectRatio="none"
-          >
-            <defs>
-              <pattern id={`grid-${patient.id}`} width="8" height="8" patternUnits="userSpaceOnUse">
-                <path d="M 8 0 L 0 0 0 8" fill="none" stroke="#374151" strokeWidth="0.5" opacity="0.3"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill={`url(#grid-${patient.id})`} />
-
-            <path
-              d={pathData}
-              fill="none"
-              stroke={
-                isECGMode
-                  ? (arrhythmiaDetected ? "#FBBF24" : "#10B981")
-                  : (seizureActivity ? "#EF4444" : "#3B82F6")
-              }
-              strokeWidth="2"
-              className="drop-shadow-sm"
-            />
-          </svg>
-
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black bg-opacity-20 rounded">
-            <span className="text-white text-xs">
-              Click for {isECGMode ? 'ECG' : 'EEG'} viewer
-            </span>
-          </div>
+        {/* Pure Waveform Area - Uses ECGWaveformCanvas (same as full ECG viewer) */}
+        <div className="flex-1 min-h-0">
+          <ECGWaveformCanvas
+            ref={canvasRef}
+            leadIdx={leadIndex}
+            leadName={leadName}
+            dataBufferRef={dataBufferRef}
+            isECGMode={isECGMode}
+            isPaused={false}
+            speed={speed}
+            gain={gain}
+            patientId={patient.id}
+            isPatientCard={true}
+          />
         </div>
       </div>
       </div>

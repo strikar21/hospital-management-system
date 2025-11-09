@@ -257,6 +257,30 @@ class ConnectionManager:
         if sentCount > 0:
             logger.info(f"🚨 Alert sent to {sentCount} subscribers{f' for patient {patientId}' if patientId else ' (general)'}")
 
+    async def sendAlertResolved(self, patientId: str, alertId: str) -> None:
+        """
+        Send alert resolution notification to frontend.
+
+        When alert conditions clear (e.g., tachycardia resolves, vitals return to normal),
+        this notifies frontend to remove the alert from the UI automatically.
+
+        Args:
+            patientId: Patient UUID
+            alertId: Alert ID that was resolved
+        """
+        data = {
+            'type': 'alertResolved',
+            'patientId': patientId,
+            'alertId': alertId,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # Send to patient-specific subscribers
+        sentCount = await self.broadcastToPatientSubscribers(patientId, data)
+
+        if sentCount > 0:
+            logger.info(f"✅ Alert resolution sent to {sentCount} subscribers for patient {patientId} (alert: {alertId})")
+
     async def broadcastSystemAlert(self, alertData: Dict[str, Any]) -> None:
         """
         Broadcast system-level alert to all connected clients

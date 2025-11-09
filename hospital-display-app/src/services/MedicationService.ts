@@ -78,10 +78,7 @@ export class MedicationService extends BaseMedicalRecordService<medication> {
     const medications = await instance.getPatientRecords(patientId);
 
     // Add console logs for debugging (like original)
-    console.log('🔍 Fetching medications for patient:', patientId);
-    console.log('✅ Parsed medications:', medications.length, 'total');
     if (medications.length > 0) {
-      console.log('📋 Sample medication with staff names:', medications[0]);
     }
 
     return medications;

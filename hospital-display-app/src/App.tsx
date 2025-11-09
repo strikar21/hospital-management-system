@@ -80,15 +80,12 @@ const App: React.FC = () => {
     setBedsidePatients([]);
     // User authentication successful
 
-    console.log('🚀 Login initiated for user:', user.id);
 
     // STEP 1: Check smart cache (connection-aware)
     const cacheResult = await patientCacheService.getFromCacheSmart(user.id, 'My Patients');
 
     // STEP 2: Display cached data immediately if available
     if (cacheResult.patients && cacheResult.patients.length > 0) {
-      console.log('⚡ Displaying cached data:', cacheResult.reason);
-      console.log(`   ${cacheResult.patients.length} patients loaded from cache`);
       setPreloadedPatients(cacheResult.patients);
     }
 
@@ -96,7 +93,6 @@ const App: React.FC = () => {
     const shouldFetchFresh = cacheResult.shouldFetchFresh;
 
     if (shouldFetchFresh) {
-      console.log('📡 Fetching fresh data from API:', cacheResult.reason);
 
       // PARALLEL: WebSocket + Fresh API fetch
       const wsService = WebSocketService.getInstance();
@@ -107,8 +103,6 @@ const App: React.FC = () => {
           PatientService.getPatients(undefined, undefined, true)
         ]);
 
-        console.log('🔌 WebSocket connected');
-        console.log('📊 Fresh patients loaded:', freshPatients.length);
 
         // Update with fresh data
         setPreloadedPatients(freshPatients);
@@ -121,11 +115,9 @@ const App: React.FC = () => {
       }
     } else {
       // Only connect WebSocket (no patient fetch needed - all devices offline)
-      console.log('✅ Using cached data only - all devices offline');
       const wsService = WebSocketService.getInstance();
       try {
         await wsService.connect();
-        console.log('🔌 WebSocket connected');
       } catch (error) {
         console.error('⚠️ WebSocket connection failed:', error);
       }
@@ -141,7 +133,6 @@ const App: React.FC = () => {
     // Disconnect WebSocket on logout
     const wsService = WebSocketService.getInstance();
     wsService.disconnect();
-    console.log('🔌 WebSocket disconnected on logout');
   };
 
   const handleUpdateSettings = useCallback((newSettings: appsettings) => {

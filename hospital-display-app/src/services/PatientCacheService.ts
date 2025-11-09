@@ -79,8 +79,6 @@ class PatientCacheService {
       const request = store.put(cache);
 
       request.onsuccess = () => {
-        console.log('💾 Saved', patients.length, 'patients to cache');
-        console.log('🔌 Connected devices:', cache.hasConnectedDevices ? 'YES' : 'NO');
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -114,7 +112,6 @@ class PatientCacheService {
 
         // No cache found
         if (!cache) {
-          console.log('📦 No cache found → Fetch fresh');
           resolve({
             patients: null,
             shouldFetchFresh: true,
@@ -125,7 +122,6 @@ class PatientCacheService {
 
         // Cache expired
         if (Date.now() > cache.expiresAt) {
-          console.log('📦 Cache expired (TTL: 5 min) → Fetch fresh');
           this.invalidateCache(userId, ward);
           resolve({
             patients: null,
@@ -139,8 +135,6 @@ class PatientCacheService {
         const currentlyConnectedDevices = this.hasConnectedDevices(cache.patients);
 
         if (currentlyConnectedDevices) {
-          console.log('🔌 Connected devices detected → Fetch fresh (medical accuracy required)');
-          console.log('   Cache will display immediately, fresh data will update');
           resolve({
             patients: cache.patients, // Return cache for instant display
             shouldFetchFresh: true,   // But also fetch fresh data
@@ -153,9 +147,6 @@ class PatientCacheService {
         const offlineCount = cache.patients.filter(p =>
           p.deviceStatus === 'offline' || p.deviceStatus === 'recentlySeen' || !p.deviceStatus
         ).length;
-        console.log('📦 Cache HIT - all devices offline/disconnected');
-        console.log(`   Total patients: ${cache.patients.length}, Offline: ${offlineCount}`);
-        console.log('   → Using cached data (no new vitals available)');
         resolve({
           patients: cache.patients,
           shouldFetchFresh: false, // No need to fetch immediately (can fetch in background)
@@ -186,7 +177,6 @@ class PatientCacheService {
       const request = store.delete(this.getCacheKey(userId, ward));
 
       request.onsuccess = () => {
-        console.log('🗑️ Cache invalidated for', userId, ward);
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -205,7 +195,6 @@ class PatientCacheService {
       const request = store.clear();
 
       request.onsuccess = () => {
-        console.log('🗑️ All cache cleared');
         resolve();
       };
       request.onerror = () => reject(request.error);

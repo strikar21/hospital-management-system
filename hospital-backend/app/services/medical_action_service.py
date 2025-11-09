@@ -558,11 +558,11 @@ class MedicalActionService:
     ) -> Dict[str, Any]:
         """Record alert acknowledgment atomically with database persistence"""
 
-        alert_id = acknowledgment_data.get('alert_id')
+        alert_id = acknowledgment_data.get('alertId')  # FIXED: Use camelCase to match Pydantic model
         acknowledged_at = datetime.now()
 
         if not alert_id:
-            raise ValueError("alert_id is required for alert acknowledgment")
+            raise ValueError("alertId is required for alert acknowledgment")
 
         # Get alert details first
         alert_details = await conn.fetchrow(

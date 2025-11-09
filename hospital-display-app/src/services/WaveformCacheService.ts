@@ -77,7 +77,6 @@ class WaveformCacheService {
     // Save to IndexedDB (persistence)
     try {
       await this.saveToIndexedDB(cacheKey, cacheData);
-      logger.log(`💾 Waveform cache saved: ${cacheKey} (${leadBuffers.length} leads, ${leadBuffers[0]?.length || 0} samples)`);
     } catch (error) {
       logger.error('Failed to save waveform to IndexedDB:', error);
       // Continue with memory cache only
@@ -95,7 +94,6 @@ class WaveformCacheService {
     // Check memory cache first (fastest - no async)
     const memoryData = this.memoryCache.get(cacheKey);
     if (memoryData && Date.now() < memoryData.expiresAt) {
-      logger.log(`⚡ Waveform cache HIT (memory): ${cacheKey}`);
       return memoryData.leadBuffers;
     }
 
@@ -103,7 +101,6 @@ class WaveformCacheService {
     try {
       const indexedData = await this.getFromIndexedDB(cacheKey);
       if (indexedData && Date.now() < indexedData.expiresAt) {
-        logger.log(`📦 Waveform cache HIT (IndexedDB): ${cacheKey}`);
         // Restore to memory cache for faster subsequent access
         this.memoryCache.set(cacheKey, indexedData);
         return indexedData.leadBuffers;
@@ -113,7 +110,6 @@ class WaveformCacheService {
       // Continue with cache miss
     }
 
-    logger.log(`❌ Waveform cache MISS: ${cacheKey}`);
     return null;
   }
 
@@ -189,10 +185,7 @@ class WaveformCacheService {
       const store = transaction.objectStore(this.storeName);
       const request = store.delete(cacheKey);
 
-      request.onsuccess = () => {
-        logger.log(`🗑️ Waveform cache invalidated: ${cacheKey}`);
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }
@@ -212,10 +205,7 @@ class WaveformCacheService {
       const store = transaction.objectStore(this.storeName);
       const request = store.clear();
 
-      request.onsuccess = () => {
-        logger.log('🗑️ All waveform cache cleared');
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }

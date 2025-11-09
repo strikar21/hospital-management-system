@@ -8,7 +8,6 @@ import {
   SAMPLE_RATE_HZ,
   LOG_SAMPLE_INTERVAL
 } from '../../config/ecgConfig';
-import { logger } from '../../utils/logger';
 
 // Props for individual waveform canvas
 interface ECGWaveformCanvasProps {
@@ -20,6 +19,7 @@ interface ECGWaveformCanvasProps {
   speed: number;
   gain: number; // mm/mV for ECG, μV/mm for EEG
   patientId: string;
+  isPatientCard?: boolean; // Optional: true for patient card, false/undefined for full ECG viewer
 }
 
 // Canvas component for rendering a single lead's waveform
@@ -31,10 +31,10 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
   isPaused,
   speed,
   gain,
-  patientId
+  patientId,
+  isPatientCard = false
 }, ref) => {
   const internalRef = useRef<HTMLCanvasElement>(null);
-  const lastTime = useRef(performance.now());
 
   // ✅ NEW: Circular buffer state for ICU monitor-style sweep
   const writePosition = useRef(0);   // Current write position (0 to samplesVisible-1)
@@ -55,8 +55,8 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
   // When these props change, cancel old animation loop and start new one with fresh values
   useEffect(() => {
     let animationFrameId: number;
-    const animate = (timestamp: number) => {
-      drawWaveform(timestamp);
+    const animate = () => {
+      drawWaveform();
       if (!isPaused) animationFrameId = requestAnimationFrame(animate);
     };
     if (!isPaused) animationFrameId = requestAnimationFrame(animate);
@@ -64,18 +64,12 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
   }, [isPaused, speed, gain, isECGMode]);
 
   // Draw grid, waveform, and sweep line with circular buffer (ICU monitor style)
-  const drawWaveform = (timestamp: number) => {
+  const drawWaveform = () => {
     const canvas = internalRef.current;
-    if (!canvas) {
-      logger.log(`[ECGWaveformCanvas ${patientId} Lead ${leadName}] No canvas available`);
-      return;
-    }
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      logger.log(`[ECGWaveformCanvas ${patientId} Lead ${leadName}] No 2D context`);
-      return;
-    }
+    if (!ctx) return;
 
     // ✅ Read fresh data from ref on every animation frame (60fps)
     const data = dataBufferRef.current[leadIdx] || [];
@@ -89,17 +83,19 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
       ctx.scale(dpr, dpr);
     }
 
-    const deltaTime = (timestamp - lastTime.current) / 1000; // seconds
-    lastTime.current = timestamp;
-
-    logger.log(`[ECGWaveformCanvas ${patientId} Lead ${leadName}] Rendering: width=${width}, height=${height}, dpr=${dpr}, dataLength=${data.length}, speed=${speed}mm/s, delta=${deltaTime}s`);
-
     // Clear canvas
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw grid
-    drawMedicalGrid(ctx, width, height, isECGMode);
+    // ✅ Baseline position:
+    // ECG: 70% for patient card (more headroom for R-waves), 50% for full viewer
+    // EEG: Always 50% centered (symmetrical brain waves)
+    const baselineRatio = isECGMode
+      ? (isPatientCard ? 0.7 : 0.5)  // ECG: 70% in card, 50% in full viewer
+      : 0.5;                          // EEG: Always centered
+
+    // Draw grid with appropriate baseline
+    drawMedicalGrid(ctx, width, height, isECGMode, baselineRatio);
 
     // ✅ MEDICAL-STANDARD HORIZONTAL SCALING: Use actual speed prop (mm/s)
     // speed is in mm/s (e.g., 25mm/s for ECG, 30mm/s for EEG)
@@ -109,7 +105,6 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
 
     // 🔍 DEBUG: Log actual spacing calculations (uses centralized LOG_SAMPLE_INTERVAL)
     if (LOG_SAMPLE_INTERVAL > 0 && data.length % LOG_SAMPLE_INTERVAL === 0) {
-      console.log(`🔍 [${leadName}] DPI spacing: speed=${speed}mm/s, pixelsPerSecond=${pixelsPerSecond.toFixed(2)}, pixelsPerSample=${pixelsPerSample.toFixed(4)}, samplesVisible=${samplesVisible}, canvas width=${width}px`);
     }
 
     // ✅ MEDICAL-STANDARD VERTICAL SCALING: Use actual gain prop
@@ -149,7 +144,8 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
           isECGMode,
           pixelsPerSample,
           pixelsPerUnit,
-          leadColor
+          leadColor,
+          baselineRatio
         );
       } else {
         // ✅ PHASE 2: ICU Monitor Typewriter Mode - show LAST samplesVisible samples (scrolling)
@@ -164,18 +160,18 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
           isECGMode,
           pixelsPerSample,
           pixelsPerUnit,
-          leadColor
+          leadColor,
+          baselineRatio
         );
-
-        logger.log(`[ECGWaveformCanvas ${patientId} Lead ${leadName}] Phase 2 (Typewriter Scroll): showing last ${visibleData.length} samples of ${data.length} total, fills entire ${width}px width`);
       }
     } else {
-      logger.log(`[ECGWaveformCanvas ${patientId} Lead ${leadName}] No data, drawing baseline`);
+      // No data - draw flat baseline at correct position
       ctx.strokeStyle = isECGMode ? '#00FF00' : '#FFD700';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
+      const baselineY = height * baselineRatio;
+      ctx.moveTo(0, baselineY);
+      ctx.lineTo(width, baselineY);
       ctx.stroke();
     }
 
@@ -185,14 +181,6 @@ export const ECGWaveformCanvas = forwardRef<HTMLCanvasElement, ECGWaveformCanvas
   return (
     <div className="relative border-2 border-gray-600 rounded overflow-hidden flex flex-col w-full h-full">
       <canvas ref={setCanvasRef} className="w-full h-full" />
-      <div className="absolute top-2 left-2 bg-gray-800 bg-opacity-75 rounded px-2 py-1 text-xs">
-        <div
-          className={`w-2 h-2 rounded-full inline-block mr-2 ${
-            isPaused ? 'bg-red-500' : isECGMode ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'
-          }`}
-        ></div>
-        Lead: {leadName} • {isPaused ? 'PAUSED' : (isECGMode ? `${gain}mm/mV` : `${gain}μV/mm`)}
-      </div>
     </div>
   );
 });

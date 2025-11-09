@@ -1,6 +1,6 @@
 /*
  * ESP32 Hospital Watch - Certificate-Based Authentication + Waveform Streaming
- * Version: 5.2.13
+ * Version: 5.2.14
  *
  * Features:
  * - Automatic captive portal when connecting to hotspot
@@ -32,6 +32,7 @@
  * - ✅ v5.2.11: MEDICAL ACCURACY FIX - Channel-specific frequency mixing (frontal=beta, occipital=alpha)
  * - ✅ v5.2.13: CRITICAL BUGFIX - Non-blocking calibration (removes 3.7s freeze, waveforms stream during calibration)
  * - ✅ v5.2.13: FEATURE - EEG calibration pulse support (100μV pulse, mode-specific calibration)
+ * - ✅ v5.2.14: FEATURE - Blood pressure monitoring (systolic/diastolic transmission via MQTT)
  *
  * CHANGES FROM v5.0:
  * ✅ v5.1: PhysiologicalSimulator for realistic patient vitals
@@ -77,6 +78,12 @@
  * ✅ v5.2.12: Bug: Swap ECG↔EEG cable → frontend shows correct mode label but wrong waveforms
  * ✅ v5.2.12: Fix: Check GPIO pin every 1s (before simulator.update()) and call setMode() dynamically
  * ✅ v5.2.12: Result: Mode switching now works correctly - waveforms match the current GPIO pin state
+ * ✅ v5.2.14: FEATURE - Blood pressure monitoring (systolic/diastolic)
+ * ✅ v5.2.14: Added bloodPressureSystolic and bloodPressureDiastolic global variables (lines 215-216)
+ * ✅ v5.2.14: Read BP from PhysiologicalSimulator every 1s (lines 1136-1137)
+ * ✅ v5.2.14: Transmit BP via MQTT in vitals message (lines 1940-1941)
+ * ✅ v5.2.14: Updated serial debug output to show BP (e.g., "BP=120/80")
+ * ✅ v5.2.14: Result: Backend now receives and stores BP data in TimescaleDB vitals_realtime table
  */
 
 #include <WiFi.h>
@@ -212,6 +219,8 @@ int oxygenSat = 0;           // ✅ Read from simulator.getOxygenSaturation()
 int batteryLevel = 100;      // Static for now (can add battery ADC later)
 int respiratoryRate = 0;     // ✅ Read from simulator.getRespiratoryRate()
 float quality = 0;           // ✅ Read from simulator.getSignalQuality()
+int bloodPressureSystolic = 0;   // ✅ Read from simulator.getBloodPressureSystolic()
+int bloodPressureDiastolic = 0;  // ✅ Read from simulator.getBloodPressureDiastolic()
 
 // ====================================
 // DEVICE MAINTENANCE
@@ -1131,6 +1140,8 @@ void loop() {
     oxygenSat = simulator.getOxygenSaturation();
     respiratoryRate = simulator.getRespiratoryRate();
     quality = simulator.getSignalQuality();
+    bloodPressureSystolic = simulator.getBloodPressureSystolic();
+    bloodPressureDiastolic = simulator.getBloodPressureDiastolic();
 
     sendVitals();  // Already handles offline queueing internally
     lastVitals = millis();
@@ -1933,6 +1944,8 @@ void sendVitals() {
   doc["signalQuality"] = quality / 100.0;
   doc["respiratoryRate"] = (int)respiratoryRate;
   doc["batteryLevel"] = batteryLevel;
+  doc["bloodPressureSystolic"] = bloodPressureSystolic;
+  doc["bloodPressureDiastolic"] = bloodPressureDiastolic;
 
   String payload;
   serializeJson(doc, payload);
@@ -1954,6 +1967,7 @@ void sendVitals() {
   if (publishWithRetry(topic.c_str(), payload.c_str())) {  // ✅ v5.2.1: QoS 1 with retry
     Serial.println("📊 Vitals: Mode=" + String(isECGMode ? "ECG" : "EEG") +
                    ", HR=" + String((int)heartRate) +
+                   ", BP=" + String(bloodPressureSystolic) + "/" + String(bloodPressureDiastolic) +
                    ", Temp=" + String(tempCelsius, 1) + "°C" +
                    ", SpO2=" + String(oxygenSat) + "%" +
                    ", RR=" + String(respiratoryRate));

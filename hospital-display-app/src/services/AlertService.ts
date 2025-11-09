@@ -75,7 +75,7 @@ export class AlertService extends BaseService {
           method: 'POST',
           body: JSON.stringify({
             acknowledgedBy: userId,
-            alertId: alertId
+            alertId: alertId  // Backend expects camelCase (AlertAcknowledgmentRequest)
             // Let backend handle acknowledgedAt timestamp to avoid datetime format issues
           })
         }

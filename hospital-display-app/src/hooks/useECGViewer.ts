@@ -62,7 +62,6 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
   useEffect(() => {
     calibrationStartRef.current = Date.now();
     setShowCalibration(true);
-    logger.log('🔧 Calibration pulse enabled (permanent display)');
   }, [patient.id, isECGMode, layout]);
 
   // Handle layout changes: adjust canvas refs
@@ -82,20 +81,14 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
     for (let i = 0; i < 22; i++) {
       dataBufferRef.current[i] = [];
     }
-    logger.log(`🆕 Blank canvas initialized - 22 empty buffers ready for fresh ${isECGMode ? 'ECG' : 'EEG'} data`);
   }, [patient.id, isECGMode]); // ✅ Clear on both patient AND mode changes
 
   // Subscribe to real waveform data from WebSocket
   useEffect(() => {
     if (!patient.id || !patient.assignedDeviceId) {
-      if (!patient.assignedDeviceId) {
-        logger.log('⚠️ No device assigned - waveform display unavailable');
-      }
       return;
     }
     // Cache loads in parallel - don't block streaming
-
-    logger.log(`🔌 Subscribing to waveform data for patient ${patient.id.substring(0, 8)} with calibration trigger`);
 
     const subscriptionId = subscribe((message: any) => {
       // Only process waveformStream messages for this patient
@@ -110,10 +103,8 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
 
       // Auto-detect mode from ESP32 and switch display accordingly
       if (waveformData.mode === 'ecg' && !isECGMode) {
-        logger.log('🔄 Auto-switching to ECG mode (detected from device)');
         setIsECGMode(true);
       } else if (waveformData.mode === 'eeg' && isECGMode) {
-        logger.log('🔄 Auto-switching to EEG mode (detected from device)');
         setIsECGMode(false);
       }
 
@@ -287,7 +278,6 @@ export const useECGViewer = ({ patient }: UseECGViewerProps) => {
     }, patient.id, true); // ← ADD patientId and triggerCalibration=true for calibration pulse
 
     return () => {
-      logger.log(`🔌 Unsubscribing from waveform data for patient ${patient.id.substring(0, 8)}`);
       unsubscribe(subscriptionId);
     };
   }, [patient.id, patient.assignedDeviceId, isECGMode, isPaused, subscribe, unsubscribe]);

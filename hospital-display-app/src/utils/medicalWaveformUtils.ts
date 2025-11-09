@@ -64,8 +64,6 @@ export function getScreenDPI(): number {
     // Validate DPI (should be between 72 and 300 for most displays)
     if (dpi >= 72 && dpi <= 300) {
       cachedDPI = dpi;
-      console.log(`✅ DPI detected: ${dpi} (cached for future use)`);
-      console.log(`🔍 1mm = ${(dpi / 25.4).toFixed(2)} pixels, 5mm big square = ${(dpi / 25.4 * 5).toFixed(2)} pixels`);
       return dpi;
     }
   } catch (error) {
@@ -74,7 +72,6 @@ export function getScreenDPI(): number {
 
   // Fallback: Standard 96 DPI
   cachedDPI = 96;
-  console.log('⚠️ DPI detection failed, using fallback: 96 DPI (cached)');
   return 96;
 }
 
@@ -433,6 +430,7 @@ export function renderWaveformCanvas(
  * @param pixelsPerSample - Horizontal spacing (pre-calculated)
  * @param pixelsPerUnit - Vertical scale (pre-calculated: pixels per mV or μV)
  * @param leadColor - Color for waveform line
+ * @param baselineRatio - Optional baseline position as ratio from top (default 0.8 = 80%)
  */
 export function renderWaveformSegment(
   data: number[],
@@ -442,11 +440,16 @@ export function renderWaveformSegment(
   isECGMode: boolean,
   pixelsPerSample: number,
   pixelsPerUnit: number,
-  leadColor: string
+  leadColor: string,
+  baselineRatio: number = 0.8
 ): void {
   if (!data || data.length === 0) return;
 
-  const baseline = height / 2; // Center line = 0mV/0μV
+  // ✅ FIX: Baseline position (default 80% for proper 25mm ECG display)
+  // Standard ECG scale: 10mm/mV, so 25mm = 2.5mV range
+  // Typical QRS: +2mV peaks, -0.5mV deflections → 80:20 ratio
+  // Patient card may use different ratio (e.g., 0.7 = 70% for more headroom)
+  const baseline = height * baselineRatio;
 
   ctx.strokeStyle = leadColor;
   ctx.lineWidth = 2;
@@ -478,12 +481,14 @@ export function renderWaveformSegment(
  * @param width - Canvas width in pixels
  * @param height - Canvas height in pixels
  * @param isECGMode - true for ECG (red grid), false for EEG (gray grid)
+ * @param baselineRatio - Optional baseline position as ratio from top (default 0.8 = 80%)
  */
 export function drawMedicalGrid(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  isECGMode: boolean
+  isECGMode: boolean,
+  baselineRatio: number = 0.8
 ): void {
   // Real ECG paper colors:
   // - Small grid (1mm): Light pink/red for ECG, light gray for EEG
@@ -536,12 +541,14 @@ export function drawMedicalGrid(
     ctx.stroke();
   }
 
-  // Draw baseline (0mV/0μV) - thicker line at center
-  ctx.strokeStyle = isECGMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(200, 200, 200, 0.3)';
-  ctx.lineWidth = 1;
+  // ✅ FIX: Draw baseline (0mV/0μV) at specified position to match waveform rendering
+  // Aligned with waveform baseline for proper ECG/EEG display
+  // Default 80% for full ECG viewer, customizable for patient card (e.g., 70%)
+  ctx.strokeStyle = isECGMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(200, 200, 200, 0.5)';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, height / 2);
-  ctx.lineTo(width, height / 2);
+  ctx.moveTo(0, height * baselineRatio);
+  ctx.lineTo(width, height * baselineRatio);
   ctx.stroke();
 }
 

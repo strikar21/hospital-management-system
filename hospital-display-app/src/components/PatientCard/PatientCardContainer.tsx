@@ -4,7 +4,7 @@
  * Medical-grade patient card with modular architecture
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Heart, Activity, Thermometer, Droplets, Wind, Waves, TrendingUp, AlertTriangle, Watch } from 'lucide-react';
 import { patient, user } from '../../types';
 import { MedicalUtils } from '../../utils/medicalUtils';
@@ -15,6 +15,7 @@ import { PatientCardAlerts } from './PatientCardAlerts';
 import { PatientCardWaveform } from './PatientCardWaveform';
 import { WatchDetailsModal } from '../WatchDetailsModal';
 import { usePatientVitals } from '../../hooks/usePatientVitals';
+import { useRealtimeAlerts } from '../../hooks/useRealtimeAlerts';
 
 interface PatientCardContainerProps {
   patient: patient;
@@ -42,6 +43,9 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
   // WebSocket real-time vitals subscription - initialize with API vitals for instant display
   const { vitals: realtimeVitals, isConnected: wsConnected } = usePatientVitals(patient.id, patient.vitals);
 
+  // WebSocket real-time alerts subscription - initialize with API alerts
+  const { alerts: realtimeAlerts } = useRealtimeAlerts(patient.id, patient.alerts || []);
+
   // console.log(`🔍 [${patient.id.substring(0,8)}] realtimeVitals from hook:`, realtimeVitals, 'wsConnected:', wsConnected);
 
   // Merge real-time vitals with patient prop vitals (WebSocket takes precedence)
@@ -54,14 +58,11 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
     return patient.vitals;
   }, [patient.vitals, realtimeVitals, wsConnected, patient.id]);
 
-  // State management - no mock alerts, only real backend alerts
-  const [displayedAlerts, setDisplayedAlerts] = useState<any[]>([]);
+  // State management - use real-time alerts from WebSocket
   const [watchDetailsPatient, setWatchDetailsPatient] = useState<patient | null>(null);
 
-  // MEDICAL SAFETY: Never auto-hide any medical alerts - all alerts must be manually dismissed
-  useEffect(() => {
-    setDisplayedAlerts(patient.alerts || []);
-  }, [patient.alerts]);
+  // Use real-time alerts from WebSocket hook (includes both API and WebSocket alerts)
+  const displayedAlerts = realtimeAlerts;
 
   // ECG/EEG mode detection
   const isECGMode: boolean = currentVitals?.isEcgMode !== undefined ? currentVitals?.isEcgMode : true;
@@ -277,14 +278,13 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       <PatientCardHeader
         patient={patientWithCurrentVitals}
         currentUser={currentUser}
-        onBedsideMode={onBedsideMode}
         unacknowledgedAlerts={allCombinedAlerts}
         onAcknowledgeAlert={onAcknowledgeAlert}
         onViewWatchDetails={handleViewWatchDetails}
       />
 
       {/* Main Content Area */}
-      <div className="px-3 py-1 flex-1 flex flex-col min-h-0 overflow-hidden space-y-1">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Vital Signs Strip */}
         <PatientVitalStrip
           patient={patientWithCurrentVitals}

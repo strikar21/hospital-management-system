@@ -86,7 +86,7 @@ class PatientRepository(BaseRepository[Patient]):
                         where_conditions.append(f"{quoted_key} = ${param_count}")
                         params.append(value)
 
-            # JOIN with deviceassignments and devices
+            # JOIN with deviceassignments, devices, and alerts
             query = """
                 SELECT p.*,
                        da."deviceId" as "assignedDeviceId",
@@ -107,10 +107,17 @@ class PatientRepository(BaseRepository[Patient]):
                            WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
                            WHEN d."lastSeen" > NOW() - INTERVAL '1 hour' THEN 'recentlySeen'
                            ELSE 'offline'
-                       END as "deviceStatus"
+                       END as "deviceStatus",
+                       json_agg(DISTINCT pa.*) FILTER (WHERE pa.id IS NOT NULL
+                           AND pa.status IN ('active', 'acknowledged')) as alerts
                 FROM patients p
                 LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
                 LEFT JOIN devices d ON da."deviceId" = d.id
+                LEFT JOIN patient_alerts pa ON p.id = pa."patientId"
+                GROUP BY p.id, da."deviceId", da."assignedAt", da."assignedBy",
+                         d."serialNumber", d."name", d."model", d."manufacturer",
+                         d."macAddress", d."firmwareVersion", d."lastSeen", d."batteryLevel",
+                         d."location", d."calibrationDate", d."nextMaintenanceDate"
             """
 
             # Add WHERE conditions if any exist
@@ -137,9 +144,9 @@ class PatientRepository(BaseRepository[Patient]):
             raise
 
     async def get_complete_patient_data(self, patient_id: str) -> Optional[Dict[str, Any]]:
-        """Get patient with all associated medical records including device assignment"""
+        """Get patient with all associated medical records including device assignment and alerts"""
         try:
-            # Include device assignment data for ECG viewer functionality
+            # Include device assignment data for ECG viewer functionality and alerts
             query = """
                 SELECT
                     p.*,
@@ -157,7 +164,9 @@ class PatientRepository(BaseRepository[Patient]):
                     json_agg(DISTINCT pn.*) FILTER (WHERE pn.id IS NOT NULL) as notes,
                     json_agg(DISTINCT m.*) FILTER (WHERE m.id IS NOT NULL) as medications,
                     json_agg(DISTINCT i.*) FILTER (WHERE i.id IS NOT NULL) as investigations,
-                    json_agg(DISTINCT t.*) FILTER (WHERE t.id IS NOT NULL) as therapies
+                    json_agg(DISTINCT t.*) FILTER (WHERE t.id IS NOT NULL) as therapies,
+                    json_agg(DISTINCT pa.*) FILTER (WHERE pa.id IS NOT NULL
+                        AND pa.status IN ('active', 'acknowledged')) as alerts
                 FROM patients p
                 LEFT JOIN deviceassignments da ON p.id = da."patientId" AND da."unassignedAt" IS NULL
                 LEFT JOIN devices d ON da."deviceId" = d.id
@@ -165,6 +174,7 @@ class PatientRepository(BaseRepository[Patient]):
                 LEFT JOIN medications m ON p.id = m."patientId"
                 LEFT JOIN investigations i ON p.id = i."patientId"
                 LEFT JOIN therapy t ON p.id = t."patientId"
+                LEFT JOIN patient_alerts pa ON p.id = pa."patientId"
                 WHERE p.id = $1
                 GROUP BY p.id, da."deviceId", da."assignedAt", da."assignedBy", d."batteryLevel", d."lastSeen", d."serialNumber"
             """

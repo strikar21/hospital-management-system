@@ -676,7 +676,7 @@ async def getHistoricalVitals(
         FROM vitals_timeseries
         WHERE "patientId" = $1
           AND "vitalType" = $2
-          AND time > NOW() - INTERVAL '%s hours'
+          AND time > NOW() - make_interval(hours => $3)
         ORDER BY time ASC
     """
 
@@ -707,15 +707,15 @@ async def getVitalsTimeBuckets(
         List of dicts with 'bucket', 'avgValue', 'minValue', 'maxValue', 'count'
     """
     query = """
-        SELECT time_bucket('%s minutes', time) AS bucket,
+        SELECT time_bucket(($1 || ' minutes')::INTERVAL, time) AS bucket,
                AVG(value) as "avgValue",
                MIN(value) as "minValue",
                MAX(value) as "maxValue",
                COUNT(*) as count
         FROM vitals_timeseries
-        WHERE "patientId" = $1
-          AND "vitalType" = $2
-          AND time > NOW() - INTERVAL '%s hours'
+        WHERE "patientId" = $2
+          AND "vitalType" = $3
+          AND time > NOW() - make_interval(hours => $4)
         GROUP BY bucket
         ORDER BY bucket ASC
     """
@@ -791,7 +791,7 @@ async def countPatientsWithCondition(
             WHERE ($1::TEXT IS NULL OR p."roomNumber" LIKE $1 || '%')
               AND v."vitalType" = 'temperature'
               AND v.value > 38.3
-              AND v.time > NOW() - INTERVAL '%s minutes'
+              AND v.time > NOW() - make_interval(mins => $2)
               AND p.status = 'active'
         """
     elif condition == 'spo2_declining':
@@ -805,7 +805,7 @@ async def countPatientsWithCondition(
                 JOIN vitals_timeseries v ON p.id = v."patientId"
                 WHERE ($1::TEXT IS NULL OR p."roomNumber" LIKE $1 || '%')
                   AND v."vitalType" = 'oxygenSaturation'
-                  AND v.time > NOW() - INTERVAL '%s minutes'
+                  AND v.time > NOW() - make_interval(mins => $2)
                   AND p.status = 'active'
             )
             SELECT COUNT(DISTINCT "patientId")
@@ -836,7 +836,7 @@ async def countRecentAdmissions(hoursBack: int = 24) -> int:
     query = """
         SELECT COUNT(*)
         FROM patients
-        WHERE "admissionDate" > NOW() - INTERVAL '%s hours'
+        WHERE "admissionDate" > NOW() - make_interval(hours => $1)
           AND status = 'active'
     """
 

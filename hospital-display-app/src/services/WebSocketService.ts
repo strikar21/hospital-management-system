@@ -68,7 +68,6 @@ class WebSocketService {
    */
   public async connect(): Promise<boolean> {
     if (this.connectionState === 'connected' || this.connectionState === 'connecting') {
-      console.log('WebSocket already connected or connecting');
       return true;
     }
 
@@ -86,7 +85,6 @@ class WebSocketService {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('🔌 WebSocket connection established');
         this.connectionState = 'connected';
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -118,7 +116,6 @@ class WebSocketService {
       };
 
       this.ws.onclose = (event) => {
-        console.log(`WebSocket connection closed: ${event.code} - ${event.reason}`);
         this.connectionState = 'disconnected';
         this.stopHeartbeat();
 
@@ -156,7 +153,6 @@ class WebSocketService {
     this.subscribers = [];
     this.subscribedPatients.clear();
     this.pendingCalibrationRequests.clear();
-    console.log('WebSocket disconnected by client');
   }
 
   /**
@@ -227,7 +223,6 @@ class WebSocketService {
 
     // If not connected, subscription will be processed by resubscribePatients() on connect
     if (!this.isConnected()) {
-      console.log(`📋 Queued subscription for patient: ${patientId} (will subscribe on connect)`);
       return;
     }
 
@@ -239,7 +234,6 @@ class WebSocketService {
     };
 
     this.ws?.send(JSON.stringify(message));
-    console.log(`📡 Subscribed to patient updates: ${patientId}${triggerWaveformCalibration ? ' (with waveform calibration trigger)' : ''}`);
   }
 
   /**
@@ -248,7 +242,6 @@ class WebSocketService {
    */
   private requestWaveformCalibration(patientId: string): void {
     if (!this.isConnected()) {
-      console.log(`📋 Queued calibration request for patient: ${patientId} (will send on connect)`);
       this.pendingCalibrationRequests.add(patientId);
       return;
     }
@@ -260,10 +253,8 @@ class WebSocketService {
     };
 
     const messageStr = JSON.stringify(message);
-    console.log(`📤 Sending waveform calibration request:`, messageStr);
     this.ws?.send(messageStr);
     this.pendingCalibrationRequests.delete(patientId);
-    console.log(`🔧 Waveform calibration requested for patient: ${patientId}`);
   }
 
   /**
@@ -281,7 +272,6 @@ class WebSocketService {
 
     this.ws?.send(JSON.stringify(message));
     this.subscribedPatients.delete(patientId);
-    console.log(`📡 Unsubscribed from patient updates: ${patientId}`);
   }
 
   /**
@@ -297,7 +287,6 @@ class WebSocketService {
     });
 
     if (this.subscribedPatients.size > 0) {
-      console.log(`📡 Resubscribed to ${this.subscribedPatients.size} patients`);
     }
 
     // Send all pending calibration requests
@@ -306,7 +295,6 @@ class WebSocketService {
       this.pendingCalibrationRequests.forEach(patientId => {
         this.requestWaveformCalibration(patientId);
       });
-      console.log(`🔧 Sent ${count} pending calibration request(s)`);
     }
   }
 
@@ -353,7 +341,6 @@ class WebSocketService {
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
 
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();

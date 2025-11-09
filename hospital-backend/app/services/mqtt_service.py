@@ -643,48 +643,137 @@ class MQTTService:
                     logger.debug(f"Could not store impedance reading: {e}")
 
             # ========================================
-            # ALERT DETECTION (Complete System - Components 1 & 3)
+            # ALERT DETECTION USING DOMAIN LAYER (AlertPipeline)
             # ========================================
-            # Detect alerts from vitals data
-            vitalsDict = {
-                'heartRate': vitalsMsg.heartRate,
-                'oxygenSaturation': vitalsMsg.oxygenSaturation,
-                'respiratoryRate': vitalsMsg.respiratoryRate,
-                'temperature': vitalsMsg.skinTemperature,
-                'batteryLevel': vitalsMsg.batteryLevel,
-                'signalQuality': vitalsMsg.signalQuality,
-                'impedance': approximateImpedance if vitalsMsg.signalQuality is not None else None
-            }
+            # Use AlertPipeline for unified alert generation with deduplication
+            if self.alertPipeline:
+                try:
+                    # Check heart rate
+                    if vitalsMsg.heartRate:
+                        alert = await self.alertPipeline.generate_vital_alert(
+                            patientId, 'heartrate', vitalsMsg.heartRate, deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'vital',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🚨 Heart rate alert for patient {patientId}: {alert['message']}")
 
-            alerts = await alertDetectionService.detectAlerts(vitalsDict, patientId, deviceId)
+                    # Check oxygen saturation
+                    if vitalsMsg.oxygenSaturation:
+                        alert = await self.alertPipeline.generate_vital_alert(
+                            patientId, 'oxygen', vitalsMsg.oxygenSaturation, deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'vital',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🚨 Oxygen alert for patient {patientId}: {alert['message']}")
 
-            # ========================================
-            # ALERT MANAGEMENT WITH DEDUPLICATION & AUTO-RESOLUTION
-            # ========================================
-            # Use centralized AlertManagerService for proper alert lifecycle management
-            async with getDbConnection() as conn:
-                for alert in alerts:
-                    # Use alert manager (handles deduplication automatically)
-                    alertId = await alertManagerService.createOrUpdateAlert(
-                        alert, patientId, deviceId, conn
-                    )
+                    # Check respiratory rate
+                    if vitalsMsg.respiratoryRate:
+                        alert = await self.alertPipeline.generate_vital_alert(
+                            patientId, 'respiratory', vitalsMsg.respiratoryRate, deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'vital',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🚨 Respiratory alert for patient {patientId}: {alert['message']}")
 
-                    # Only broadcast if NEW alert created (not duplicate update)
-                    if alertId:
-                        alertPayload = alertDetectionService.createAlertPayload(alert)
-                        alertPayload['id'] = alertId
-                        await connectionManager.sendAlert(patientId, alertPayload)
-                        # Note: logger.warning() is already called by AlertManagerService
+                    # Check temperature
+                    if vitalsMsg.skinTemperature:
+                        alert = await self.alertPipeline.generate_vital_alert(
+                            patientId, 'temperature', vitalsMsg.skinTemperature, deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'vital',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🚨 Temperature alert for patient {patientId}: {alert['message']}")
 
-                # Check for auto-resolution (vitals returned to normal)
-                resolvedAlerts = await alertManagerService.checkForResolution(
-                    patientId, vitalsDict, conn
-                )
+                    # Check blood pressure (if available)
+                    if vitalsMsg.bloodPressureSystolic and vitalsMsg.bloodPressureDiastolic:
+                        # Check systolic
+                        alert = await self.alertPipeline.generate_vital_alert(
+                            patientId, 'systolic', vitalsMsg.bloodPressureSystolic, deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'vital',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🚨 Blood pressure alert for patient {patientId}: {alert['message']}")
 
-                # Broadcast resolution to frontend (alerts disappear automatically)
-                for resolved in resolvedAlerts:
-                    await connectionManager.sendAlertResolved(patientId, resolved['alertId'])
-                    logger.info(f"✅ Auto-resolved alert {resolved['alertId']} ({resolved['alertType']})")
+                    # Check device battery
+                    if vitalsMsg.batteryLevel and vitalsMsg.batteryLevel < 20:
+                        alert = await self.alertPipeline.generate_device_alert(
+                            patientId, 'low_battery', f"Device battery at {vitalsMsg.batteryLevel}%",
+                            'low', deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'device',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"🔋 Low battery alert for patient {patientId}: {vitalsMsg.batteryLevel}%")
+
+                    # Check signal quality
+                    if vitalsMsg.signalQuality is not None and vitalsMsg.signalQuality < 0.5:
+                        alert = await self.alertPipeline.generate_device_alert(
+                            patientId, 'poor_signal', f"Poor signal quality: {vitalsMsg.signalQuality:.0%}",
+                            'medium', deviceId
+                        )
+                        if alert:
+                            alert_id = await self.alertPipeline.process_alert(alert)
+                            await connectionManager.sendAlert(patientId, {
+                                'id': alert_id,
+                                'severity': alert['severity'],
+                                'message': alert['message'],
+                                'type': 'device',
+                                'timestamp': alert['timestamp'].isoformat(),
+                                'isAcknowledged': False
+                            })
+                            logger.warning(f"📡 Signal quality alert for patient {patientId}: {vitalsMsg.signalQuality:.0%}")
+
+                except Exception as e:
+                    logger.error(f"❌ Alert generation error: {e}", exc_info=True)
+            else:
+                logger.debug("⚠️ AlertPipeline not initialized, skipping alert generation")
 
             # Broadcast to frontend via WebSocket
             frontendVitals = self._convertVitalsToFrontendFormat(vitalsMsg)

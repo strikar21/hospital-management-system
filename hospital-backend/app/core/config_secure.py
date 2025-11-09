@@ -80,6 +80,7 @@ class Settings(BaseSettings):
         case_sensitive = False
         # Validate that all required fields are provided
         validate_assignment = True
+        extra = "ignore"  # Allow extra fields from .env to prevent validation errors
 
 
 def get_settings() -> Settings:
