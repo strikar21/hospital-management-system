@@ -30,7 +30,10 @@ from ..models.neural_vitals import (
 )
 from .ecg_analysis_service import ecgAnalysisService
 from .eeg_analysis_service import eegAnalysisService
-from .alert_detection_service import completeAlertDetectionService as alertDetectionService
+from ..domain import VitalsNormalizer, AlertPipeline, AlertDeduplicator
+# DEPRECATED: Replaced by domain layer classes
+# from .alert_detection_service import completeAlertDetectionService as alertDetectionService
+# from .alert_manager_service import alertManagerService
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,17 @@ class MQTTService:
         self.isRunning = False
         self.deviceLastMessage: Dict[str, float] = {}  # Rate limiting tracker
 
+        # ✅ NEW: Waveform cache for ECG/EEG analysis
+        # ESP32 sends /stream (waveforms) and /vitals (basic vitals) as SEPARATE messages
+        # Cache waveforms when /stream arrives, use when /vitals arrives to run analysis
+        self.waveformCache: Dict[str, Dict[str, Any]] = {}  # deviceId -> {waveform, timestamp, mode}
+
+        # ✅ NEW: Domain layer services for vitals normalization and alert processing
+        # Initialized in start() method when database pool is available
+        self.vitalsNormalizer = VitalsNormalizer()  # No DB needed for normalization
+        self.alertPipeline: Optional[AlertPipeline] = None  # Needs DB pool
+        self.alertDeduplicator: Optional[AlertDeduplicator] = None  # Needs DB pool
+
     async def start(self, config: Dict[str, Any] = None) -> bool:
         """Start MQTT service and connect to broker"""
         if not MQTT_AVAILABLE:
@@ -71,6 +85,17 @@ class MQTTService:
 
         if config:
             self.config.update(config)
+
+        # ✅ Initialize AlertPipeline and AlertDeduplicator with database pool
+        try:
+            from ..core.database import getConnectionPool
+            db_pool = await getConnectionPool()
+            self.alertPipeline = AlertPipeline(pool=db_pool)
+            self.alertDeduplicator = AlertDeduplicator(pool=db_pool)
+            logger.info("✅ AlertPipeline and AlertDeduplicator initialized with database pool")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to initialize alert services: {e}")
+            logger.warning("Continuing without AlertPipeline - using existing alert system")
 
         try:
             # Create MQTT client
@@ -418,28 +443,35 @@ class MQTTService:
             logger.error(f"❌ Message routing error: {e}")
 
     def _validateVitalsRanges(self, payload: Dict[str, Any]) -> bool:
-        """Validate vitals are within physiologically possible ranges"""
+        """
+        Validate vitals are within physiologically possible ranges using VitalsNormalizer
+
+        NOTE: This performs basic range validation for security.
+        Full clinical validation happens in VitalsNormalizer.validate_vitals()
+        """
         try:
+            # Quick sanity check for physiologically impossible values (security layer)
             hr = payload.get('heartRate', 0)
             spo2 = payload.get('oxygenSaturation', 0)
             temp = payload.get('skinTemperature', 0)
             rr = payload.get('respiratoryRate', 0)
 
-            # Physiologically possible ranges
+            # Physiologically possible ranges (wider than clinical thresholds)
+            # This catches sensor errors and malicious data
             if hr and not (20 <= hr <= 300):
-                logger.warning(f"Invalid heart rate: {hr}")
+                logger.warning(f"Invalid heart rate (physiologically impossible): {hr}")
                 return False
 
             if spo2 and not (50 <= spo2 <= 100):
-                logger.warning(f"Invalid SpO2: {spo2}")
+                logger.warning(f"Invalid SpO2 (physiologically impossible): {spo2}")
                 return False
 
             if temp and not (30.0 <= temp <= 45.0):
-                logger.warning(f"Invalid temperature: {temp}°C (expected Celsius range: 30.0-45.0)")
+                logger.warning(f"Invalid temperature (physiologically impossible): {temp}°F")
                 return False
 
             if rr and not (4 <= rr <= 60):
-                logger.warning(f"Invalid respiratory rate: {rr}")
+                logger.warning(f"Invalid respiratory rate (physiologically impossible): {rr}")
                 return False
 
             return True
@@ -474,7 +506,76 @@ class MQTTService:
                     logger.warning(f"⚠️ Device {deviceId} not assigned to patient {patientId}")
                     return
 
-            # Store in TimescaleDB vitals_realtime table
+            # ========================================
+            # RUN ECG/EEG ANALYSIS USING CACHED WAVEFORM DATA
+            # ========================================
+            # ESP32 sends /stream (waveforms, 10/sec) and /vitals (basic vitals, 1/sec) as SEPARATE messages
+            # Get cached waveform from most recent /stream message and run analysis
+            cachedWaveform = self.waveformCache.get(deviceId)
+
+            if cachedWaveform:
+                # Validate cache age (< 2 seconds old)
+                cacheAge = (datetime.now() - cachedWaveform['timestamp']).total_seconds()
+
+                if cacheAge < 2.0 and cachedWaveform['mode'] == vitalsMsg.mode:
+                    waveformPayload = cachedWaveform['waveform']
+
+                    if vitalsMsg.mode == 'ecg' and 'ecgWaveform' in waveformPayload:
+                        logger.info(f"🧠 Running ECG analysis for patient {patientId} (using cached waveform, age: {cacheAge:.2f}s)...")
+                        analysisResult = ecgAnalysisService.analyzeECG(waveformPayload['ecgWaveform'], mode='ecg')
+
+                        if analysisResult and analysisResult.confidence and analysisResult.confidence > 0.5:
+                            logger.info(f"✅ ECG Analysis: HR={analysisResult.heartRate} BPM, "
+                                      f"Rhythm={analysisResult.rhythm}, "
+                                      f"QRS={analysisResult.qrsDuration}ms, "
+                                      f"Confidence={analysisResult.confidence:.2f}")
+
+                            # Convert ECGAnalysisResult to ECGAnalysis model and attach to vitalsMsg
+                            from ..models.neural_vitals import ECGAnalysis
+                            vitalsMsg.ecgAnalysis = ECGAnalysis(
+                                rrInterval=analysisResult.rrInterval,
+                                qrsDuration=analysisResult.qrsDuration,
+                                qtInterval=analysisResult.qtInterval,
+                                axis=analysisResult.axis,
+                                rhythm=analysisResult.rhythm,
+                                stSegment=analysisResult.stSegment
+                            )
+
+                    elif vitalsMsg.mode == 'eeg' and 'eegWaveform' in waveformPayload:
+                        logger.info(f"🧠 Running EEG analysis for patient {patientId} (using cached waveform, age: {cacheAge:.2f}s)...")
+                        analysisResult = eegAnalysisService.analyzeEEG(waveformPayload['eegWaveform'], mode='eeg')
+
+                        if analysisResult and analysisResult.confidence and analysisResult.confidence > 0.5:
+                            logger.info(f"✅ EEG Analysis: Alpha={analysisResult.alphaPower:.1f} μV², "
+                                      f"Seizure={'YES' if analysisResult.seizureActivity else 'NO'}, "
+                                      f"Confidence={analysisResult.confidence:.2f}")
+
+                            # Convert EEGAnalysisResult to EEGAnalysis model and attach to vitalsMsg
+                            from ..models.neural_vitals import EEGAnalysis, EEGBandPowers
+                            vitalsMsg.eegAnalysis = EEGAnalysis(
+                                bandPowers=EEGBandPowers(
+                                    alpha=analysisResult.alphaPower,
+                                    beta=analysisResult.betaPower,
+                                    theta=analysisResult.thetaPower,
+                                    delta=analysisResult.deltaPower,
+                                    gamma=analysisResult.gammaPower or 0
+                                ),
+                                dominantFrequency=analysisResult.dominantFrequency,
+                                seizureActivity=analysisResult.seizureActivity
+                            )
+
+                            # Critical: Seizure detection
+                            if analysisResult.seizureActivity and analysisResult.seizureConfidence and analysisResult.seizureConfidence > 0.7:
+                                await self._createSeizureAlert(patientId, deviceId, analysisResult)
+                else:
+                    if cacheAge >= 2.0:
+                        logger.debug(f"⚠️ Cached waveform too old ({cacheAge:.2f}s) for {deviceId}, skipping analysis")
+                    else:
+                        logger.debug(f"⚠️ Cached waveform mode mismatch (cached: {cachedWaveform['mode']}, vitals: {vitalsMsg.mode}), skipping analysis")
+            else:
+                logger.debug(f"⚠️ No cached waveform for {deviceId}, skipping analysis (waiting for /stream message)")
+
+            # Store in TimescaleDB vitals_realtime table (NOW includes analysis results)
             await self._storeVitalsRealtime(vitalsMsg)
 
             # ========================================
@@ -506,32 +607,6 @@ class MQTTService:
                 try:
                     waveformMsg = WaveformSnapshotMessage(**waveformData)
                     await self._storeWaveformSnapshot(waveformMsg)
-
-                    # ========================================
-                    # BACKEND ECG/EEG ANALYSIS ON WAVEFORM
-                    # ========================================
-                    # Run backend analysis on the waveform data
-                    analysisResult = None
-
-                    if waveformMsg.mode == 'ecg' and waveformMsg.ecgWaveform:
-                        logger.info(f"🧠 Running ECG analysis for patient {patientId}...")
-                        analysisResult = ecgAnalysisService.analyzeECG(waveformMsg.ecgWaveform.dict(), mode='ecg')
-
-                        if analysisResult and analysisResult.confidence and analysisResult.confidence > 0.5:
-                            logger.info(f"✅ ECG Analysis: HR={analysisResult.heartRate} BPM, "
-                                      f"Rhythm={analysisResult.rhythm}")
-
-                    elif waveformMsg.mode == 'eeg' and waveformMsg.eegWaveform:
-                        logger.info(f"🧠 Running EEG analysis for patient {patientId}...")
-                        analysisResult = eegAnalysisService.analyzeEEG(waveformMsg.eegWaveform.dict(), mode='eeg')
-
-                        if analysisResult and analysisResult.confidence and analysisResult.confidence > 0.5:
-                            logger.info(f"✅ EEG Analysis: Alpha={analysisResult.alphaPower:.1f} μV²")
-
-                            # Critical: Seizure detection
-                            if analysisResult.seizureActivity and analysisResult.seizureConfidence and analysisResult.seizureConfidence > 0.7:
-                                await self._createSeizureAlert(patientId, deviceId, analysisResult)
-
                     logger.debug(f"📈 Waveform stored from combined message (1-sec snapshot)")
 
                 except Exception as e:
@@ -583,25 +658,33 @@ class MQTTService:
 
             alerts = await alertDetectionService.detectAlerts(vitalsDict, patientId, deviceId)
 
-            # Store alerts in database and broadcast via WebSocket
+            # ========================================
+            # ALERT MANAGEMENT WITH DEDUPLICATION & AUTO-RESOLUTION
+            # ========================================
+            # Use centralized AlertManagerService for proper alert lifecycle management
             async with getDbConnection() as conn:
                 for alert in alerts:
-                    # Generate unique alert ID
-                    alert_id = str(uuid.uuid4())
+                    # Use alert manager (handles deduplication automatically)
+                    alertId = await alertManagerService.createOrUpdateAlert(
+                        alert, patientId, deviceId, conn
+                    )
 
-                    # Store alert in patient_alerts table
-                    await conn.execute('''
-                        INSERT INTO patient_alerts
-                        (id, "patientId", "deviceId", type, severity, message, source, "alertTimestamp", status, "createdAt", "updatedAt")
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW(), NOW())
-                    ''', alert_id, patientId, deviceId, alert.alertType, alert.severity, alert.message, alert.source, datetime.now())
+                    # Only broadcast if NEW alert created (not duplicate update)
+                    if alertId:
+                        alertPayload = alertDetectionService.createAlertPayload(alert)
+                        alertPayload['id'] = alertId
+                        await connectionManager.sendAlert(patientId, alertPayload)
+                        # Note: logger.warning() is already called by AlertManagerService
 
-                    # Broadcast with ID for frontend acknowledgment tracking
-                    alertPayload = alertDetectionService.createAlertPayload(alert)
-                    alertPayload['id'] = alert_id
-                    await connectionManager.sendAlert(patientId, alertPayload)
+                # Check for auto-resolution (vitals returned to normal)
+                resolvedAlerts = await alertManagerService.checkForResolution(
+                    patientId, vitalsDict, conn
+                )
 
-                    logger.debug(f"Alert stored: {alert.alertType} (ID: {alert_id}) for patient {patientId}")
+                # Broadcast resolution to frontend (alerts disappear automatically)
+                for resolved in resolvedAlerts:
+                    await connectionManager.sendAlertResolved(patientId, resolved['alertId'])
+                    logger.info(f"✅ Auto-resolved alert {resolved['alertId']} ({resolved['alertType']})")
 
             # Broadcast to frontend via WebSocket
             frontendVitals = self._convertVitalsToFrontendFormat(vitalsMsg)
@@ -613,7 +696,11 @@ class MQTTService:
             logger.error(f"❌ Vitals processing error: {e}", exc_info=True)
 
     async def _handleWaveformMessage(self, deviceId: str, payload: Dict[str, Any]):
-        """Handle 8-channel waveform snapshot from ESP32 watch with automatic analysis"""
+        """
+        Handle 8-channel waveform snapshot from ESP32 watch with automatic analysis
+        NOTE: This handler is for standalone waveform messages (10-second snapshots).
+        For combined vitals+waveform messages (1-second), see _handleVitalsMessageNew()
+        """
         try:
             # Parse and validate using Pydantic model
             try:
@@ -637,8 +724,9 @@ class MQTTService:
             # ========================================
             # BACKEND ECG/EEG ANALYSIS
             # ========================================
-            # If ESP32 didn't send analysis, backend calculates it
-            analysisResult = None
+            # NOTE: Analysis results from standalone waveform messages are NOT stored in vitals_realtime
+            # because they don't have vitals data. They are only logged for debugging.
+            # Only the combined vitals+waveform messages (via _handleVitalsMessageNew) store analysis.
 
             if waveformMsg.mode == 'ecg' and waveformMsg.ecgWaveform:
                 # Extract waveform data for analysis
@@ -653,9 +741,6 @@ class MQTTService:
                               f"Rhythm={analysisResult.rhythm}, "
                               f"QRS={analysisResult.qrsDuration}ms, "
                               f"Confidence={analysisResult.confidence:.2f}")
-
-                    # Store analysis results in vitals_realtime for trend tracking
-                    await self._storeAnalysisAsVitals(patientId, deviceId, analysisResult, 'ecg')
                 else:
                     logger.warning(f"⚠️ ECG analysis low confidence or failed")
 
@@ -671,9 +756,6 @@ class MQTTService:
                     logger.info(f"✅ EEG Analysis: Alpha={analysisResult.alphaPower:.1f} μV², "
                               f"Seizure={'YES' if analysisResult.seizureActivity else 'NO'}, "
                               f"Confidence={analysisResult.confidence:.2f}")
-
-                    # Store analysis results in vitals_realtime for trend tracking
-                    await self._storeAnalysisAsVitals(patientId, deviceId, analysisResult, 'eeg')
 
                     # If seizure detected, create critical alert
                     if analysisResult.seizureActivity and analysisResult.seizureConfidence and analysisResult.seizureConfidence > 0.7:
@@ -725,6 +807,17 @@ class MQTTService:
                 deviceId=deviceId,
                 waveformData=payload
             )
+
+            # ✅ NEW: Cache waveform for ECG/EEG analysis when /vitals arrives
+            # ESP32 sends /stream (waveforms) and /vitals (basic vitals) as SEPARATE messages
+            # Cache the most recent waveform so we can run analysis when vitals arrive
+            self.waveformCache[deviceId] = {
+                'waveform': payload,
+                'timestamp': datetime.now(),
+                'mode': payload.get('mode'),
+                'patientId': patientId
+            }
+            logger.debug(f"📦 Cached waveform for {deviceId} (mode: {payload.get('mode')})")
 
             # ✅ NEW: Store stream packet to database for historical analysis
             try:
@@ -1363,62 +1456,13 @@ class MQTTService:
         # This creates a persistent alert that nurses/doctors can acknowledge
         pass
 
-    async def _storeAnalysisAsVitals(self, patientId: str, deviceId: str, analysisResult: any, mode: str):
-        """
-        Store ECG/EEG analysis results in vitals_realtime table for trend tracking
-        This allows frontend to query and display analysis trends over time
-        """
-        try:
-            from .ecg_analysis_service import ECGAnalysisResult
-            from .eeg_analysis_service import EEGAnalysisResult
-
-            async with getTimescaleConnection() as tsConn:
-                timestamp = datetime.now()
-
-                if mode == 'ecg' and isinstance(analysisResult, ECGAnalysisResult):
-                    # Store ECG analysis results
-                    await tsConn.execute("""
-                        INSERT INTO vitals_realtime (
-                            time, "patientId", "deviceId", mode,
-                            "heartRate", "signalQuality",
-                            "rrInterval", "qrsDuration", "qtInterval", axis, rhythm, "stSegment"
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                    """,
-                        timestamp, patientId, deviceId, mode,
-                        analysisResult.heartRate,
-                        analysisResult.signalQuality,
-                        analysisResult.rrInterval,
-                        analysisResult.qrsDuration,
-                        analysisResult.qtInterval,
-                        analysisResult.axis,
-                        analysisResult.rhythm,
-                        analysisResult.stSegment
-                    )
-
-                elif mode == 'eeg' and isinstance(analysisResult, EEGAnalysisResult):
-                    # Store EEG analysis results
-                    await tsConn.execute("""
-                        INSERT INTO vitals_realtime (
-                            time, "patientId", "deviceId", mode, "signalQuality",
-                            "alphaPower", "betaPower", "thetaPower", "deltaPower", "gammaPower",
-                            "dominantFrequency", "seizureActivity"
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                    """,
-                        timestamp, patientId, deviceId, mode,
-                        analysisResult.signalQuality,
-                        analysisResult.alphaPower,
-                        analysisResult.betaPower,
-                        analysisResult.thetaPower,
-                        analysisResult.deltaPower,
-                        analysisResult.gammaPower,
-                        analysisResult.dominantFrequency,
-                        analysisResult.seizureActivity
-                    )
-
-                logger.debug(f"💾 Analysis results stored in vitals_realtime for {patientId}")
-
-        except Exception as e:
-            logger.error(f"❌ Failed to store analysis results: {e}", exc_info=True)
+    # ========================================
+    # NOTE: _storeAnalysisAsVitals() function REMOVED
+    # ========================================
+    # Analysis results are now stored WITH vitals in the same row via _storeVitalsRealtime()
+    # This eliminates the data mismatch bug where frontend would query latest vitals
+    # and sometimes get basic vitals WITHOUT analysis metrics.
+    # See lines 477-533 in _handleVitalsMessageNew() for new implementation.
 
     async def _createSeizureAlert(self, patientId: str, deviceId: str, analysisResult: any):
         """Create critical alert for seizure detection"""
