@@ -7,19 +7,40 @@ import asyncpg
 
 from .base_service import BaseService
 from ..repositories.medication_repository import MedicationRepository
+from ..domain import StaffResolver
+from ..common import dict_to_camel_case
 
 
 class MedicationService(BaseService):
     """Medication service handling all medication business logic"""
 
-    def __init__(self):
+    def __init__(self, pool: Optional[asyncpg.Pool] = None):
         self.medication_repository = MedicationRepository()
         super().__init__(self.medication_repository)
 
+        # Initialize StaffResolver with database pool
+        if pool:
+            self.staff_resolver = StaffResolver(pool)
+        else:
+            self.staff_resolver = None
+            self.logger.warning("MedicationService initialized without database pool - staff resolution will be limited")
+
     async def get_by_patient_id(self, patient_id: str) -> List[Dict[str, Any]]:
-        """Get medications by patient ID"""
+        """Get medications by patient ID with staff name resolution"""
         results = await self.medication_repository.get_by_patient_id(patient_id)
-        return [self.repository.transform_to_camel_case(item) for item in results]
+        medications = [self.repository.transform_to_camel_case(item) for item in results]
+
+        # Enrich with staff names using StaffResolver
+        if medications and self.staff_resolver:
+            medications = await self.staff_resolver.enrich_records_batch(
+                medications,
+                {
+                    'prescribedBy': 'prescribedByName',
+                    'createdBy': 'createdByName'
+                }
+            )
+
+        return medications
 
     async def add_medication(self, patient_id: str, medication_data: Dict[str, Any], created_by: str) -> Dict[str, Any]:
         """Add medication with validation and FK constraint handling"""
@@ -36,7 +57,19 @@ class MedicationService(BaseService):
             result = await self.medication_repository.add_medication(patient_id, snake_data, created_by)
 
             if result:
-                return self.repository.transform_to_camel_case(result)
+                medication = self.repository.transform_to_camel_case(result)
+
+                # Enrich with staff names using StaffResolver
+                if self.staff_resolver:
+                    medication = await self.staff_resolver.enrich_record_with_staff(
+                        medication,
+                        {
+                            'prescribedBy': 'prescribedByName',
+                            'createdBy': 'createdByName'
+                        }
+                    )
+
+                return medication
             return None
 
         except asyncpg.exceptions.ForeignKeyViolationError as e:
@@ -123,5 +156,15 @@ class MedicationService(BaseService):
             # Remove the raw nextAdministration field
             med_data.pop('nextAdministration', None)
             medications_with_schedule.append(med_data)
+
+        # Enrich with staff names using StaffResolver
+        if medications_with_schedule and self.staff_resolver:
+            medications_with_schedule = await self.staff_resolver.enrich_records_batch(
+                medications_with_schedule,
+                {
+                    'prescribedBy': 'prescribedByName',
+                    'createdBy': 'createdByName'
+                }
+            )
 
         return medications_with_schedule
