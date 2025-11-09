@@ -25,40 +25,52 @@
 
 ---
 
-## 🚧 IN PROGRESS
-
-### Phase 2: Domain Schemas (STARTED)
-**Status:** Directory structure created, schemas pending
+### Phase 2: Domain Schemas ✅ COMPLETE
+**Commit:** 7ba4d2a "refactor(backend): Phase 2 complete - Add domain schemas"
 
 **Files Created:**
 - ✅ `hospital-backend/app/domain/__init__.py`
 - ✅ `hospital-backend/app/domain/schemas/__init__.py`
-- ⏳ `hospital-backend/app/domain/schemas/vitals_schema.py` - PENDING
-- ⏳ `hospital-backend/app/domain/schemas/alert_schema.py` - PENDING
-- ⏳ `hospital-backend/app/domain/schemas/patient_schema.py` - PENDING
-- ⏳ `hospital-backend/app/domain/schemas/medication_schema.py` - PENDING
-- ⏳ `hospital-backend/app/domain/schemas/staff_schema.py` - PENDING
+- ✅ `hospital-backend/app/domain/schemas/vitals_schema.py` - VitalsRecord + VITAL_THRESHOLDS
+- ✅ `hospital-backend/app/domain/schemas/alert_schema.py` - AlertRecord + type aliases
+- ✅ `hospital-backend/app/domain/schemas/patient_schema.py` - PatientRecord + related types
+- ✅ `hospital-backend/app/domain/schemas/medication_schema.py` - MedicationRecord
+- ✅ `hospital-backend/app/domain/schemas/staff_schema.py` - StaffRecord + StaffResolution
+
+**What This Provides:**
+- TypedDict schemas for all data structures
+- Type aliases for better type safety (AlertSeverity, PatientStatus, etc.)
+- Mirrored frontend TypeScript interfaces
+- Single source of truth for vital thresholds
+
+---
+
+## 🚧 IN PROGRESS
+
+### Phase 3: Domain Business Logic (IN PROGRESS)
+**Status:** Creating domain classes for business logic
+
+**Files Created:**
+- ✅ `hospital-backend/app/domain/vitals/__init__.py`
+- ✅ `hospital-backend/app/domain/vitals/normalizer.py` - VitalsNormalizer class
+- ✅ `hospital-backend/app/domain/alerts/__init__.py`
+- ✅ `hospital-backend/app/domain/alerts/pipeline.py` - AlertPipeline (unified entry point)
+- ✅ `hospital-backend/app/domain/alerts/deduplicator.py` - AlertDeduplicator
+- ✅ `hospital-backend/app/domain/staff/__init__.py`
+- ✅ `hospital-backend/app/domain/staff/resolver.py` - StaffResolver
+- ✅ `hospital-backend/app/domain/__init__.py` - Updated exports
+
+---
+
+**What This Provides:**
+- VitalsNormalizer: Normalize MQTT payloads, validate vitals, calculate quality scores
+- AlertPipeline: Generate vital/arrhythmia/device alerts, apply deduplication, insert to DB
+- AlertDeduplicator: Prevent duplicate alerts within time windows
+- StaffResolver: Resolve staff IDs to names + roles (batch operations + caching)
 
 ---
 
 ## 📋 REMAINING PHASES
-
-### Phase 3: Domain Business Logic (PENDING)
-**Estimated Time:** 2-3 hours
-
-**Files to Create:**
-- `hospital-backend/app/domain/vitals/__init__.py`
-- `hospital-backend/app/domain/vitals/normalizer.py` - VitalsNormalizer class
-- `hospital-backend/app/domain/vitals/thresholds.py` - Clinical thresholds
-- `hospital-backend/app/domain/vitals/validator.py` - Vitals validation
-
-- `hospital-backend/app/domain/alerts/__init__.py`
-- `hospital-backend/app/domain/alerts/pipeline.py` - AlertPipeline (unified entry point)
-- `hospital-backend/app/domain/alerts/deduplicator.py` - Alert deduplication
-- `hospital-backend/app/domain/alerts/normalizer.py` - Alert normalization
-
-- `hospital-backend/app/domain/staff/__init__.py`
-- `hospital-backend/app/domain/staff/resolver.py` - Staff name resolution
 
 ### Phase 4: Service Refactoring (PENDING)
 **Estimated Time:** 3-4 hours
@@ -126,12 +138,12 @@
 
 ## 📊 PROGRESS METRICS
 
-**Overall Progress:** 10% (Phase 1 complete out of 6 phases)
+**Overall Progress:** 45% (Phases 1-2 complete, Phase 3 complete pending commit, 3 phases remaining)
 
 **Backend:**
 - ✅ Common utilities: 100%
-- ⏳ Domain schemas: 20%
-- ⏳ Domain logic: 0%
+- ✅ Domain schemas: 100%
+- ✅ Domain logic: 100%
 - ⏳ Service refactoring: 0%
 
 **Frontend:**
@@ -144,7 +156,7 @@
 - ⏳ Integration tests: 0%
 
 **Estimated Total Time:** 15-20 hours
-**Time Spent:** ~1 hour
+**Time Spent:** ~3 hours
 
 ---
 
@@ -168,4 +180,4 @@ ec74815 (HEAD -> refactor/unified-architecture) refactor(backend): Phase 1 - Add
 ---
 
 **Last Updated:** 2025-11-09
-**Status:** ✅ Phase 1 complete, Phase 2 in progress
+**Status:** ✅ Phases 1-2 complete, Phase 3 ready to commit
