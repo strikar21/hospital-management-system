@@ -17,6 +17,8 @@ from ..core.exceptions import (
     BusinessRuleException,
     PermissionDeniedException
 )
+from ..domain import StaffResolver
+from ..common import dict_to_camel_case
 
 
 class PatientService(BaseService):
@@ -25,9 +27,16 @@ class PatientService(BaseService):
     Coordinates with PatientRepository for data operations
     """
 
-    def __init__(self):
+    def __init__(self, pool: Optional[asyncpg.Pool] = None):
         self.patient_repository = PatientRepository()
         super().__init__(self.patient_repository)
+
+        # Initialize StaffResolver with database pool
+        if pool:
+            self.staff_resolver = StaffResolver(pool)
+        else:
+            self.staff_resolver = None
+            self.logger.warning("PatientService initialized without database pool - staff resolution will be limited")
 
     # ================================
     # PATIENT CORE OPERATIONS
@@ -54,9 +63,9 @@ class PatientService(BaseService):
             # Transform to camelCase and process medical records
             camel_result = self.patient_repository.transform_to_camel_case(result)
 
-            # Process nested medical records - handle JSON strings
+            # Process nested medical records and alerts - handle JSON strings
             import json
-            for field in ['notes', 'medications', 'investigations', 'therapies']:
+            for field in ['notes', 'medications', 'investigations', 'therapies', 'alerts']:
                 field_data = camel_result.get(field)
 
                 # Parse JSON strings to arrays
@@ -71,17 +80,25 @@ class PatientService(BaseService):
                     field_data = []
 
                 # Filter out null entries and transform to camelCase
-                camel_result[field] = [
-                    self.patient_repository.transform_to_camel_case(item)
-                    for item in field_data
-                    if item is not None
-                ]
+                processed_items = []
+                for item in field_data:
+                    if item is not None:
+                        item_camel = self.patient_repository.transform_to_camel_case(item)
 
-                # Add edit permissions for each item
-                for item in camel_result[field]:
-                    # Notes use 'timestamp', others use 'createdAt'
-                    time_field = item.get('timestamp') or item.get('createdAt', '')
-                    item['canEdit'] = self.can_edit_item(time_field)
+                        # Add isAcknowledged field for alerts (frontend compatibility)
+                        if field == 'alerts':
+                            item_camel['isAcknowledged'] = item.get('status') == 'acknowledged'
+
+                        processed_items.append(item_camel)
+
+                camel_result[field] = processed_items
+
+                # Add edit permissions for each item (except alerts which don't have canEdit)
+                if field != 'alerts':
+                    for item in camel_result[field]:
+                        # Notes use 'timestamp', others use 'createdAt'
+                        time_field = item.get('timestamp') or item.get('createdAt', '')
+                        item['canEdit'] = self.can_edit_item(time_field)
 
             # Calculate age if birthDate exists
             if camel_result.get('dateOfBirth'):
@@ -160,151 +177,98 @@ class PatientService(BaseService):
             raise
 
     async def _resolve_staff_names(self, patient_data: Dict[str, Any]) -> None:
-        """Resolve staff IDs to readable names"""
+        """Resolve staff IDs to readable names using StaffResolver"""
         try:
-            # Get staff IDs that need resolution
-            attending_physician_id = patient_data.get('attendingPhysician')
-            nurse_in_charge_id = patient_data.get('nurseInCharge')
-
-            self.logger.info(f"🔍 Staff IDs to resolve: attending={attending_physician_id}, nurse={nurse_in_charge_id}")
-
-            staff_ids = []
-            if attending_physician_id:
-                staff_ids.append(attending_physician_id)
-            if nurse_in_charge_id:
-                staff_ids.append(nurse_in_charge_id)
-
-            if not staff_ids:
-                self.logger.info("⚠️ No staff IDs to resolve")
+            if not self.staff_resolver:
+                self.logger.warning("Staff resolver not initialized - skipping staff resolution")
                 return
 
-            # Query staff names from database
-            self.logger.info(f"🔍 Querying staff names for IDs: {staff_ids}")
-            staff_names = await self.patient_repository.get_staff_names(staff_ids)
-            self.logger.info(f"✅ Retrieved staff names: {staff_names}")
+            # Use StaffResolver to enrich patient data with staff names
+            await self.staff_resolver.enrich_record_with_staff(
+                patient_data,
+                {
+                    'attendingPhysician': 'attendingPhysicianName',
+                    'nurseInCharge': 'nurseInChargeName'
+                }
+            )
 
-            # Update patient data with resolved names
-            if attending_physician_id and attending_physician_id in staff_names:
-                patient_data['attendingPhysicianName'] = staff_names[attending_physician_id]['name']
-                patient_data['assignedDoctor'] = staff_names[attending_physician_id]['name']
-                self.logger.info(f"✅ Set attending physician name: {staff_names[attending_physician_id]['name']}")
+            # Add assignedDoctor alias for backwards compatibility
+            if patient_data.get('attendingPhysicianName'):
+                patient_data['assignedDoctor'] = patient_data['attendingPhysicianName']
 
-            if nurse_in_charge_id and nurse_in_charge_id in staff_names:
-                patient_data['nurseInChargeName'] = staff_names[nurse_in_charge_id]['name']
-                self.logger.info(f"✅ Set nurse name: {staff_names[nurse_in_charge_id]['name']}")
+            self.logger.info(f"✅ Staff names resolved: attendingPhysicianName = {patient_data.get('attendingPhysicianName')}")
 
         except Exception as e:
             self.logger.error(f"❌ Error resolving staff names: {e}", exc_info=True)
             # Don't fail the whole request if staff name resolution fails
 
     async def _resolve_medical_record_staff_names(self, patient_data: Dict[str, Any]) -> None:
-        """Resolve staff IDs to readable names in all medical records"""
+        """Resolve staff IDs to readable names in all medical records using StaffResolver"""
         try:
-            # Collect all staff IDs from medical records
-            staff_ids = set()
-
-            # Get staff IDs from medications
-            if patient_data.get('medications'):
-                for med in patient_data['medications']:
-                    if isinstance(med, dict):
-                        if med.get('prescribedBy'):
-                            staff_ids.add(med['prescribedBy'])
-                        if med.get('authorId'):
-                            staff_ids.add(med['authorId'])
-                        if med.get('createdBy'):
-                            staff_ids.add(med['createdBy'])
-
-            # Get staff IDs from investigations
-            if patient_data.get('investigations'):
-                for inv in patient_data['investigations']:
-                    if isinstance(inv, dict):
-                        if inv.get('performedBy'):
-                            staff_ids.add(inv['performedBy'])
-                        if inv.get('authorId'):
-                            staff_ids.add(inv['authorId'])
-                        if inv.get('createdBy'):
-                            staff_ids.add(inv['createdBy'])
-
-            # Get staff IDs from therapies
-            if patient_data.get('therapies'):
-                for therapy in patient_data['therapies']:
-                    if isinstance(therapy, dict):
-                        if therapy.get('prescribedBy'):
-                            staff_ids.add(therapy['prescribedBy'])
-
-            # Get staff IDs from notes
-            if patient_data.get('notes'):
-                for note in patient_data['notes']:
-                    if isinstance(note, dict):
-                        if note.get('authorId'):
-                            staff_ids.add(note['authorId'])
-                        if note.get('createdBy'):
-                            staff_ids.add(note['createdBy'])
-                        if note.get('editedBy'):
-                            staff_ids.add(note['editedBy'])
-
-            # Remove None values and convert to list
-            staff_ids = [sid for sid in staff_ids if sid]
-
-            if not staff_ids:
+            if not self.staff_resolver:
+                self.logger.warning("Staff resolver not initialized - skipping medical record staff resolution")
                 return
 
-            # Get staff names from database
-            staff_names = await self.patient_repository.get_staff_names(staff_ids)
+            # Use StaffResolver batch operations for efficient resolution
 
-            # Update medications with resolved names
+            # Medications: prescribedBy, authorId, createdBy
             if patient_data.get('medications'):
-                for med in patient_data['medications']:
-                    if isinstance(med, dict):
-                        if med.get('prescribedBy') and med['prescribedBy'] in staff_names:
-                            med['prescribedByName'] = staff_names[med['prescribedBy']]['name']
-                        if med.get('authorId') and med['authorId'] in staff_names:
-                            med['authorName'] = staff_names[med['authorId']]['name']
-                        if med.get('createdBy') and med['createdBy'] in staff_names:
-                            med['createdByName'] = staff_names[med['createdBy']]['name']
+                medications = await self.staff_resolver.enrich_records_batch(
+                    patient_data['medications'],
+                    {
+                        'prescribedBy': 'prescribedByName',
+                        'authorId': 'authorName',
+                        'createdBy': 'createdByName'
+                    }
+                )
+                patient_data['medications'] = medications
 
-            # Update investigations with resolved names
+            # Investigations: performedBy, authorId, createdBy
             if patient_data.get('investigations'):
-                for inv in patient_data['investigations']:
-                    if isinstance(inv, dict):
-                        if inv.get('prescribedBy') and inv['prescribedBy'] in staff_names:
-                            inv['prescribedByName'] = staff_names[inv['prescribedBy']]['name']
-                        if inv.get('authorId') and inv['authorId'] in staff_names:
-                            inv['authorName'] = staff_names[inv['authorId']]['name']
-                        if inv.get('createdBy') and inv['createdBy'] in staff_names:
-                            inv['createdByName'] = staff_names[inv['createdBy']]['name']
+                investigations = await self.staff_resolver.enrich_records_batch(
+                    patient_data['investigations'],
+                    {
+                        'performedBy': 'performedByName',
+                        'prescribedBy': 'prescribedByName',
+                        'authorId': 'authorName',
+                        'createdBy': 'createdByName'
+                    }
+                )
+                patient_data['investigations'] = investigations
 
-            # Update therapies with resolved names
+            # Therapies: prescribedBy, authorId, createdBy
             if patient_data.get('therapies'):
-                for therapy in patient_data['therapies']:
-                    if isinstance(therapy, dict):
-                        if therapy.get('prescribedBy') and therapy['prescribedBy'] in staff_names:
-                            therapy['prescribedByName'] = staff_names[therapy['prescribedBy']]['name']
-                        if therapy.get('authorId') and therapy['authorId'] in staff_names:
-                            therapy['authorName'] = staff_names[therapy['authorId']]['name']
-                        if therapy.get('createdBy') and therapy['createdBy'] in staff_names:
-                            therapy['createdByName'] = staff_names[therapy['createdBy']]['name']
+                therapies = await self.staff_resolver.enrich_records_batch(
+                    patient_data['therapies'],
+                    {
+                        'prescribedBy': 'prescribedByName',
+                        'authorId': 'authorName',
+                        'createdBy': 'createdByName'
+                    }
+                )
+                patient_data['therapies'] = therapies
 
-            # Update notes with resolved names
+            # Notes: createdBy, editedBy (with special frontend compatibility handling)
             if patient_data.get('notes'):
-                for note in patient_data['notes']:
+                notes = await self.staff_resolver.enrich_records_batch(
+                    patient_data['notes'],
+                    {
+                        'createdBy': 'createdByName',
+                        'editedBy': 'editedByName'
+                    }
+                )
+
+                # Add frontend compatibility fields
+                for note in notes:
                     if isinstance(note, dict):
                         # Map createdBy to authorId for frontend compatibility
                         if note.get('createdBy'):
                             note['authorId'] = note['createdBy']
+                            # Use already resolved name or fallback
+                            note['authorName'] = note.get('createdByName', 'Unknown Staff')
+                            note['authorRole'] = note.get('createdByRole', 'Staff')
 
-                            # Set authorName and authorRole (frontend expected fields)
-                            if note['createdBy'] in staff_names:
-                                note['authorName'] = staff_names[note['createdBy']]['name']
-                                note['createdByName'] = staff_names[note['createdBy']]['name']  # Keep for backwards compat
-                                note['authorRole'] = staff_names[note['createdBy']]['role']
-                            else:
-                                # Fallback for missing staff records
-                                note['authorName'] = 'Unknown Staff'
-                                note['authorRole'] = 'Staff'
-
-                        if note.get('editedBy') and note['editedBy'] in staff_names:
-                            note['editedByName'] = staff_names[note['editedBy']]['name']
+                patient_data['notes'] = notes
 
         except Exception as e:
             self.logger.error(f"Error resolving medical record staff names: {e}")
@@ -411,9 +375,33 @@ class PatientService(BaseService):
             # Fetch latest vitals from TimescaleDB
             vitals_map = await self.patient_repository.getLatestVitalsForPatients(patient_ids)
 
-            # Merge vitals into patient data
+            # Process alerts and merge vitals into patient data
+            import json
             for patient in patients:
                 patient_id = patient.get('id')
+
+                # Process alerts array (same as notes, medications, etc.)
+                alerts_data = patient.get('alerts')
+                if isinstance(alerts_data, str):
+                    try:
+                        alerts_data = json.loads(alerts_data)
+                    except (json.JSONDecodeError, TypeError):
+                        alerts_data = []
+                if not isinstance(alerts_data, list):
+                    alerts_data = []
+
+                # Transform alerts and add isAcknowledged field for frontend compatibility
+                processed_alerts = []
+                for alert in alerts_data:
+                    if alert is not None:
+                        alert_camel = self.patient_repository.transform_to_camel_case(alert)
+                        # Add boolean flag: frontend filters by isAcknowledged, backend stores status enum
+                        alert_camel['isAcknowledged'] = alert.get('status') == 'acknowledged'
+                        processed_alerts.append(alert_camel)
+
+                patient['alerts'] = processed_alerts
+
+                # Merge vitals if available
                 if patient_id and patient_id in vitals_map:
                     vitals_row = vitals_map[patient_id]
 
@@ -453,7 +441,7 @@ class PatientService(BaseService):
                             'seizureActivity': vitals_row.get('seizureActivity')
                         }
 
-            self.logger.info(f"✅ Retrieved {len(patients)} patients with vitals merged from TimescaleDB")
+            self.logger.info(f"✅ Retrieved {len(patients)} patients with alerts and vitals merged")
             return patients
 
         except Exception as e:
@@ -704,7 +692,7 @@ class PatientService(BaseService):
             raise
 
     async def get_case_entries(self, patient_id: str) -> List[Dict[str, Any]]:
-        """Get case entries with transformation and staff name resolution"""
+        """Get case entries with transformation and staff name resolution using StaffResolver"""
         try:
             if not await self.patient_repository.exists(patient_id):
                 raise ValueError(f"Patient {patient_id} not found")
@@ -712,24 +700,12 @@ class PatientService(BaseService):
             results = await self.patient_repository.get_case_entries(patient_id)
             camel_results = [self.repository.transform_to_camel_case(item) for item in results]
 
-            # Resolve staff names for case entries
-            if camel_results:
-                staff_ids = set()
-                for entry in camel_results:
-                    if entry.get('createdBy'):
-                        staff_ids.add(entry['createdBy'])
-
-                # Get staff names from database
-                staff_ids_list = list(staff_ids)
-                if staff_ids_list:
-                    staff_names = await self.patient_repository.get_staff_names(staff_ids_list)
-
-                    # Update case entries with resolved names
-                    for entry in camel_results:
-                        created_by = entry.get('createdBy')
-                        if created_by and created_by in staff_names:
-                            entry['createdByName'] = staff_names[created_by]['name']
-                            entry['createdByRole'] = staff_names[created_by]['role']
+            # Use StaffResolver for batch staff name resolution
+            if camel_results and self.staff_resolver:
+                camel_results = await self.staff_resolver.enrich_records_batch(
+                    camel_results,
+                    {'createdBy': 'createdByName'}
+                )
 
             return camel_results
 
