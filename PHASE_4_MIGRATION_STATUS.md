@@ -1,11 +1,11 @@
 # Phase 4 Migration Status
 
 **Date:** 2025-11-10
-**Last Updated:** After Batch 1 Migration
+**Last Updated:** After Module 2 Migration
 
 ---
 
-## Module 1: Datetime Utils - IN PROGRESS ✅
+## Module 1: Datetime Utils - ✅ COMPLETE
 
 ### Step 1: Backward Compatibility Wrappers ✅ COMPLETE
 **Status:** Committed (d11f95d)
@@ -62,11 +62,33 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-## Next Modules (Not Yet Started)
+---
 
-### Module 2: Waveform Processing
-**Status:** Ready to migrate (18 tests passing)
-**Estimated Time:** 30 minutes
+## Module 2: Waveform Processing - ✅ COMPLETE
+
+**Status:** Committed (ed331cd)
+
+**What Was Done:**
+- Added import to websocket_manager.py: `from app.common.waveform import decompress_delta, adc_to_millivolts, adc_to_microvolts`
+- Deleted 3 duplicate waveform functions (60 lines removed):
+  - `decompressChannelData()` → now uses `decompress_delta()`
+  - `convertADCToMillivolts()` → now uses `adc_to_millivolts()`
+  - `convertADCToMicrovolts()` → now uses `adc_to_microvolts()`
+- Kept high-level `processWaveformData()` function (orchestration logic)
+
+**Files Migrated (1 file):**
+- **app/services/websocket_manager.py** (lines 316-375 deleted, replaced with imports)
+
+**Impact:**
+- 60 lines of duplicate code eliminated
+- All waveform processing now centralized in `app.common.waveform` module
+- WebSocket manager uses tested, production-ready waveform functions
+
+**Test Results:** 95/95 tests passing ✅
+
+---
+
+## Next Modules (Not Yet Started)
 
 ### Module 3: Alert Thresholds
 **Status:** Ready to migrate (29 tests passing)
@@ -91,10 +113,18 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 - ✅ No breaking changes
 - ✅ Committed to git (2 commits)
 
+### Module 2: Waveform ✅ COMPLETE
+- ✅ Deleted duplicate waveform functions (60 lines)
+- ✅ All imports updated to new module
+- ✅ All tests still passing (95/95)
+- ✅ No breaking changes
+- ✅ Committed to git (1 commit)
+
 ### Overall Progress
-- **Modules Completed:** 1/5 (20%)
+- **Modules Completed:** 2/5 (40%)
 - **Test Coverage:** 100% (95/95 passing)
 - **Breaking Changes:** 0
+- **Code Reduction:** ~60 lines duplicate code removed
 - **Production Readiness:** High (tests passing, backward compatible)
 
 ---
@@ -119,5 +149,5 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-**Status:** ✅ Module 1 migration complete and committed
-**Next Action:** Choose whether to continue with Module 2 or mark Phase 4 complete
+**Status:** ✅ Modules 1 and 2 migrations complete and committed (40% done)
+**Next Action:** Continue with Module 3 (Alert Thresholds) or pause here
