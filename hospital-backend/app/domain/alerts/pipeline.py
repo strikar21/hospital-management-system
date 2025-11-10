@@ -382,3 +382,179 @@ class AlertPipeline:
         except Exception as e:
             logger.error(f"Failed to resolve alert {alert_id}: {e}")
             return False
+
+    async def detect_system_level_alerts(self) -> list[AlertRecord]:
+        """
+        Detect system-level alerts that span multiple patients or affect hospital operations.
+
+        Checks for:
+        - Device pool depletion (no devices available, low availability)
+        - Mass admission surges (workflow alerts)
+        - Outbreak patterns (multiple patients with fever, declining SpO2)
+
+        Returns:
+            List of AlertRecord objects for system-level alerts
+        """
+        alerts: list[AlertRecord] = []
+
+        try:
+            # Check device pool status
+            device_alerts = await self._check_device_pool_status()
+            alerts.extend(device_alerts)
+
+            # Check for admission surges
+            admission_alerts = await self._check_admission_surge()
+            alerts.extend(admission_alerts)
+
+            # Check for outbreak patterns
+            outbreak_alerts = await self._check_outbreak_patterns()
+            alerts.extend(outbreak_alerts)
+
+        except Exception as e:
+            logger.error(f"Error detecting system-level alerts: {e}", exc_info=True)
+
+        return alerts
+
+    async def _check_device_pool_status(self) -> list[AlertRecord]:
+        """Check device pool availability and generate alerts if critically low"""
+        alerts: list[AlertRecord] = []
+
+        try:
+            async with self.pool.acquire() as conn:
+                # Get device pool stats
+                pool_stats = await conn.fetchrow("""
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'available') as available,
+                        COUNT(*) as total,
+                        (COUNT(*) FILTER (WHERE status = 'available')::float / NULLIF(COUNT(*), 0) * 100) as availability_percent
+                    FROM devices
+                    WHERE "deviceType" = 'watch'
+                """)
+
+                available = pool_stats['available']
+                availability_percent = pool_stats['availability_percent'] or 0
+
+                # Critical: No devices available
+                if available == 0:
+                    alert: AlertRecord = {
+                        'id': None,
+                        'patientId': 'SYSTEM',
+                        'type': 'system',
+                        'severity': 'critical',
+                        'status': 'active',
+                        'message': 'CRITICAL: No devices available in pool - cannot assign to new patients',
+                        'createdBy': 'system',
+                        'createdAt': to_utc_now()
+                    }
+                    alerts.append(alert)
+
+                # High: Device pool critically low
+                elif availability_percent < 10:
+                    alert: AlertRecord = {
+                        'id': None,
+                        'patientId': 'SYSTEM',
+                        'type': 'system',
+                        'severity': 'high',
+                        'status': 'active',
+                        'message': f'Device pool critically low: {available} available ({availability_percent:.1f}%)',
+                        'createdBy': 'system',
+                        'createdAt': to_utc_now()
+                    }
+                    alerts.append(alert)
+
+        except Exception as e:
+            logger.error(f"Error checking device pool status: {e}")
+
+        return alerts
+
+    async def _check_admission_surge(self) -> list[AlertRecord]:
+        """Check for mass admission events"""
+        alerts: list[AlertRecord] = []
+
+        try:
+            async with self.pool.acquire() as conn:
+                # Count admissions in last 4 hours
+                result = await conn.fetchval("""
+                    SELECT COUNT(*)
+                    FROM patients
+                    WHERE "admissionDate" > NOW() - INTERVAL '4 hours'
+                    AND status = 'active'
+                """)
+
+                admission_count = result or 0
+
+                # Alert if more than 10 admissions in 4 hours
+                if admission_count > 10:
+                    alert: AlertRecord = {
+                        'id': None,
+                        'patientId': 'SYSTEM',
+                        'type': 'system',
+                        'severity': 'high',
+                        'status': 'active',
+                        'message': f'Mass admission event: {admission_count} patients admitted in 4 hours',
+                        'createdBy': 'system',
+                        'createdAt': to_utc_now()
+                    }
+                    alerts.append(alert)
+
+        except Exception as e:
+            logger.error(f"Error checking admission surge: {e}")
+
+        return alerts
+
+    async def _check_outbreak_patterns(self) -> list[AlertRecord]:
+        """Check for potential outbreak patterns (fever, respiratory issues)"""
+        alerts: list[AlertRecord] = []
+
+        try:
+            async with self.pool.acquire() as conn:
+                # Check for multiple patients with fever (temp > 38°C / 100.4°F)
+                fever_count = await conn.fetchval("""
+                    SELECT COUNT(DISTINCT v."patientId")
+                    FROM vitals_realtime v
+                    JOIN patients p ON p.id = v."patientId"
+                    WHERE v.time > NOW() - INTERVAL '1 hour'
+                    AND v.temperature > 38.0
+                    AND p.status = 'active'
+                """)
+
+                if fever_count and fever_count > 5:
+                    alert: AlertRecord = {
+                        'id': None,
+                        'patientId': 'SYSTEM',
+                        'type': 'system',
+                        'severity': 'medium',
+                        'status': 'active',
+                        'message': f'{fever_count} patients with fever - potential outbreak',
+                        'createdBy': 'system',
+                        'createdAt': to_utc_now()
+                    }
+                    alerts.append(alert)
+
+                # Check for declining SpO2 pattern (respiratory outbreak)
+                low_spo2_count = await conn.fetchval("""
+                    SELECT COUNT(DISTINCT v."patientId")
+                    FROM vitals_realtime v
+                    JOIN patients p ON p.id = v."patientId"
+                    WHERE v.time > NOW() - INTERVAL '1 hour'
+                    AND v."oxygenSaturation" < 92
+                    AND p.status = 'active'
+                """)
+
+                if low_spo2_count and low_spo2_count > 3:
+                    alert: AlertRecord = {
+                        'id': None,
+                        'patientId': 'SYSTEM',
+                        'type': 'system',
+                        'severity': 'high',
+                        'status': 'active',
+                        'message': f'{low_spo2_count} patients with declining SpO2 - respiratory outbreak suspected',
+                        'createdBy': 'system',
+                        'createdAt': to_utc_now()
+                    }
+                    alerts.append(alert)
+
+        except Exception as e:
+            logger.error(f"Error checking outbreak patterns: {e}")
+
+        return alerts

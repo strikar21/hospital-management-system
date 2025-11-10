@@ -391,8 +391,13 @@ async def receiveVitalsData(
         # ============================================
         # PHASE 2: GENERATE ALERTS (BEST EFFORT)
         # ============================================
+        # DEPRECATED: This HTTP endpoint alert generation is legacy.
+        # ESP32 devices should use MQTT (hospital/devices/{deviceId}/vitals) instead.
+        # MQTT path uses AlertPipeline from domain layer for proper alert generation.
+        # This code path is kept for backwards compatibility only.
         alerts = []
         try:
+            logger.warning(f"⚠️ DEPRECATED: Device {deviceId} using HTTP endpoint for vitals. Please migrate to MQTT.")
             async with getDbConnection() as conn:
                 # Vital threshold alerts (existing)
                 alerts = await vital_alert_service.check_vitals_and_generate_alerts(
