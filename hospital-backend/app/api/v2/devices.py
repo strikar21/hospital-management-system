@@ -11,6 +11,8 @@ import logging
 from ...core.database import getDbConnection
 from ...core.db_utils import fetchAll, fetchOne
 from ...core.auth_dependencies import require_admin, require_medical_staff
+from ...core.errors import DeviceNotFoundError, DatabaseError
+from ...models.api_response import create_list_response, create_success_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -168,20 +170,19 @@ async def get_devices(
 
         logger.info(f"✅ Retrieved {len(devices)} devices (total: {total}, filters: {len(where_clauses)})")
 
-        return {
-            "devices": devices,
-            "count": len(devices),
-            "total": total,
-            "offset": offset,
-            "limit": limit,
-            "success": True
-        }
+        return create_list_response(
+            data=devices,
+            total=total,
+            limit=limit,
+            offset=offset,
+            message="Devices retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting devices: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve devices", operation="get_devices")
 
 
 @router.get("/{device_id}", dependencies=[Depends(require_medical_staff)])
@@ -236,16 +237,19 @@ async def get_device(device_id: str):
             device = await fetchOne(conn, query, (device_id,))
 
         if not device:
-            raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
+            raise DeviceNotFoundError(device_id=device_id)
 
         logger.info(f"✅ Retrieved device: {device_id}")
-        return device
+        return create_success_response(
+            data=device,
+            message=f"Device {device_id} retrieved successfully"
+        )
 
-    except HTTPException:
+    except DeviceNotFoundError:
         raise
     except Exception as e:
         logger.error(f"❌ Error getting device {device_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message=f"Failed to retrieve device {device_id}", operation="get_device")
 
 
 # ================================
@@ -280,14 +284,14 @@ async def get_device_stats():
             stats = await fetchOne(conn, query)
 
         logger.info(f"✅ Retrieved device statistics")
-        return {
-            "summary": stats,
-            "success": True
-        }
+        return create_success_response(
+            data=stats,
+            message="Device statistics retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting device stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve device statistics", operation="get_device_stats")
 
 
 # ================================
@@ -312,15 +316,15 @@ async def get_available_watches():
             watches = await fetchAll(conn, query)
 
         logger.info(f"✅ Retrieved {len(watches)} available watches")
-        return {
-            "devices": watches,
-            "count": len(watches),
-            "success": True
-        }
+        return create_list_response(
+            data=watches,
+            total=len(watches),
+            message="Available watches retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting available watches: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve available watches", operation="get_available_watches")
 
 
 @router.get("/assigned/all", dependencies=[Depends(require_medical_staff)])
@@ -341,15 +345,15 @@ async def get_assigned_devices():
             devices = await fetchAll(conn, query)
 
         logger.info(f"✅ Retrieved {len(devices)} assigned devices")
-        return {
-            "devices": devices,
-            "count": len(devices),
-            "success": True
-        }
+        return create_list_response(
+            data=devices,
+            total=len(devices),
+            message="Assigned devices retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting assigned devices: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve assigned devices", operation="get_assigned_devices")
 
 
 @router.get("/low-battery/all", dependencies=[Depends(require_medical_staff)])
@@ -370,12 +374,12 @@ async def get_low_battery_devices():
             devices = await fetchAll(conn, query)
 
         logger.info(f"✅ Retrieved {len(devices)} low battery devices")
-        return {
-            "devices": devices,
-            "count": len(devices),
-            "success": True
-        }
+        return create_list_response(
+            data=devices,
+            total=len(devices),
+            message="Low battery devices retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting low battery devices: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve low battery devices", operation="get_low_battery_devices")
