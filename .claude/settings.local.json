@@ -22,7 +22,9 @@
       "Read(//c/Users/Srika/.claude/**)",
       "Bash(findstr:*)",
       "Bash(npm test:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(if exist test_mqtt_connection.py del /f test_mqtt_connection.py)",
+      "Bash(if exist test_mqtt_simple.py del /f test_mqtt_simple.py)"
     ],
     "deny": [],
     "ask": []
