@@ -16,6 +16,8 @@ import { PatientCardWaveform } from './PatientCardWaveform';
 import { WatchDetailsModal } from '../WatchDetailsModal';
 import { usePatientVitals } from '../../hooks/usePatientVitals';
 import { useRealtimeAlerts } from '../../hooks/useRealtimeAlerts';
+import { VitalsFormatter } from '../../domain/vitals/VitalsFormatter';
+import { VitalsData } from '../../domain/vitals/VitalsValidator';
 
 interface PatientCardContainerProps {
   patient: patient;
@@ -149,6 +151,24 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
     vitals: currentVitals
   }), [patient, currentVitals]);
 
+  // Create vitals data structure for domain layer
+  const vitalsData: VitalsData = useMemo(() => ({
+    patientId: patient.id,
+    timestamp: new Date().toISOString(),
+    heartRate: currentVitals?.heartRate,
+    oxygenSaturation: currentVitals?.oxygenSaturation,
+    temperature: currentVitals?.skinTemperature,
+    bloodPressureSystolic: currentVitals?.systolicPressure,
+    bloodPressureDiastolic: currentVitals?.diastolicPressure,
+    respiratoryRate: currentVitals?.respiratoryRate
+  }), [patient.id, currentVitals]);
+
+  // Use domain layer for formatting vitals
+  const formattedVitals = useMemo(() =>
+    VitalsFormatter.formatAllVitals(vitalsData, 'F'), // Patient cards use Fahrenheit
+    [vitalsData]
+  );
+
   // Memoize all vitals calculation - expensive operation with alert status computation
   const allVitals = useMemo(() => [
     {
@@ -171,8 +191,9 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       key: 'skinTemperature',
       icon: Thermometer,
       label: 'Temp',
-      value: hasWatchAssigned ? (currentVitals?.skinTemperature ? currentVitals.skinTemperature.toFixed(1) : '--') : '--',
-      unit: hasWatchAssigned && currentVitals?.skinTemperature ? '°F' : '',
+      value: hasWatchAssigned ?
+        (currentVitals?.skinTemperature ? formattedVitals.temperature.value.replace('°F', '') : '--') : '--',
+      unit: hasWatchAssigned && currentVitals?.skinTemperature ? formattedVitals.temperature.unit : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('skinTemperature') : 'normal'
     },
     {
@@ -181,8 +202,9 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       label: 'BP',
       value: hasWatchAssigned ?
         (currentVitals?.systolicPressure && currentVitals?.diastolicPressure ?
-          `${currentVitals.systolicPressure}/${currentVitals.diastolicPressure}` : '--/--') : '--/--',
-      unit: hasWatchAssigned && currentVitals?.systolicPressure && currentVitals?.diastolicPressure ? 'mmHg' : '',
+          formattedVitals.bloodPressure.value.replace(' mmHg', '') : '--/--') : '--/--',
+      unit: hasWatchAssigned && currentVitals?.systolicPressure && currentVitals?.diastolicPressure ?
+        formattedVitals.bloodPressure.unit : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('systolicPressure') : 'normal'
     },
     {
@@ -197,7 +219,8 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       key: 'bioimpedance',
       icon: Waves,
       label: 'BioZ',
-      value: hasWatchAssigned ? (currentVitals?.bioimpedance ?? '--') : '--',
+      value: hasWatchAssigned ?
+        (currentVitals?.bioimpedance ? VitalsFormatter.formatBioimpedance(currentVitals.bioimpedance).replace(' Ω', '') : '--') : '--',
       unit: hasWatchAssigned && currentVitals?.bioimpedance ? 'Ω' : '',
       alertStatus: hasWatchAssigned ? getVitalAlertStatus('bioimpedance') : 'normal'
     },
@@ -221,7 +244,8 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       key: 'perfusionIndex',
       icon: TrendingUp,
       label: 'Perfusion',
-      value: hasWatchAssigned ? (currentVitals?.perfusionIndex ? currentVitals.perfusionIndex.toFixed(1) : '--') : '--',
+      value: hasWatchAssigned ?
+        (currentVitals?.perfusionIndex ? VitalsFormatter.formatPerfusionIndex(currentVitals.perfusionIndex).replace('%', '') : '--') : '--',
       unit: hasWatchAssigned && currentVitals?.perfusionIndex ? '%' : '',
       alertStatus: hasWatchAssigned && currentVitals?.perfusionIndex && currentVitals.perfusionIndex < 0.5 ? 'critical' : hasWatchAssigned && currentVitals?.perfusionIndex && currentVitals.perfusionIndex < 2 ? 'warning' : 'normal'
     },
@@ -241,7 +265,7 @@ export const PatientCardContainer: React.FC<PatientCardContainerProps> = React.m
       unit: '',
       alertStatus: hasWatchAssigned && currentVitals?.watchWorn === false ? 'critical' : 'normal'
     }
-  ], [hasWatchAssigned, currentVitals, getVitalAlertStatus]);
+  ], [hasWatchAssigned, currentVitals, getVitalAlertStatus, formattedVitals]);
 
   return (
     <div
