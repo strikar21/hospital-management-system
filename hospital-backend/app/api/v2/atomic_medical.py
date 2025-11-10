@@ -23,6 +23,8 @@ from ...validators.medical_validators import MedicationRequest
 from ...validators.investigation_validators import InvestigationRequest as InvestigationRequestValidated
 from ...validators.therapy_validators import TherapyRequest as TherapyRequestValidated
 from ...core.auth_dependencies import require_doctor, require_medical_staff, get_current_user
+from ...middleware import resolve_staff_in_response
+from ...core.database import getDbConnection
 
 # Rate limiting
 from slowapi import Limiter
@@ -177,6 +179,10 @@ async def add_medication_atomic_endpoint(
         # Execute atomic operation
         result = await add_medication_atomic(patient_id, medication_data, performedBy)
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -234,6 +240,10 @@ async def add_investigation_atomic_endpoint(
 
         result = await add_investigation_atomic(patient_id, investigation_data, performedBy)
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -283,6 +293,10 @@ async def add_therapy_atomic_endpoint(
 
         result = await add_therapy_atomic(patient_id, therapy_data, performedBy)
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -331,6 +345,10 @@ async def add_note_atomic_endpoint(
         note_data = note.dict(exclude_none=True)
 
         result = await add_note_atomic(patient_id, note_data, performedBy)
+
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
 
         return AtomicResponse(
             success=True,
@@ -435,6 +453,10 @@ async def administer_medication_atomic_endpoint(
             admin_request.administeredBy  # Fixed: use camelCase from model
         )
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -492,6 +514,10 @@ async def record_therapy_session_atomic_endpoint(
             session_data,
             request.performedBy
         )
+
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
 
         return AtomicResponse(
             success=True,
@@ -724,6 +750,10 @@ async def acknowledge_alert_atomic_endpoint(
             request.acknowledgedBy
         )
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -783,6 +813,10 @@ async def complete_investigation_atomic_endpoint(
             request.completedBy  # Fixed: use camelCase from model
         )
 
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
+
         return AtomicResponse(
             success=True,
             medicalRecord=result['medical_record'],
@@ -827,6 +861,10 @@ async def update_medication_status_atomic_endpoint(
             status_change_data,
             request.changedBy
         )
+
+        # Resolve staff IDs to names before returning
+        async with getDbConnection() as conn:
+            result = await resolve_staff_in_response(result, conn)
 
         return AtomicResponse(
             success=True,
