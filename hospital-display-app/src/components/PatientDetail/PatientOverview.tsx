@@ -13,6 +13,8 @@ import { getVitalStatusColor } from '../../utils';
 import { MedicalUtils } from '../../utils/medicalUtils';
 import ECGViewer from '../ECGViewer';
 import { usePatientVitals } from '../../hooks/usePatientVitals';
+import { VitalsFormatter } from '../../domain/vitals/VitalsFormatter';
+import { VitalsData } from '../../domain/vitals/VitalsValidator';
 
 interface PatientOverviewProps {
   patient: patient;
@@ -37,6 +39,24 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
     }
     return patient.vitals;
   }, [patient.vitals, realtimeVitals, wsConnected]);
+
+  // Create vitals data structure for domain layer
+  const vitalsData: VitalsData = useMemo(() => ({
+    patientId: patient.id,
+    timestamp: new Date().toISOString(),
+    heartRate: currentVitals?.heartRate,
+    oxygenSaturation: currentVitals?.oxygenSaturation,
+    temperature: currentVitals?.skinTemperature,
+    bloodPressureSystolic: currentVitals?.systolicPressure,
+    bloodPressureDiastolic: currentVitals?.diastolicPressure,
+    respiratoryRate: currentVitals?.respiratoryRate
+  }), [patient.id, currentVitals]);
+
+  // Use domain layer for formatting vitals
+  const formattedVitals = useMemo(() =>
+    VitalsFormatter.formatAllVitals(vitalsData, 'F'), // Overview displays in Fahrenheit
+    [vitalsData]
+  );
 
   return (
     <div className="p-2 h-full flex flex-col space-y-2">
@@ -100,8 +120,8 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
                 <Droplets className="w-4 h-4" />
               </div>
               <div className="text-right">
-                <span className="font-bold text-lg text-purple-600">{currentVitals?.systolicPressure || '--'}/{currentVitals?.diastolicPressure || '--'}</span>
-                <span className="text-xs text-gray-500 ml-0.5">mmHg</span>
+                <span className="font-bold text-lg text-purple-600">{currentVitals?.systolicPressure && currentVitals?.diastolicPressure ? formattedVitals.bloodPressure.value.replace(' mmHg', '') : '--/--'}</span>
+                <span className="text-xs text-gray-500 ml-0.5">{formattedVitals.bloodPressure.unit}</span>
               </div>
             </div>
           </div>
@@ -132,8 +152,8 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
                 <Thermometer className="w-4 h-4" />
               </div>
               <div className="text-right">
-                <span className="font-bold text-lg text-orange-600">{currentVitals?.skinTemperature ? currentVitals.skinTemperature.toFixed(1) : '--'}</span>
-                <span className="text-xs text-gray-500 ml-0.5">°F</span>
+                <span className="font-bold text-lg text-orange-600">{currentVitals?.skinTemperature ? formattedVitals.temperature.value.replace('°F', '') : '--'}</span>
+                <span className="text-xs text-gray-500 ml-0.5">{formattedVitals.temperature.unit}</span>
               </div>
             </div>
           </div>
@@ -191,7 +211,7 @@ export const PatientOverview: React.FC<PatientOverviewProps> = ({
                 <TrendingUp className="w-4 h-4" />
               </div>
               <div className="text-right">
-                <span className="font-bold text-lg text-teal-600">{currentVitals?.perfusionIndex ? currentVitals.perfusionIndex.toFixed(1) : '--'}</span>
+                <span className="font-bold text-lg text-teal-600">{currentVitals?.perfusionIndex ? VitalsFormatter.formatPerfusionIndex(currentVitals.perfusionIndex).replace('%', '') : '--'}</span>
                 <span className="text-xs text-gray-500 ml-0.5">%</span>
               </div>
             </div>
