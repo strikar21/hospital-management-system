@@ -4,7 +4,7 @@ Implements all patient-related database operations with medical record support
 """
 
 from typing import Dict, List, Optional, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import logging
 
 from .base_repository import BaseRepository
@@ -650,7 +650,34 @@ class PatientRepository(BaseRepository[Patient]):
             # This ensures consistent resolution across all endpoints
 
             # Sort all entries by timestamp (newest first)
-            timeline_entries.sort(key=lambda x: x['timestamp'], reverse=True)
+            # Handle both timezone-aware and timezone-naive datetimes
+            def safe_timestamp(entry):
+                """Convert all timestamps to comparable format"""
+                ts = entry.get('timestamp')
+                if ts is None:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+
+                # If already datetime, ensure it has timezone
+                if isinstance(ts, datetime):
+                    if ts.tzinfo is None:
+                        # Naive datetime - assume UTC
+                        return ts.replace(tzinfo=timezone.utc)
+                    return ts
+
+                # If string, parse it
+                if isinstance(ts, str):
+                    try:
+                        # Parse ISO format string
+                        dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        return dt
+                    except:
+                        return datetime.min.replace(tzinfo=timezone.utc)
+
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+            timeline_entries.sort(key=safe_timestamp, reverse=True)
 
             return timeline_entries
 
