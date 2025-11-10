@@ -13,6 +13,8 @@ from ...models.patient import PatientCreate, PatientUpdate
 from ...core.database import getDbConnection
 from ...core.auth_dependencies import require_medical_staff
 from ...middleware import resolve_staff_in_response
+from ...core.errors import PatientNotFoundError, ValidationError, DatabaseError, AlertNotFoundError
+from ...models.api_response import create_list_response, create_success_response, create_operation_response
 
 router = APIRouter(dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
@@ -42,17 +44,31 @@ async def get_all_patients(
 
         # Handle ward filtering separately if needed
         if ward:
-            return await patient_service.get_patients_by_ward(ward)
+            patients = await patient_service.get_patients_by_ward(ward)
+            logger.info(f"✅ Retrieved {len(patients)} patients from ward {ward}")
+            return create_list_response(
+                data=patients,
+                total=len(patients),
+                limit=None,
+                offset=None,
+                message=f"Retrieved patients from ward {ward}"
+            )
 
         patients = await patient_service.get_all(filters, limit, offset)
         # total = await patient_service.count(filters)  # Temporarily disabled
 
         logger.info(f"✅ Retrieved {len(patients)} patients")
-        return {"patients": patients, "total": len(patients), "success": True}
+        return create_list_response(
+            data=patients,
+            total=len(patients),
+            limit=limit,
+            offset=offset,
+            message="Patients retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting patients: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to retrieve patients", operation="get_all_patients")
 
 
 @router.get("/{patient_id}")
@@ -66,7 +82,7 @@ async def get_patient(
         patient = await patient_service.get_complete_patient_data(patient_id)
 
         if not patient:
-            raise HTTPException(status_code=404, detail="Patient not found")
+            raise PatientNotFoundError(patient_id=patient_id)
 
         # Include staff data if requested for comprehensive single call
         if includeStaff:
@@ -103,13 +119,16 @@ async def get_patient(
         logger.info(f"🔍 Patient attendingPhysician: {patient.get('attendingPhysician')}")
         logger.info(f"🔍 Patient attendingPhysicianName: {patient.get('attendingPhysicianName')}")
         logger.info(f"🔍 Patient assignedDoctor: {patient.get('assignedDoctor')}")
-        return patient
+        return create_success_response(
+            data=patient,
+            message="Patient data retrieved successfully"
+        )
 
-    except HTTPException:
+    except PatientNotFoundError:
         raise
     except Exception as e:
         logger.error(f"❌ Error getting patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message=f"Failed to retrieve patient data", operation="get_patient")
 
 
 @router.get("/search/{query}")
@@ -160,23 +179,33 @@ async def add_patient_note(
     try:
         patient_service = get_patient_service()
 
+        # Validate required fields
+        content = note_data.get('comment') or note_data.get('content')
+        if not content:
+            raise ValidationError("Note content is required", field="content")
+
         note = await patient_service.add_note_comment(
             patient_id=patient_id,
-            content=note_data.get('comment') or note_data.get('content'),  # Support both field names
-            author_id=note_data.get('createdBy') or note_data.get('authorId', 'system')  # Support both field names
+            content=content,
+            author_id=note_data.get('createdBy') or note_data.get('authorId', 'system')
         )
 
         if not note:
-            raise HTTPException(status_code=400, detail="Failed to add note")
+            raise ValidationError("Failed to add note - patient may not exist", field="patient_id")
 
         logger.info(f"✅ Added note to patient {patient_id}")
-        return note
+        return create_success_response(
+            data=note,
+            message="Note added successfully"
+        )
 
+    except ValidationError:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error adding note to patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to add note", operation="add_patient_note")
 
 
 @router.put("/{patient_id}/notes/{note_id}")
@@ -307,16 +336,18 @@ async def acknowledge_alert(
         )
 
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to acknowledge alert")
+            raise AlertNotFoundError(alert_id=alert_id)
 
         logger.info(f"✅ Acknowledged alert {alert_id} for patient {patient_id}")
-        return {"success": True, "message": "Alert acknowledged successfully"}
+        return create_operation_response("Alert acknowledged successfully")
 
+    except (ValidationError, AlertNotFoundError):
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error acknowledging alert {alert_id} for patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to acknowledge alert", operation="acknowledge_alert")
 
 
 @router.post("/{patient_id}/alerts/{alert_id}/resolve")
@@ -457,16 +488,25 @@ async def create_patient_v2(patient_data: PatientCreate):
         )
 
         if not patient:
-            raise HTTPException(status_code=400, detail="Failed to create patient")
+            raise ValidationError("Failed to create patient - invalid data provided")
 
         logger.info(f"✅ Created new patient: {patient.get('id')}")
-        return {"id": patient.get('id'), "message": "Patient created successfully", "success": True}
+        from ...models.api_response import CreatedResponse, ResponseMeta
+        return {
+            "success": True,
+            "data": patient,
+            "resourceId": patient.get('id'),
+            "message": "Patient created successfully",
+            "meta": {"timestamp": ResponseMeta().timestamp.isoformat()}
+        }
 
+    except ValidationError:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error creating patient: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to create patient", operation="create_patient_v2")
 
 
 @router.post("/")
