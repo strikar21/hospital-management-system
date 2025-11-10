@@ -1,5 +1,11 @@
 """
-Datetime utilities - Single source of truth for all timestamp operations.
+Datetime utilities - DEPRECATED - Use app.common.datetime instead.
+
+MIGRATION NOTICE:
+This module is being phased out. New code should use:
+    from app.common.datetime import now_utc, parse_iso8601, to_iso8601
+
+Backward compatibility wrappers provided for existing code.
 
 Provides:
 - ISO8601 parsing with timezone support
@@ -8,7 +14,7 @@ Provides:
 - Time window validation
 - Date parsing (without time)
 
-Usage:
+Legacy Usage:
     from app.common.datetime_utils import parse_iso8601, to_utc_now
 
     timestamp = parse_iso8601(data['timestamp'])
@@ -19,6 +25,11 @@ from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 import logging
 
+# Import from new modular datetime package
+from app.common.datetime import now_utc as _now_utc
+from app.common.datetime import parse_iso8601 as _parse_iso8601
+from app.common.datetime import to_iso8601 as _to_iso8601
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,39 +37,24 @@ def parse_iso8601(timestamp_str: str) -> datetime:
     """
     Parse ISO8601 timestamp string with timezone support.
 
-    Handles formats:
-    - 2025-11-09T10:30:00Z (UTC with Z)
-    - 2025-11-09T10:30:00+00:00 (UTC with offset)
-    - 2025-11-09T10:30:00+05:30 (IST)
+    DEPRECATED: Use app.common.datetime.parse_iso8601() instead.
+    This is a backward compatibility wrapper.
 
     Args:
         timestamp_str: ISO8601 formatted timestamp string
 
     Returns:
         datetime object with timezone info
-
-    Raises:
-        ValueError: If timestamp format is invalid
-
-    Example:
-        >>> parse_iso8601("2025-11-09T10:30:00Z")
-        datetime(2025, 11, 9, 10, 30, 0, tzinfo=timezone.utc)
     """
-    if not timestamp_str:
-        raise ValueError("Timestamp string cannot be empty")
-
-    try:
-        # Replace 'Z' with '+00:00' for Python's fromisoformat()
-        normalized = timestamp_str.replace('Z', '+00:00')
-        return datetime.fromisoformat(normalized)
-    except ValueError as e:
-        logger.error(f"Failed to parse timestamp '{timestamp_str}': {e}")
-        raise ValueError(f"Invalid ISO8601 timestamp: {timestamp_str}")
+    return _parse_iso8601(timestamp_str)
 
 
 def to_utc_now() -> datetime:
     """
     Get current UTC time with timezone info.
+
+    DEPRECATED: Use app.common.datetime.now_utc() instead.
+    This is a backward compatibility wrapper.
 
     Returns:
         Current datetime in UTC with timezone
@@ -67,12 +63,15 @@ def to_utc_now() -> datetime:
         >>> to_utc_now()
         datetime(2025, 11, 9, 10, 30, 0, tzinfo=timezone.utc)
     """
-    return datetime.now(timezone.utc)
+    return _now_utc()
 
 
 def format_iso8601(dt: datetime) -> str:
     """
     Format datetime to ISO8601 string.
+
+    DEPRECATED: Use app.common.datetime.to_iso8601() instead.
+    This is a backward compatibility wrapper.
 
     Args:
         dt: datetime object (with or without timezone)
@@ -84,15 +83,7 @@ def format_iso8601(dt: datetime) -> str:
         >>> format_iso8601(datetime(2025, 11, 9, 10, 30, 0, tzinfo=timezone.utc))
         '2025-11-09T10:30:00+00:00'
     """
-    if not dt:
-        raise ValueError("Datetime cannot be None")
-
-    # Ensure timezone-aware
-    if dt.tzinfo is None:
-        logger.warning(f"Datetime {dt} has no timezone, assuming UTC")
-        dt = dt.replace(tzinfo=timezone.utc)
-
-    return dt.isoformat()
+    return _to_iso8601(dt)
 
 
 def parse_date_only(date_str: str) -> date:
