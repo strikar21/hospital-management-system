@@ -1,0 +1,7 @@
+### Test fixes needed:
+
+1. Temperature test - the formatted value has unit stripped, so just check for °F
+2. NORMAL/ABNORMAL tests - the screen does show these, but tests need to be more flexible
+3. Temperature values are in the component but split between elements
+
+Strategy: Update tests to check for key elements rather than exact text matches
