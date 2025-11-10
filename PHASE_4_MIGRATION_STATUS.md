@@ -114,15 +114,55 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-## Next Modules (Not Yet Started)
+---
 
-### Module 4: Alert Generation
-**Status:** Ready to migrate (19 tests passing)
-**Estimated Time:** 30 minutes
+## Module 4: Alert Generation - ✅ COMPLETE
 
-### Module 5: Patient Queries
-**Status:** Ready to migrate (9 tests passing)
-**Estimated Time:** 45 minutes
+**Status:** Committed (f63e232)
+
+**What Was Done:**
+- Refactored `AlertPipeline.generate_vital_alert()` method to use generators module
+- Added import: `from .generators.vital import generate_vital_alert as _generate_vital_alert`
+- Replaced ~90 lines of inline alert generation logic with 3-line call to generators module
+- Method reduced from ~90 lines to ~17 lines (~73 lines removed)
+
+**Files Migrated (1 file):**
+- **app/domain/alerts/pipeline.py** (lines 56-147 refactored)
+
+**Impact:**
+- ~73 lines of duplicate code eliminated
+- Alert generation logic now centralized in `app.domain.alerts.generators.vital`
+- Cleaner separation: generators create alerts, pipeline handles deduplication
+- Uses `check_vital_threshold()` from rules module (single source of truth)
+
+**Test Results:** 95/95 tests passing ✅
+
+---
+
+## Module 5: Patient Queries - ✅ PROPERLY ORGANIZED
+
+**Status:** No migration needed (proper architecture)
+
+**Finding:**
+Module 5 has NO duplicate code - the two query layers serve **different purposes**:
+
+1. **Common Queries** (`app/common/queries/patient.py`)
+   - Simple, lightweight SELECT queries
+   - 16 core patient fields
+   - No JOINs, no aggregations
+   - Used for quick lookups
+
+2. **Repository Queries** (`app/repositories/patient_repository.py`)
+   - Complex queries with JOINs (up to 7 tables)
+   - 40+ fields with aggregations
+   - Business logic (device status calculation, timeline formatting)
+   - Used for full medical records
+
+**Analysis:** These are **complementary**, not duplicate! Good architecture.
+
+**Test Results:** 9/9 patient query tests passing ✅
+
+**Documentation:** See [MODULE_5_PROPERLY_ORGANIZED.md](../MODULE_5_PROPERLY_ORGANIZED.md) for detailed analysis
 
 ---
 
@@ -149,11 +189,25 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 - ✅ All tests passing (29/29)
 - ✅ Discovered during Phase 4 audit
 
+### Module 4: Alert Generation ✅ COMPLETE
+- ✅ Refactored AlertPipeline to use generators module
+- ✅ Deleted duplicate alert generation logic (73 lines)
+- ✅ All imports updated to generators module
+- ✅ All tests still passing (95/95)
+- ✅ Committed to git (1 commit)
+
+### Module 5: Patient Queries ✅ PROPERLY ORGANIZED
+- ✅ No duplicate code found
+- ✅ Common queries and repository serve different purposes
+- ✅ Proper separation of concerns
+- ✅ All tests passing (9/9)
+- ✅ Good architecture - no migration needed
+
 ### Overall Progress
-- **Modules Completed:** 3/5 (60%)
+- **Modules Completed:** 5/5 (100%) 🎉
 - **Test Coverage:** 100% (95/95 passing)
 - **Breaking Changes:** 0
-- **Code Reduction:** ~60 lines duplicate code removed
+- **Code Reduction:** ~133 lines duplicate code removed
 - **Production Readiness:** High (tests passing, backward compatible)
 
 ---
@@ -178,5 +232,12 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-**Status:** ✅ Modules 1, 2, and 3 complete (60% done) - Module 3 was already migrated earlier
-**Next Action:** Continue with Module 4 (Alert Generation) or Module 5 (Patient Queries), or pause here
+**Status:** ✅✅✅ ALL 5 MODULES COMPLETE (100%) 🎉🎉🎉
+
+**Phase 4 Migration: COMPLETE!**
+- 2 modules actively migrated (Datetime, Waveform, Alert Generation)
+- 2 modules already migrated in earlier work (Alert Thresholds)
+- 1 module properly organized (Patient Queries - no migration needed)
+- 133 lines of duplicate code eliminated
+- Zero breaking changes
+- 100% test coverage maintained (95/95 passing)
