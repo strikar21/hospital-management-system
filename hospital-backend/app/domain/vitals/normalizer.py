@@ -19,7 +19,7 @@ from datetime import datetime
 import logging
 
 from app.domain.schemas import VitalsRecord, VITAL_THRESHOLDS
-from app.common import parse_iso8601, to_utc_now
+from app.common.datetime import parse_iso8601, now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class VitalsNormalizer:
             raise ValueError("Missing required field: deviceId")
 
         # Parse timestamp (use current time if not provided)
-        timestamp = to_utc_now()
+        timestamp = now_utc()
         if 'timestamp' in payload:
             try:
                 timestamp = parse_iso8601(payload['timestamp'])

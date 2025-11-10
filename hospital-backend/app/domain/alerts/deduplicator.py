@@ -21,7 +21,8 @@ from datetime import datetime, timedelta
 import logging
 import asyncpg
 
-from app.common import to_utc_now, ALERT_DEDUPLICATION_MINUTES
+from app.common.datetime import now_utc
+from app.common import ALERT_DEDUPLICATION_MINUTES
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class AlertDeduplicator:
             window_minutes = self.default_window_minutes
 
         # Calculate time window
-        now = to_utc_now()
+        now = now_utc()
         window_start = now - timedelta(minutes=window_minutes)
 
         # Strip timezone for database compatibility (PostgreSQL timestamp without time zone)
@@ -148,7 +149,7 @@ class AlertDeduplicator:
             Number of alerts deleted
         """
         try:
-            cutoff_date = to_utc_now() - timedelta(days=days_to_keep)
+            cutoff_date = now_utc() - timedelta(days=days_to_keep)
             # Strip timezone for database compatibility
             cutoff_date = cutoff_date.replace(tzinfo=None)
 

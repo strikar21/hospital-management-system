@@ -23,7 +23,7 @@ from app.domain.schemas import (
     AlertRecord, AlertType, AlertSeverity, AlertStatus,
     VitalsRecord, VITAL_THRESHOLDS
 )
-from app.common import to_utc_now
+from app.common.datetime import now_utc
 from .deduplicator import AlertDeduplicator
 
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ class AlertPipeline:
             'vitalValue': vital_value,
             'thresholdValue': threshold_value,
             'createdBy': device_id or 'system',
-            'createdAt': to_utc_now()
+            'createdAt': now_utc()
         }
 
         return alert
@@ -197,7 +197,7 @@ class AlertPipeline:
             'status': 'active',
             'message': message,
             'createdBy': device_id or 'system',
-            'createdAt': to_utc_now()
+            'createdAt': now_utc()
         }
 
         return alert
@@ -229,7 +229,7 @@ class AlertPipeline:
             'status': 'active',
             'message': f"Device {device_id}: {issue}",
             'createdBy': 'system',
-            'createdAt': to_utc_now()
+            'createdAt': now_utc()
         }
 
         return alert
@@ -314,7 +314,7 @@ class AlertPipeline:
                 """
 
                 # Strip timezone for database compatibility
-                acknowledged_at = to_utc_now().replace(tzinfo=None)
+                acknowledged_at = now_utc().replace(tzinfo=None)
 
                 result = await conn.fetchval(
                     query,
@@ -363,7 +363,7 @@ class AlertPipeline:
                 """
 
                 # Strip timezone for database compatibility
-                resolved_at = to_utc_now().replace(tzinfo=None)
+                resolved_at = now_utc().replace(tzinfo=None)
 
                 result = await conn.fetchval(
                     query,
@@ -444,7 +444,7 @@ class AlertPipeline:
                         'status': 'active',
                         'message': 'CRITICAL: No devices available in pool - cannot assign to new patients',
                         'createdBy': 'system',
-                        'createdAt': to_utc_now()
+                        'createdAt': now_utc()
                     }
                     alerts.append(alert)
 
@@ -458,7 +458,7 @@ class AlertPipeline:
                         'status': 'active',
                         'message': f'Device pool critically low: {available} available ({availability_percent:.1f}%)',
                         'createdBy': 'system',
-                        'createdAt': to_utc_now()
+                        'createdAt': now_utc()
                     }
                     alerts.append(alert)
 
@@ -493,7 +493,7 @@ class AlertPipeline:
                         'status': 'active',
                         'message': f'Mass admission event: {admission_count} patients admitted in 4 hours',
                         'createdBy': 'system',
-                        'createdAt': to_utc_now()
+                        'createdAt': now_utc()
                     }
                     alerts.append(alert)
 
@@ -527,7 +527,7 @@ class AlertPipeline:
                         'status': 'active',
                         'message': f'{fever_count} patients with fever - potential outbreak',
                         'createdBy': 'system',
-                        'createdAt': to_utc_now()
+                        'createdAt': now_utc()
                     }
                     alerts.append(alert)
 
@@ -550,7 +550,7 @@ class AlertPipeline:
                         'status': 'active',
                         'message': f'{low_spo2_count} patients with declining SpO2 - respiratory outbreak suspected',
                         'createdBy': 'system',
-                        'createdAt': to_utc_now()
+                        'createdAt': now_utc()
                     }
                     alerts.append(alert)
 
