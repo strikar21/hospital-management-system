@@ -237,37 +237,22 @@ export class InvestigationService extends BaseMedicalRecordService<investigation
 
   /**
    * Validate investigation data
+   * Uses base class validation with investigation-specific required fields
    * @param investigation - Investigation to validate
    * @returns true if valid, false otherwise
    */
   static validateInvestigation(investigation: any): boolean {
-    if (!investigation.name || !investigation.type) {
-      return false;
-    }
-
-    // Basic validation for investigation fields
-    const requiredFields = ['name', 'type'];
-    return requiredFields.every(field => investigation[field]);
+    const instance = new InvestigationService();
+    return instance.validateRecord(investigation, ['name', 'type']);
   }
 
   /**
    * Format investigation results for display
+   * Delegates to base class formatDataForDisplay utility
    * @param results - Investigation results
    * @returns Formatted results string
    */
   static formatInvestigationResults(results: any): string {
-    try {
-      if (typeof results === 'string') {
-        return results;
-      }
-
-      if (typeof results === 'object') {
-        return JSON.stringify(results, null, 2);
-      }
-
-      return String(results);
-    } catch (error) {
-      return 'Invalid results format';
-    }
+    return BaseMedicalRecordService.formatDataForDisplay(results, 'Invalid results format');
   }
 }

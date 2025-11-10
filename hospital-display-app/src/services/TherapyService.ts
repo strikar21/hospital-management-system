@@ -303,58 +303,34 @@ export class TherapyService extends BaseMedicalRecordService<therapy> {
 
   /**
    * Validate therapy data
+   * Uses base class validation with therapy-specific required fields
    * @param therapy - Therapy to validate
    * @returns true if valid, false otherwise
    */
   static validateTherapy(therapy: any): boolean {
-    if (!therapy.name || !therapy.type) {
-      return false;
-    }
-
-    // Basic validation for therapy fields
-    const requiredFields = ['name', 'type'];
-    return requiredFields.every(field => therapy[field]);
+    const instance = new TherapyService();
+    return instance.validateRecord(therapy, ['name', 'type']);
   }
 
   /**
    * Format therapy duration for display
+   * Delegates to base class formatDuration utility
    * @param duration - Duration in minutes
    * @returns Formatted duration string
    */
   static formatTherapyDuration(duration: number): string {
-    try {
-      if (duration < 60) {
-        return `${duration} minutes`;
-      }
-
-      const hours = Math.floor(duration / 60);
-      const minutes = duration % 60;
-
-      if (minutes === 0) {
-        return `${hours} hour${hours > 1 ? 's' : ''}`;
-      }
-
-      return `${hours} hour${hours > 1 ? 's' : ''} ${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } catch (error) {
-      return 'Invalid duration';
-    }
+    return BaseMedicalRecordService.formatDuration(duration);
   }
 
   /**
    * Calculate therapy progress percentage
+   * Delegates to base class calculateProgress utility
    * @param therapy - Therapy session with totalSessions and completedSessions
    * @returns Progress percentage (0-100)
    */
   static calculateTherapyProgress(therapy: any): number {
-    try {
-      if (!therapy.totalSessions || therapy.totalSessions <= 0) {
-        return 0;
-      }
-
-      const completedSessions = therapy.completedSessions || 0;
-      return Math.min(100, Math.round((completedSessions / therapy.totalSessions) * 100));
-    } catch (error) {
-      return 0;
-    }
+    const completedSessions = therapy.completedSessions || 0;
+    const totalSessions = therapy.totalSessions || 0;
+    return BaseMedicalRecordService.calculateProgress(completedSessions, totalSessions);
   }
 }

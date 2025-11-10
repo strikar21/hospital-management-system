@@ -11,8 +11,10 @@ import { CaseSheetService } from './CaseSheetService';
 import { AlertService } from './AlertService';
 // Removed unused services: ClinicalDecisionSupport, LabIntegration, ImagingService
 import { BaseService } from './BaseService';
+import { BaseMedicalRecordService } from './base/BaseMedicalRecordService';
 
 export { BaseService } from './BaseService';
+export { BaseMedicalRecordService } from './base/BaseMedicalRecordService';
 export { AuthService } from './AuthService';
 export { PatientService } from './patient';
 export { VitalService } from './VitalService';

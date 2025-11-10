@@ -440,4 +440,114 @@ export abstract class BaseMedicalRecordService<T> extends BaseService {
       record[field] !== ''
     );
   }
+
+  // ================================
+  // STATIC FACTORY PATTERN
+  // ================================
+
+  /**
+   * Create service instance - static factory method
+   * Subclasses can use this to create instances without 'new'
+   *
+   * @returns New service instance
+   *
+   * @example
+   * ```typescript
+   * const medications = await MedicationService.instance().getPatientRecords(patientId);
+   * ```
+   */
+  protected static instance<T extends BaseMedicalRecordService<any>>(): T {
+    return new (this as any)();
+  }
+
+  // ================================
+  // GENERIC UTILITY METHODS
+  // ================================
+
+  /**
+   * Format JSON data for display
+   * Generic utility for formatting complex data structures
+   *
+   * @param data - Data to format
+   * @param fallback - Fallback string if formatting fails
+   * @returns Formatted string
+   */
+  static formatDataForDisplay(data: any, fallback: string = 'No data available'): string {
+    try {
+      if (!data) return fallback;
+
+      if (typeof data === 'string') {
+        return data;
+      }
+
+      if (typeof data === 'object') {
+        return JSON.stringify(data, null, 2);
+      }
+
+      return String(data);
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  /**
+   * Format duration in minutes to human-readable string
+   * Generic utility for duration formatting
+   *
+   * @param minutes - Duration in minutes
+   * @returns Formatted duration string
+   */
+  static formatDuration(minutes: number): string {
+    try {
+      if (!minutes || minutes < 0) return '0 minutes';
+
+      if (minutes < 60) {
+        return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+      }
+
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+
+      if (remainingMinutes === 0) {
+        return `${hours} hour${hours !== 1 ? 's' : ''}`;
+      }
+
+      return `${hours} hour${hours !== 1 ? 's' : ''} ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+    } catch (error) {
+      return 'Invalid duration';
+    }
+  }
+
+  /**
+   * Calculate progress percentage
+   * Generic utility for calculating completion percentage
+   *
+   * @param completed - Number of completed items
+   * @param total - Total number of items
+   * @returns Progress percentage (0-100)
+   */
+  static calculateProgress(completed: number, total: number): number {
+    try {
+      if (!total || total <= 0) {
+        return 0;
+      }
+
+      const completedCount = completed || 0;
+      return Math.min(100, Math.round((completedCount / total) * 100));
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
+   * Capitalize first letter of string
+   * Generic utility for string formatting
+   *
+   * @param str - String to capitalize
+   * @returns Capitalized string
+   */
+  static capitalize(str: string): string {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  }
 }
