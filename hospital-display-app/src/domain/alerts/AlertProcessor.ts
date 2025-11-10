@@ -137,13 +137,14 @@ export class AlertProcessor {
     const grouped = new Map<string, AlertData[]>();
 
     for (const alert of alerts) {
-      const patientAlerts = grouped.get(alert.patientId) || [];
+      const patientId = alert.patientId || 'unknown';
+      const patientAlerts = grouped.get(patientId) || [];
       patientAlerts.push(alert);
-      grouped.set(alert.patientId, patientAlerts);
+      grouped.set(patientId, patientAlerts);
     }
 
     // Sort each patient's alerts by priority
-    for (const [patientId, patientAlerts] of grouped.entries()) {
+    for (const [patientId, patientAlerts] of Array.from(grouped.entries())) {
       grouped.set(
         patientId,
         this.sortAlertsByPriority(patientAlerts)

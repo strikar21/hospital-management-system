@@ -4,10 +4,11 @@
  * Medical-grade patient monitoring display with ECG/EEG waveforms and vital signs
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Heart, Activity, Thermometer, Droplets, Zap, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { patient } from '../../types';
-import { MedicalUtils } from '../../utils/medicalUtils';
+import { VitalsFormatter } from '../../domain/vitals/VitalsFormatter';
+import { VitalsData } from '../../domain/vitals/VitalsValidator';
 
 interface PatientMonitorProps {
   patient: patient;
@@ -55,16 +56,26 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
   // REMOVED: Frontend arrhythmia detection - ALL medical diagnosis comes from backend
   // Backend provides arrhythmia alerts via patient.alerts if detected
 
-  // MEDICAL SAFETY: Validate vital signs are within displayable ranges
-  const safeVitals = {
-    heartRate: Math.max(0, Math.min(300, patient.vitals?.heartRate ?? 0)),
-    systolicPressure: Math.max(60, Math.min(300, patient.vitals?.systolicPressure ?? 0)),
-    diastolicPressure: Math.max(30, Math.min(150, patient.vitals?.diastolicPressure ?? 0)),
-    oxygenSaturation: Math.max(0, Math.min(100, patient.vitals?.oxygenSaturation ?? 0)),
-    skinTemperature: Math.max(90.0, Math.min(115.0, patient.vitals?.skinTemperature ?? 0)),
-    ecgReading: Math.max(-50, Math.min(50, patient.vitals?.ecgReading ?? 0)),
-    eegReading: Math.max(0, Math.min(200, patient.vitals?.eegReading ?? 0))
-  };
+  // Format vitals using domain layer for consistent display
+  const vitalsData: VitalsData = useMemo(() => ({
+    patientId: patient.id,
+    timestamp: new Date().toISOString(), // Use current time for display
+    heartRate: patient.vitals?.heartRate,
+    oxygenSaturation: patient.vitals?.oxygenSaturation,
+    temperature: patient.vitals?.skinTemperature,
+    bloodPressureSystolic: patient.vitals?.systolicPressure,
+    bloodPressureDiastolic: patient.vitals?.diastolicPressure
+  }), [patient.id, patient.vitals]);
+
+  // Use domain layer for validation and formatting
+  const formattedVitals = useMemo(() =>
+    VitalsFormatter.formatAllVitals(vitalsData, 'F'), // Bedside monitors use Fahrenheit
+    [vitalsData]
+  );
+
+  // Legacy ECG/EEG readings (not part of standard vitals)
+  const ecgReading = Math.max(-50, Math.min(50, patient.vitals?.ecgReading ?? 0));
+  const eegReading = Math.max(0, Math.min(200, patient.vitals?.eegReading ?? 0));
 
   return (
     <div className={`h-full ${displayCount === 2 ? 'w-1/2' : 'w-full'} bg-black text-white flex flex-col border-r border-gray-800`}>
@@ -115,12 +126,12 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="text-4xl font-mono font-bold text-red-400 leading-none">
-                    {safeVitals.heartRate}
+                    {patient.vitals?.heartRate !== undefined ? Math.round(patient.vitals.heartRate) : '--'}
                   </div>
-                  <div className="text-red-300 text-sm font-medium">BPM</div>
+                  <div className="text-red-300 text-sm font-medium">{formattedVitals.heartRate.unit}</div>
                 </div>
                 <div className="text-xs text-gray-500 font-medium">
-                  Normal: 60-100 • {MedicalUtils.getVitalStatus(safeVitals.heartRate, 'heartRate').toUpperCase()}
+                  Normal: 60-100 • {formattedVitals.heartRate.isNormal ? 'NORMAL' : 'ABNORMAL'}
                 </div>
               </div>
 
@@ -134,12 +145,14 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="text-3xl font-mono font-bold text-blue-400 leading-none">
-                    {`${safeVitals.systolicPressure}/${safeVitals.diastolicPressure}`}
+                    {patient.vitals?.systolicPressure !== undefined && patient.vitals?.diastolicPressure !== undefined
+                      ? `${Math.round(patient.vitals.systolicPressure)}/${Math.round(patient.vitals.diastolicPressure)}`
+                      : '--/--'}
                   </div>
-                  <div className="text-blue-300 text-sm font-medium">mmHg</div>
+                  <div className="text-blue-300 text-sm font-medium">{formattedVitals.bloodPressure.unit}</div>
                 </div>
                 <div className="text-xs text-gray-500 font-medium">
-                  Normal: 90-140/60-90 • {MedicalUtils.getVitalStatus(safeVitals.systolicPressure, 'systolicPressure', safeVitals.diastolicPressure).toUpperCase()}
+                  Normal: 90-140/60-90 • {formattedVitals.bloodPressure.isNormal ? 'NORMAL' : 'ABNORMAL'}
                 </div>
               </div>
 
@@ -153,12 +166,12 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="text-4xl font-mono font-bold text-cyan-400 leading-none">
-                    {safeVitals.oxygenSaturation}
+                    {patient.vitals?.oxygenSaturation !== undefined ? Math.round(patient.vitals.oxygenSaturation) : '--'}
                   </div>
-                  <div className="text-cyan-300 text-sm font-medium">%</div>
+                  <div className="text-cyan-300 text-sm font-medium">{formattedVitals.spO2.unit}</div>
                 </div>
                 <div className="text-xs text-gray-500 font-medium">
-                  Normal: 95-100 • {MedicalUtils.getVitalStatus(safeVitals.oxygenSaturation, 'oxygenSaturation').toUpperCase()}
+                  Normal: 95-100 • {formattedVitals.spO2.isNormal ? 'NORMAL' : 'ABNORMAL'}
                 </div>
               </div>
 
@@ -172,12 +185,12 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 </div>
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="text-3xl font-mono font-bold text-amber-400 leading-none">
-                    {safeVitals.skinTemperature.toFixed(1)}
+                    {formattedVitals.temperature.value.replace('°F', '')}
                   </div>
-                  <div className="text-amber-300 text-sm font-medium">°F</div>
+                  <div className="text-amber-300 text-sm font-medium">{formattedVitals.temperature.unit}</div>
                 </div>
                 <div className="text-xs text-gray-500 font-medium">
-                  Normal: 97.0-99.0 • {MedicalUtils.getVitalStatus(safeVitals.skinTemperature, 'skinTemperature').toUpperCase()}
+                  Normal: 97.0-99.0 • {formattedVitals.temperature.isNormal ? 'NORMAL' : 'ABNORMAL'}
                 </div>
               </div>
             </div>
@@ -196,7 +209,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <div className="flex items-center space-x-4">
                   <div className="text-right">
                     <div className="text-green-400 text-xl font-mono font-bold">
-                      {isECGMode ? `${safeVitals.ecgReading} mV` : 'ACTIVE'}
+                      {isECGMode ? `${ecgReading} mV` : 'ACTIVE'}
                     </div>
                     <div className="text-green-300 text-xs font-medium">
                       {isECGMode ? 'Amplitude' : 'Brain Activity'}
@@ -263,8 +276,10 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <Heart className="w-4 h-4 text-red-500" />
                 <span className="text-red-300 text-xs font-bold">HR</span>
               </div>
-              <div className="text-2xl font-mono font-bold text-red-400">{safeVitals.heartRate}</div>
-              <div className="text-red-300 text-xs">BPM</div>
+              <div className="text-2xl font-mono font-bold text-red-400">
+                {patient.vitals?.heartRate !== undefined ? Math.round(patient.vitals.heartRate) : '--'}
+              </div>
+              <div className="text-red-300 text-xs">{formattedVitals.heartRate.unit}</div>
             </div>
 
             <div className="bg-gray-900 rounded border-l-2 border-blue-600 p-2">
@@ -272,8 +287,12 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <Droplets className="w-4 h-4 text-blue-500" />
                 <span className="text-blue-300 text-xs font-bold">BP</span>
               </div>
-              <div className="text-xl font-mono font-bold text-blue-400">{`${safeVitals.systolicPressure}/${safeVitals.diastolicPressure}`}</div>
-              <div className="text-blue-300 text-xs">mmHg</div>
+              <div className="text-xl font-mono font-bold text-blue-400">
+                {patient.vitals?.systolicPressure !== undefined && patient.vitals?.diastolicPressure !== undefined
+                  ? `${Math.round(patient.vitals.systolicPressure)}/${Math.round(patient.vitals.diastolicPressure)}`
+                  : '--/--'}
+              </div>
+              <div className="text-blue-300 text-xs">{formattedVitals.bloodPressure.unit}</div>
             </div>
 
             <div className="bg-gray-900 rounded border-l-2 border-cyan-600 p-2">
@@ -281,8 +300,10 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <Activity className="w-4 h-4 text-cyan-500" />
                 <span className="text-cyan-300 text-xs font-bold">O2</span>
               </div>
-              <div className="text-2xl font-mono font-bold text-cyan-400">{safeVitals.oxygenSaturation}</div>
-              <div className="text-cyan-300 text-xs">%</div>
+              <div className="text-2xl font-mono font-bold text-cyan-400">
+                {patient.vitals?.oxygenSaturation !== undefined ? Math.round(patient.vitals.oxygenSaturation) : '--'}
+              </div>
+              <div className="text-cyan-300 text-xs">{formattedVitals.spO2.unit}</div>
             </div>
 
             <div className="bg-gray-900 rounded border-l-2 border-amber-600 p-2">
@@ -290,8 +311,10 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <Thermometer className="w-4 h-4 text-amber-500" />
                 <span className="text-amber-300 text-xs font-bold">TEMP</span>
               </div>
-              <div className="text-xl font-mono font-bold text-amber-400">{safeVitals.skinTemperature.toFixed(1)}</div>
-              <div className="text-amber-300 text-xs">°F</div>
+              <div className="text-xl font-mono font-bold text-amber-400">
+                {formattedVitals.temperature.value.replace('°F', '')}
+              </div>
+              <div className="text-amber-300 text-xs">{formattedVitals.temperature.unit}</div>
             </div>
           </div>
 
@@ -303,7 +326,7 @@ export const PatientMonitor: React.FC<PatientMonitorProps> = ({
                 <span className="text-green-300 text-sm font-bold">{isECGMode ? 'ECG' : 'EEG'}</span>
               </div>
               <div className="text-green-400 text-sm font-mono">
-                {isECGMode ? `${safeVitals.ecgReading} mV` : 'ACTIVE'}
+                {isECGMode ? `${ecgReading} mV` : 'ACTIVE'}
               </div>
             </div>
 

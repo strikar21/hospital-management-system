@@ -454,7 +454,7 @@ describe('AlertProcessor', () => {
 
       expect(grouped.size).toBe(1);
       // Undefined patientId becomes string 'undefined' as Map key
-      expect(grouped.get(undefined)).toHaveLength(1);
+      expect(grouped.get('unknown')).toHaveLength(1);
     });
   });
 
