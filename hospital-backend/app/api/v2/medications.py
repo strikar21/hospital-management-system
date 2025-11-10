@@ -9,6 +9,8 @@ import logging
 from ...services.service_factory import get_medication_service
 from ...validators.medical_validators import MedicationRequest, MedicationUpdate
 from ...core.auth_dependencies import require_medical_staff
+from ...core.errors import MedicationNotFoundError, ValidationError, DatabaseError
+from ...models.api_response import create_list_response, create_success_response, create_operation_response
 
 router = APIRouter(dependencies=[Depends(require_medical_staff)])
 logger = logging.getLogger(__name__)
@@ -22,11 +24,15 @@ async def list_medications():
         medications = await medication_service.get_all()
 
         logger.info(f"✅ Retrieved {len(medications)} total medications")
-        return {"medications": medications, "count": len(medications)}
+        return create_list_response(
+            data=medications,
+            total=len(medications),
+            message="Medications retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error listing medications: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to list medications", operation="list_medications")
 
 
 @router.get("/patient/{patient_id}")
@@ -48,11 +54,15 @@ async def get_patient_medications(patient_id: str):
             )
 
         logger.info(f"✅ Retrieved {len(medications)} medications for patient {patient_id}")
-        return {"medications": medications, "count": len(medications)}
+        return create_list_response(
+            data=medications,
+            total=len(medications),
+            message=f"Medications for patient {patient_id} retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting medications for patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to get patient medications", operation="get_patient_medications")
 
 
 @router.post("/patient/{patient_id}")
@@ -74,16 +84,21 @@ async def add_medication(
         )
 
         if not result:
-            raise HTTPException(status_code=400, detail="Failed to add medication")
+            raise ValidationError("Failed to add medication - invalid data or patient not found")
 
         logger.info(f"✅ Added medication '{medication.name}' to patient {patient_id}")
-        return result
+        return create_success_response(
+            data=result,
+            message=f"Medication '{medication.name}' added successfully"
+        )
 
+    except ValidationError:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error adding medication to patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to add medication", operation="add_medication")
 
 
 @router.get("/patient/{patient_id}/active")
@@ -97,11 +112,15 @@ async def get_active_medications(patient_id: str):
         active_medications = [med for med in medications if med.get('status') == 'active']
 
         logger.info(f"✅ Retrieved {len(active_medications)} active medications for patient {patient_id}")
-        return {"medications": active_medications, "count": len(active_medications)}
+        return create_list_response(
+            data=active_medications,
+            total=len(active_medications),
+            message=f"Active medications for patient {patient_id} retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting active medications for patient {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to get active medications", operation="get_active_medications")
 
 
 @router.post("/patient/{patient_id}/add")
@@ -127,11 +146,15 @@ async def get_medication_types():
         ]
 
         logger.info(f"✅ Retrieved {len(types)} medication types")
-        return {"types": types, "count": len(types)}
+        return create_list_response(
+            data=types,
+            total=len(types),
+            message="Medication types retrieved successfully"
+        )
 
     except Exception as e:
         logger.error(f"❌ Error getting medication types: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to get medication types", operation="get_medication_types")
 
 
 @router.put("/{medication_id}/status")
@@ -139,6 +162,10 @@ async def update_medication_status_simplified(medication_id: str, status_data: d
     """Update medication status (simplified path for frontend)"""
     try:
         medication_service = get_medication_service()
+
+        # Validate status field
+        if not status_data.get('status'):
+            raise ValidationError("Status is required", field="status")
 
         # Try to find the medication first to get patient_id
         # This is a simplified approach - in production, you might want to store patient context
@@ -150,16 +177,18 @@ async def update_medication_status_simplified(medication_id: str, status_data: d
         )
 
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to update medication")
+            raise MedicationNotFoundError(medication_id=medication_id)
 
         logger.info(f"✅ Updated medication {medication_id} status")
-        return {"success": True, "message": "Medication status updated successfully"}
+        return create_operation_response("Medication status updated successfully")
 
+    except (ValidationError, MedicationNotFoundError):
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error updating medication {medication_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to update medication status", operation="update_medication_status_simplified")
 
 
 @router.post("/{medication_id}/complete")
@@ -176,16 +205,18 @@ async def complete_medication(medication_id: str, completion_data: dict):
         )
 
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to complete medication")
+            raise MedicationNotFoundError(medication_id=medication_id)
 
         logger.info(f"✅ Completed medication administration {medication_id}")
-        return {"success": True, "message": "Medication administration recorded"}
+        return create_operation_response("Medication administration recorded successfully")
 
+    except (ValidationError, MedicationNotFoundError):
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error completing medication {medication_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise DatabaseError(message="Failed to complete medication", operation="complete_medication")
 
 
 @router.put("/patient/{patient_id}/{medication_id}/status")
@@ -198,6 +229,10 @@ async def update_medication_status(
     try:
         medication_service = get_medication_service()
 
+        # Validate status field
+        if not status_data.get('status'):
+            raise ValidationError("Status is required", field="status")
+
         success = await medication_service.update_medication(
             patient_id=patient_id,
             medication_id=medication_id,
@@ -206,13 +241,15 @@ async def update_medication_status(
         )
 
         if not success:
-            raise HTTPException(status_code=400, detail="Failed to update medication")
+            raise MedicationNotFoundError(medication_id=medication_id)
 
         logger.info(f"✅ Updated medication {medication_id} status for patient {patient_id}")
-        return {"success": True, "message": "Medication status updated successfully"}
+        return create_operation_response("Medication status updated successfully")
 
+    except (ValidationError, MedicationNotFoundError):
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
     except Exception as e:
         logger.error(f"❌ Error updating medication {medication_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))# Trigger reload
+        raise DatabaseError(message="Failed to update medication status", operation="update_medication_status")
