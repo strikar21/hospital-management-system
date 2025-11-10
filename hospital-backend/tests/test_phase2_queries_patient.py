@@ -36,11 +36,15 @@ class TestPatientQueries:
         assert result is not None
         assert isinstance(result, dict)
 
-        # Check camelCase column names
+        # Check camelCase column names (matching actual database schema)
         assert 'id' in result
         assert 'firstName' in result
         assert 'lastName' in result
         assert 'dateOfBirth' in result
+        assert 'phoneNumber' in result
+        assert 'emergencyContactName' in result
+        assert 'emergencyContactPhone' in result
+        assert 'bloodType' in result
         assert 'admissionDate' in result
         assert 'roomNumber' in result
         assert 'bedNumber' in result
@@ -118,10 +122,10 @@ class TestPatientQueriesFieldValidation:
 
         result = await get_patient_by_id(db_connection, test_patient_id)
 
-        # Required fields as per query
+        # Required fields as per query (matching actual database schema)
         required_fields = [
             'id', 'firstName', 'lastName', 'dateOfBirth', 'gender',
-            'contactNumber', 'emergencyContact', 'bloodGroup',
+            'phoneNumber', 'emergencyContactName', 'emergencyContactPhone', 'bloodType',
             'admissionDate', 'roomNumber', 'bedNumber',
             'diagnosis', 'status', 'createdAt', 'updatedAt'
         ]
@@ -140,7 +144,7 @@ class TestPatientQueriesFieldValidation:
             patient = result[0]
 
             # Check for camelCase (should have these)
-            camelcase_fields = ['firstName', 'lastName', 'dateOfBirth', 'contactNumber',
+            camelcase_fields = ['firstName', 'lastName', 'dateOfBirth', 'phoneNumber',
                                 'roomNumber', 'bedNumber', 'admissionDate']
 
             for field in camelcase_fields:

@@ -21,8 +21,8 @@ async def get_patient_by_id(conn: asyncpg.Connection, patient_id: str) -> Option
     query = """
         SELECT
             id, "firstName", "lastName", "dateOfBirth", gender,
-            "contactNumber", "emergencyContact", "bloodGroup",
-            "admissionDate", "roomNumber", "bedNumber",
+            "phoneNumber", "emergencyContactName", "emergencyContactPhone",
+            "bloodType", "admissionDate", "roomNumber", "bedNumber",
             diagnosis, status, "createdAt", "updatedAt"
         FROM patients
         WHERE id = $1
@@ -54,7 +54,7 @@ async def get_patients_by_status(
     query = """
         SELECT
             id, "firstName", "lastName", "dateOfBirth", gender,
-            "contactNumber", "roomNumber", "bedNumber",
+            "phoneNumber", "roomNumber", "bedNumber",
             diagnosis, status, "admissionDate"
         FROM patients
         WHERE status = $1
