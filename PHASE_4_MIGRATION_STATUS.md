@@ -88,11 +88,33 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-## Next Modules (Not Yet Started)
+## Module 3: Alert Thresholds - ✅ ALREADY COMPLETE
 
-### Module 3: Alert Thresholds
-**Status:** Ready to migrate (29 tests passing)
-**Estimated Time:** 45 minutes
+**Status:** Discovered to be already migrated (earlier refactoring work)
+
+**What Was Done (Earlier):**
+- mqtt_service.py already uses `AlertPipeline` for all alert generation
+- `AlertPipeline` internally uses `VITAL_THRESHOLDS` from domain schemas
+- All clinical threshold checking uses `check_vital_threshold()` from alert rules module
+- Hardcoded values in mqtt_service.py are for **security validation only** (physiologically impossible ranges), not clinical alerts
+
+**Files Using Alert Rules Module:**
+- **app/services/mqtt_service.py** - Uses `AlertPipeline` for all vital alert generation (lines 192-277)
+- **app/domain/alerts/pipeline.py** - Uses `VITAL_THRESHOLDS` and threshold checker (line 54)
+- **app/domain/vitals/normalizer.py** - Uses `VITAL_THRESHOLDS` for validation
+
+**Impact:**
+- Zero hardcoded clinical thresholds remain in production code
+- All alert generation centralized in AlertPipeline
+- ICMR-compliant thresholds used throughout system
+
+**Test Results:** 29/29 alert rules tests passing ✅
+
+**Documentation:** See [MODULE_3_ALREADY_COMPLETE.md](../MODULE_3_ALREADY_COMPLETE.md) for detailed analysis
+
+---
+
+## Next Modules (Not Yet Started)
 
 ### Module 4: Alert Generation
 **Status:** Ready to migrate (19 tests passing)
@@ -120,8 +142,15 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 - ✅ No breaking changes
 - ✅ Committed to git (1 commit)
 
+### Module 3: Alert Thresholds ✅ ALREADY COMPLETE
+- ✅ All alert generation uses AlertPipeline
+- ✅ All threshold checks use VITAL_THRESHOLDS
+- ✅ Zero hardcoded clinical thresholds
+- ✅ All tests passing (29/29)
+- ✅ Discovered during Phase 4 audit
+
 ### Overall Progress
-- **Modules Completed:** 2/5 (40%)
+- **Modules Completed:** 3/5 (60%)
 - **Test Coverage:** 100% (95/95 passing)
 - **Breaking Changes:** 0
 - **Code Reduction:** ~60 lines duplicate code removed
@@ -149,5 +178,5 @@ All production code files that used `to_utc_now()`, `format_iso8601()`, or `pars
 
 ---
 
-**Status:** ✅ Modules 1 and 2 migrations complete and committed (40% done)
-**Next Action:** Continue with Module 3 (Alert Thresholds) or pause here
+**Status:** ✅ Modules 1, 2, and 3 complete (60% done) - Module 3 was already migrated earlier
+**Next Action:** Continue with Module 4 (Alert Generation) or Module 5 (Patient Queries), or pause here
