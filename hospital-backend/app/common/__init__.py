@@ -1,6 +1,8 @@
 """
 Common utilities shared across all services.
 Provides centralized implementations for cross-cutting concerns.
+
+NEW: Modular datetime utilities available at app.common.datetime
 """
 
 from .datetime_utils import (
