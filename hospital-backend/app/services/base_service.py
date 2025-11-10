@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 
 from ..repositories.base_repository import BaseRepository
+from ..common.datetime import now_utc
 
 T = TypeVar('T')
 
@@ -174,7 +175,7 @@ class BaseService(ABC):
                 timestamp_cleaned = base + tz
 
             item_time = datetime.fromisoformat(timestamp_cleaned)
-            now = datetime.utcnow()
+            now = now_utc()
             time_diff = now - item_time.replace(tzinfo=None)
             max_edit_window = timedelta(hours=24)
 
@@ -190,7 +191,7 @@ class BaseService(ABC):
         # For now, return basic context
         return {
             'userId': user_id,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': now_utc().isoformat()
         }
 
     # ================================

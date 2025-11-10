@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Tuple
 from cryptography import x509
+from ..common.datetime import now_utc
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -107,7 +108,7 @@ class CertificateService:
         logger.debug(f"Certificate serial number: {serial_number}")
 
         # Set validity period
-        not_valid_before = datetime.utcnow()
+        not_valid_before = now_utc()
         not_valid_after = not_valid_before + timedelta(days=validity_days)
         cert_builder = cert_builder.not_valid_before(not_valid_before)
         cert_builder = cert_builder.not_valid_after(not_valid_after)
@@ -210,7 +211,7 @@ class CertificateService:
             )
 
             # Verify certificate is not expired
-            now = datetime.utcnow()
+            now = now_utc()
             if now < cert.not_valid_before or now > cert.not_valid_after:
                 logger.warning(f"Certificate is expired or not yet valid")
                 return False
