@@ -235,7 +235,10 @@ async def createTables():
             "dischargeStatus" TEXT DEFAULT 'active',
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
-            "recommendedFrom" TEXT
+            "recommendedFrom" TEXT,
+            mrn VARCHAR(50) UNIQUE,  -- Medical Record Number
+            weight NUMERIC(5,2),  -- Patient weight in kg
+            diagnosis TEXT  -- Primary diagnosis
         );
         
         -- Devices table
@@ -257,7 +260,14 @@ async def createTables():
             "calibrationDate" TIMESTAMPTZ,
             "nextMaintenanceDate" TIMESTAMPTZ,
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
-            "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+            "updatedAt" TIMESTAMPTZ DEFAULT NOW(),
+            -- Device maintenance tracking fields
+            "lastCalibrationDate" TIMESTAMP,
+            "calibrationDueDate" TIMESTAMP,
+            "batteryHealthPercentage" INTEGER,
+            "totalDisconnects" INTEGER DEFAULT 0,
+            "lastCommandSentAt" TIMESTAMP,
+            "lastCommandAckAt" TIMESTAMP
         );
         
         -- Device Assignments table
@@ -395,13 +405,19 @@ async def createTables():
         CREATE TABLE IF NOT EXISTS patient_alerts (
             id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
             "patientId" TEXT NOT NULL,
+            "deviceId" TEXT,  -- Device that generated the alert
             type TEXT NOT NULL DEFAULT 'vital',
             message TEXT NOT NULL,
             severity TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
+            source TEXT NOT NULL DEFAULT 'Backend',  -- 'ESP32', 'Backend', 'Manual'
+            "alertTimestamp" TIMESTAMP NOT NULL DEFAULT NOW(),  -- When alert actually occurred
             "vitalType" TEXT,
             "vitalValue" NUMERIC(10,2),
             "thresholdValue" NUMERIC(10,2),
+            category TEXT,  -- Alert category for grouping
+            confidence DOUBLE PRECISION,  -- Confidence score 0.0-1.0
+            context JSONB,  -- Additional context data
             "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             "acknowledgedBy" TEXT,
             "acknowledgedAt" TIMESTAMPTZ,
@@ -473,6 +489,199 @@ async def createTables():
             "createdAt" TIMESTAMPTZ DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ DEFAULT NOW()
         );
+
+        -- Case Entries table (Patient Case Sheet)
+        CREATE TABLE IF NOT EXISTS "caseEntries" (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "patientId" TEXT NOT NULL,
+            "entryType" TEXT NOT NULL,
+            description TEXT NOT NULL,
+            findings TEXT,
+            recommendations TEXT,
+            "followUpDate" DATE,
+            severity TEXT,
+            category TEXT,
+            "createdBy" TEXT NOT NULL,
+            timestamp TIMESTAMPTZ NOT NULL,
+            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "deletedAt" TIMESTAMPTZ,
+            "performedBy" TEXT
+        );
+
+        -- Medical Operations table (Idempotency Tracking)
+        CREATE TABLE IF NOT EXISTS medical_operations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "idempotencyKey" VARCHAR NOT NULL UNIQUE,
+            "operationType" VARCHAR NOT NULL,
+            "patientId" TEXT NOT NULL,
+            result JSONB,
+            status VARCHAR NOT NULL,
+            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "completedAt" TIMESTAMPTZ
+        );
+
+        -- Atomic Transactions table (Transaction Recovery)
+        CREATE TABLE IF NOT EXISTS atomic_transactions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "transactionId" UUID NOT NULL,
+            "patientId" TEXT NOT NULL,
+            "operationType" VARCHAR NOT NULL,
+            "operationData" JSONB NOT NULL,
+            status VARCHAR NOT NULL,
+            "startedAt" TIMESTAMPTZ NOT NULL,
+            "completedAt" TIMESTAMPTZ,
+            "errorMessage" TEXT,
+            "retryCount" INTEGER
+        );
+
+        -- Device Baselines table (Device Performance Tracking)
+        CREATE TABLE IF NOT EXISTS "deviceBaselines" (
+            "baselineId" SERIAL PRIMARY KEY,
+            "deviceId" TEXT NOT NULL,
+            "batteryDrainRatePerHour" DOUBLE PRECISION,
+            "batteryHealthPercentage" INTEGER,
+            "heartRateMean" DOUBLE PRECISION,
+            "heartRateStdDev" DOUBLE PRECISION,
+            "spo2Mean" DOUBLE PRECISION,
+            "spo2StdDev" DOUBLE PRECISION,
+            "temperatureMean" DOUBLE PRECISION,
+            "temperatureStdDev" DOUBLE PRECISION,
+            "systolicBpMean" DOUBLE PRECISION,
+            "systolicBpStdDev" DOUBLE PRECISION,
+            "diastolicBpMean" DOUBLE PRECISION,
+            "diastolicBpStdDev" DOUBLE PRECISION,
+            "baselineCalculatedAt" TIMESTAMP,
+            "baselineUpdatedAt" TIMESTAMP,
+            "sampleCount" INTEGER,
+            "calculationPeriodDays" INTEGER
+        );
+
+        -- Device Calibration table (Calibration History)
+        CREATE TABLE IF NOT EXISTS "deviceCalibration" (
+            "calibrationId" SERIAL PRIMARY KEY,
+            "deviceId" TEXT NOT NULL,
+            "calibratedAt" TIMESTAMP NOT NULL,
+            "calibratedBy" TEXT,
+            "calibrationType" TEXT,
+            "sensorType" TEXT,
+            notes TEXT,
+            "expiresAt" TIMESTAMP,
+            "createdAt" TIMESTAMP DEFAULT NOW()
+        );
+
+        -- Device Maintenance History table
+        CREATE TABLE IF NOT EXISTS "deviceMaintenanceHistory" (
+            "maintenanceId" SERIAL PRIMARY KEY,
+            "deviceId" TEXT NOT NULL,
+            "maintenanceType" TEXT NOT NULL,
+            "performedAt" TIMESTAMP NOT NULL,
+            "performedBy" TEXT,
+            notes TEXT,
+            "nextMaintenanceDue" TIMESTAMP,
+            cost NUMERIC,
+            "createdAt" TIMESTAMP DEFAULT NOW()
+        );
+
+        -- Device Certificates table (TLS Certificates for ESP32)
+        CREATE TABLE IF NOT EXISTS device_certificates (
+            id SERIAL PRIMARY KEY,
+            "deviceId" VARCHAR NOT NULL,
+            "certificatePem" TEXT NOT NULL,
+            "issuedAt" TIMESTAMPTZ DEFAULT NOW(),
+            "expiresAt" TIMESTAMPTZ NOT NULL,
+            revoked BOOLEAN DEFAULT FALSE,
+            "revokedAt" TIMESTAMPTZ,
+            "revokedBy" VARCHAR,
+            "revocationReason" TEXT,
+            "macAddress" VARCHAR NOT NULL,
+            "serialNumber" VARCHAR
+        );
+
+        -- Device MAC Mapping table
+        CREATE TABLE IF NOT EXISTS device_mac_mapping (
+            "macAddress" TEXT PRIMARY KEY,
+            "deviceId" TEXT NOT NULL,
+            "createdAt" TIMESTAMP DEFAULT NOW(),
+            "updatedAt" TIMESTAMP DEFAULT NOW()
+        );
+
+        -- Provisioning Codes table (Device Provisioning)
+        CREATE TABLE IF NOT EXISTS provisioning_codes (
+            code VARCHAR PRIMARY KEY,
+            "technicianId" VARCHAR NOT NULL,
+            "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+            "expiresAt" TIMESTAMPTZ NOT NULL,
+            used BOOLEAN DEFAULT FALSE,
+            "usedAt" TIMESTAMPTZ,
+            "deviceId" VARCHAR
+        );
+
+        -- Watch Removal Events table
+        CREATE TABLE IF NOT EXISTS watchremovalevents (
+            eventid SERIAL PRIMARY KEY,
+            patientid TEXT NOT NULL,
+            deviceid TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            duration INTEGER,
+            reason TEXT
+        );
+
+        -- Impedance Readings table
+        CREATE TABLE IF NOT EXISTS impedancereadings (
+            readingid SERIAL PRIMARY KEY,
+            patientid TEXT NOT NULL,
+            deviceid TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            impedance DOUBLE PRECISION NOT NULL
+        );
+
+        -- Patient States table (Alert State Tracking)
+        CREATE TABLE IF NOT EXISTS patientstates (
+            stateid SERIAL PRIMARY KEY,
+            patientid TEXT NOT NULL UNIQUE,
+            tachycardiastarttime TIMESTAMP,
+            tachycardiaalertsent BOOLEAN,
+            bradycardiastarttime TIMESTAMP,
+            bradycardiaalertsent BOOLEAN,
+            hypotensionstarttime TIMESTAMP,
+            hypotensionalertsent BOOLEAN,
+            hypoxiastarttime TIMESTAMP,
+            hypoxiaalertsent BOOLEAN,
+            feverstarttime TIMESTAMP,
+            feveralertsent BOOLEAN,
+            hypothermiastarttime TIMESTAMP,
+            hypothermiaalertsent BOOLEAN,
+            lastvitalstimestamp TIMESTAMP,
+            novitalsalertsent BOOLEAN,
+            connectiondrops JSONB,
+            createdat TIMESTAMP DEFAULT NOW(),
+            updatedat TIMESTAMP DEFAULT NOW()
+        );
+
+        -- Token Blacklist table (JWT Token Revocation)
+        CREATE TABLE IF NOT EXISTS token_blacklist (
+            token TEXT PRIMARY KEY,
+            blacklisted_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP NOT NULL
+        );
+
+        -- Legacy Therapies table (for backwards compatibility)
+        CREATE TABLE IF NOT EXISTS therapies_legacy (
+            id TEXT PRIMARY KEY,
+            "patientId" TEXT NOT NULL,
+            "therapyType" VARCHAR NOT NULL,
+            "therapyName" VARCHAR NOT NULL,
+            description TEXT,
+            "startDate" DATE,
+            "endDate" DATE,
+            frequency VARCHAR,
+            "sessionDuration" INTEGER,
+            status VARCHAR,
+            "createdAt" TIMESTAMP DEFAULT NOW(),
+            "updatedAt" TIMESTAMP DEFAULT NOW(),
+            "createdBy" TEXT
+        );
         """
     
     try:
@@ -540,6 +749,59 @@ async def createTables():
 
                 logger.info("✅ Database indexes created successfully (10 indexes)")
 
+                # Create devices_enriched view (joining devices, assignments, and patients)
+                await conn.execute('''
+                    CREATE OR REPLACE VIEW devices_enriched AS
+                    SELECT
+                        d.id,
+                        d."deviceType",
+                        d.name,
+                        d."serialNumber",
+                        d."macAddress",
+                        d."firmwareVersion",
+                        d.status,
+                        d.location,
+                        d.description,
+                        d."batteryLevel",
+                        d."lastSeen",
+                        d."calibrationDate",
+                        d."nextMaintenanceDate",
+                        d."createdAt",
+                        d."updatedAt",
+                        d.model,
+                        d.manufacturer,
+                        da.id as "assignmentId",
+                        da."patientId" as "assignedPatientId",
+                        da."assignedBy",
+                        da."assignedAt",
+                        da."unassignedBy",
+                        da."unassignedAt",
+                        da."unassignmentReason",
+                        da.status as "assignmentStatus",
+                        p."firstName" as "patientFirstName",
+                        p."lastName" as "patientLastName",
+                        p."roomNumber",
+                        p."bedNumber",
+                        CONCAT(p."firstName", ' ', p."lastName") as "patientName",
+                        CONCAT(p."roomNumber", '-', p."bedNumber") as "patientLocation",
+                        CASE
+                            WHEN d."lastSeen" > NOW() - INTERVAL '5 minutes' THEN 'connected'
+                            WHEN d."lastSeen" > NOW() - INTERVAL '30 minutes' THEN 'idle'
+                            ELSE 'disconnected'
+                        END as "connectionStatus",
+                        CASE
+                            WHEN d."batteryLevel" > 50 THEN 'good'
+                            WHEN d."batteryLevel" > 20 THEN 'medium'
+                            ELSE 'low'
+                        END as "batteryStatus",
+                        EXTRACT(EPOCH FROM (NOW() - d."lastSeen")) / 60 as "minutesSinceLastSeen"
+                    FROM devices d
+                    LEFT JOIN deviceassignments da ON d.id = da."deviceId" AND da.status = 'active'
+                    LEFT JOIN patients p ON da."patientId" = p.id
+                ''')
+
+                logger.info("✅ devices_enriched view created successfully")
+
             except Exception as migrationError:
                 logger.warning(f"⚠️ Migration warning (may be expected): {migrationError}")
 
@@ -550,13 +812,155 @@ async def createTables():
         raise
 
 async def createTimescaleTables():
-    """Create TimescaleDB hypertables for vitals data"""
-    
+    """Create TimescaleDB hypertables for vitals and waveform data"""
+
     timescaleSql = """
     -- Enable TimescaleDB extension
     CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-    
-    -- Create vitals_timeseries table (using camelCase schema)
+
+    -- ========================================
+    -- PRIMARY VITALS TABLE (ACTIVELY USED)
+    -- ========================================
+    CREATE TABLE IF NOT EXISTS vitals_realtime (
+        time TIMESTAMPTZ NOT NULL,
+        "patientId" UUID NOT NULL,
+        "deviceId" VARCHAR(50) NOT NULL,
+        mode VARCHAR(10) NOT NULL CHECK (mode IN ('ecg', 'eeg')),
+
+        -- Standard vitals
+        "heartRate" INTEGER,
+        "respiratoryRate" INTEGER,
+        "skinTemperature" NUMERIC(4,1),
+        "oxygenSaturation" INTEGER,
+        "systolicPressure" INTEGER CHECK ("systolicPressure" >= 60 AND "systolicPressure" <= 200),
+        "diastolicPressure" INTEGER CHECK ("diastolicPressure" >= 40 AND "diastolicPressure" <= 130),
+
+        -- Device status
+        "batteryLevel" INTEGER,
+        "signalQuality" NUMERIC(3,2),
+
+        -- ECG metrics
+        "rrInterval" INTEGER,
+        "qrsDuration" INTEGER,
+        "qtInterval" INTEGER,
+        axis INTEGER,
+        rhythm VARCHAR(50),
+        "stSegment" VARCHAR(20),
+
+        -- EEG metrics
+        "alphaPower" NUMERIC(5,2),
+        "betaPower" NUMERIC(5,2),
+        "thetaPower" NUMERIC(5,2),
+        "deltaPower" NUMERIC(5,2),
+        "gammaPower" NUMERIC(5,2),
+        "dominantFrequency" NUMERIC(5,2),
+        "seizureActivity" BOOLEAN,
+
+        -- New sensor vitals (v5.2.13+)
+        tremor NUMERIC(4,2) CHECK (tremor >= 0.0 AND tremor <= 10.0),
+        bioimpedance NUMERIC(5,2) CHECK (bioimpedance >= 20.0 AND bioimpedance <= 50.0),
+        "imuFallRisk" NUMERIC(4,2) CHECK ("imuFallRisk" >= 0.0 AND "imuFallRisk" <= 10.0),
+        "perfusionIndex" NUMERIC(5,2) CHECK ("perfusionIndex" >= 0.0 AND "perfusionIndex" <= 20.0),
+        "stepCount" INTEGER,
+        "watchWorn" BOOLEAN,
+        "lastMovementTime" INTEGER,
+
+        -- Metadata
+        quality JSONB,
+        sequence INTEGER,
+        metadata JSONB
+    );
+
+    -- Convert to hypertable (only if not already)
+    SELECT create_hypertable('vitals_realtime', 'time', if_not_exists => TRUE);
+
+    -- Create performance indexes
+    CREATE INDEX IF NOT EXISTS idx_vitals_realtime_patient_time ON vitals_realtime ("patientId", time DESC);
+    CREATE INDEX IF NOT EXISTS idx_vitals_realtime_device_time ON vitals_realtime ("deviceId", time DESC);
+    CREATE INDEX IF NOT EXISTS idx_vitals_tremor ON vitals_realtime ("patientId", tremor) WHERE tremor > 5.0;
+    CREATE INDEX IF NOT EXISTS idx_vitals_fall_risk ON vitals_realtime ("patientId", "imuFallRisk") WHERE "imuFallRisk" > 7.0;
+    CREATE INDEX IF NOT EXISTS idx_vitals_perfusion ON vitals_realtime ("patientId", "perfusionIndex") WHERE "perfusionIndex" < 0.5;
+    CREATE INDEX IF NOT EXISTS idx_vitals_watch_off ON vitals_realtime ("patientId", "watchWorn", time) WHERE "watchWorn" = false;
+    CREATE INDEX IF NOT EXISTS idx_vitals_bp ON vitals_realtime ("patientId", "systolicPressure", "diastolicPressure") WHERE "systolicPressure" IS NOT NULL;
+
+    -- ========================================
+    -- WAVEFORM DATA TABLE
+    -- ========================================
+    CREATE TABLE IF NOT EXISTS waveform_snapshots (
+        time TIMESTAMPTZ NOT NULL,
+        "patientId" UUID NOT NULL,
+        "deviceId" VARCHAR(50) NOT NULL,
+        mode VARCHAR(10) NOT NULL CHECK (mode IN ('ecg', 'eeg')),
+        "sampleRate" INTEGER NOT NULL,
+        duration NUMERIC(5,2) NOT NULL,
+
+        -- ECG channels (JSONB arrays of samples)
+        "ecgLimbLeads" JSONB,
+        "ecgPrecordialLeads" JSONB,
+        "ecgDerivedLeads" JSONB,
+        "ecgEvents" JSONB,
+
+        -- EEG channels (JSONB arrays of samples)
+        "eegFrontalChannels" JSONB,
+        "eegCentralChannels" JSONB,
+        "eegOccipitalChannels" JSONB,
+        "eegAnalysis" JSONB,
+
+        -- Metadata
+        quality JSONB,
+        sequence INTEGER,
+        compression VARCHAR(20),
+        metadata JSONB
+    );
+
+    -- Convert to hypertable
+    SELECT create_hypertable('waveform_snapshots', 'time', if_not_exists => TRUE);
+
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_waveform_snapshots_patient_mode_time ON waveform_snapshots ("patientId", mode, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_waveform_snapshots_device_time ON waveform_snapshots ("deviceId", time DESC);
+    CREATE INDEX IF NOT EXISTS idx_waveform_snapshots_mode_time ON waveform_snapshots (mode, time DESC);
+
+    -- ========================================
+    -- NEURAL EVENTS TABLE
+    -- ========================================
+    CREATE TABLE IF NOT EXISTS neural_events (
+        time TIMESTAMPTZ NOT NULL,
+        "patientId" UUID NOT NULL,
+        "deviceId" VARCHAR(50) NOT NULL,
+        "eventType" VARCHAR(50) NOT NULL,
+        severity VARCHAR(20) NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+        confidence NUMERIC(3,2) NOT NULL,
+        mode VARCHAR(10) NOT NULL CHECK (mode IN ('ecg', 'eeg')),
+
+        -- Event details
+        "sampleRate" INTEGER,
+        duration NUMERIC(5,2),
+        context JSONB,
+        waveform JSONB,
+        actions JSONB,
+
+        -- Resolution tracking
+        acknowledged BOOLEAN DEFAULT false,
+        "acknowledgedBy" VARCHAR(100),
+        "acknowledgedAt" TIMESTAMPTZ,
+        resolved BOOLEAN DEFAULT false,
+        "resolvedAt" TIMESTAMPTZ,
+
+        metadata JSONB
+    );
+
+    -- Convert to hypertable
+    SELECT create_hypertable('neural_events', 'time', if_not_exists => TRUE);
+
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_neural_events_patient_time ON neural_events ("patientId", time DESC);
+    CREATE INDEX IF NOT EXISTS idx_neural_events_type_severity ON neural_events ("eventType", severity, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_neural_events_unresolved ON neural_events (resolved, time DESC) WHERE NOT resolved;
+
+    -- ========================================
+    -- LEGACY VITALS TABLE (for backwards compatibility)
+    -- ========================================
     CREATE TABLE IF NOT EXISTS vitals_timeseries (
         time TIMESTAMPTZ NOT NULL,
         "patientId" TEXT NOT NULL,
@@ -568,21 +972,21 @@ async def createTimescaleTables():
         "rawData" JSONB,
         metadata JSONB
     );
-    
+
     -- Convert to hypertable (only if not already a hypertable)
     SELECT create_hypertable('vitals_timeseries', 'time', if_not_exists => TRUE);
-    
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_vitals_patient_time ON vitals_timeseries ("patientId", time);
     CREATE INDEX IF NOT EXISTS idx_vitals_device_time ON vitals_timeseries ("deviceId", time);
     CREATE INDEX IF NOT EXISTS idx_vitals_metric ON vitals_timeseries ("patientId", "vitalType", time);
     """
-    
+
     try:
         async with getTimescaleConnection() as conn:
             await conn.execute(timescaleSql)
-            logger.info("✅ TimescaleDB hypertables created successfully")
-            
+            logger.info("✅ TimescaleDB hypertables created successfully (vitals_realtime, waveform_snapshots, neural_events, vitals_timeseries)")
+
     except Exception as e:
         logger.error(f"❌ Failed to create TimescaleDB tables: {e}")
 

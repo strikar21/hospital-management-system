@@ -14,8 +14,9 @@ from ...core.database import getDbConnection, getTimescaleConnection
 from ...core.auth_dependencies import verify_device_key
 from ...services.websocket_manager import connectionManager
 from ...services.audit import logAuditEvent
-from ...services.vital_alert_service import vital_alert_service
-from ...services.arrhythmia_detection_service import arrhythmia_detection_service
+# DEPRECATED: vital_alert_service removed - use MQTT + AlertPipeline instead
+# from ...services.vital_alert_service import vital_alert_service
+# from ...services.arrhythmia_detection_service import arrhythmia_detection_service
 from ...middleware.esp32_field_mapper import ESP32FieldMapper
 from ...middleware.esp32_hmac_auth import ESP32HMACAuth
 from ...core.config import settings
@@ -389,47 +390,49 @@ async def receiveVitalsData(
             )
 
         # ============================================
-        # PHASE 2: GENERATE ALERTS (BEST EFFORT)
+        # PHASE 2: GENERATE ALERTS (DEPRECATED - DISABLED)
         # ============================================
-        # DEPRECATED: This HTTP endpoint alert generation is legacy.
-        # ESP32 devices should use MQTT (hospital/devices/{deviceId}/vitals) instead.
+        # DEPRECATED: This HTTP endpoint alert generation is legacy and has been DISABLED.
+        # ESP32 devices MUST use MQTT (hospital/devices/{deviceId}/vitals) instead.
         # MQTT path uses AlertPipeline from domain layer for proper alert generation.
-        # This code path is kept for backwards compatibility only.
+        #
+        # The vital_alert_service and arrhythmia_detection_service modules have been
+        # removed in favor of the domain layer AlertPipeline architecture.
+        #
+        # This entire code block is commented out to prevent import errors.
+        # Vitals are still stored and broadcasted - only alert generation is disabled.
         alerts = []
-        try:
-            logger.warning(f"⚠️ DEPRECATED: Device {deviceId} using HTTP endpoint for vitals. Please migrate to MQTT.")
-            async with getDbConnection() as conn:
-                # Vital threshold alerts (existing)
-                alerts = await vital_alert_service.check_vitals_and_generate_alerts(
-                    patientId, deviceId, vitalsData, conn
-                )
+        logger.warning(f"⚠️ DEPRECATED: Device {deviceId} using HTTP endpoint. Alert generation disabled. Please migrate to MQTT.")
 
-                # NEW: Arrhythmia detection
-                if vitalsData.get('heartRate'):
-                    logger.info(f"🔬 CALLING ARRHYTHMIA DETECTION for patient {patientId}, HR: {vitalsData.get('heartRate')}")
-                    arrhythmia_alert = await arrhythmia_detection_service.detect_arrhythmia(
-                        patientId, deviceId, int(vitalsData['heartRate']), conn
-                    )
-                    logger.info(f"🔬 ARRHYTHMIA DETECTION RETURNED: {arrhythmia_alert}")
-                    if arrhythmia_alert:
-                        alerts.append(arrhythmia_alert)
-                        logger.info(f"🔬 ARRHYTHMIA ALERT APPENDED TO LIST")
-                else:
-                    logger.warning(f"⚠️ NO HEARTRATE IN VITALS DATA - arrhythmia detection skipped")
-
-            if alerts:
-                logger.warning(f"🚨 Generated {len(alerts)} alert(s) for patient {patientId}")
-                # Broadcast alerts via WebSocket
-                for alert in alerts:
-                    alert_type = 'arrhythmia_alert' if alert.get('alertType') else 'vital_threshold_alert'
-                    await connectionManager.sendAlert(patientId, {
-                        'type': alert_type,
-                        'alert': alert
-                    })
-
-        except Exception as e:
-            logger.error(f"⚠️ Alert generation failed (vitals already stored): {e}")
-            # DON'T raise - vitals are already stored, alert failure is non-critical
+        # COMMENTED OUT - Use MQTT + AlertPipeline instead
+        # try:
+        #     async with getDbConnection() as conn:
+        #         # Vital threshold alerts (existing)
+        #         alerts = await vital_alert_service.check_vitals_and_generate_alerts(
+        #             patientId, deviceId, vitalsData, conn
+        #         )
+        #
+        #         # NEW: Arrhythmia detection
+        #         if vitalsData.get('heartRate'):
+        #             arrhythmia_alert = await arrhythmia_detection_service.detect_arrhythmia(
+        #                 patientId, deviceId, int(vitalsData['heartRate']), conn
+        #             )
+        #             if arrhythmia_alert:
+        #                 alerts.append(arrhythmia_alert)
+        #
+        #     if alerts:
+        #         logger.warning(f"🚨 Generated {len(alerts)} alert(s) for patient {patientId}")
+        #         # Broadcast alerts via WebSocket
+        #         for alert in alerts:
+        #             alert_type = 'arrhythmia_alert' if alert.get('alertType') else 'vital_threshold_alert'
+        #             await connectionManager.sendAlert(patientId, {
+        #                 'type': alert_type,
+        #                 'alert': alert
+        #             })
+        #
+        # except Exception as e:
+        #     logger.error(f"⚠️ Alert generation failed (vitals already stored): {e}")
+        #     # DON'T raise - vitals are already stored, alert failure is non-critical
 
         # ============================================
         # PHASE 3: BROADCAST VITALS (BEST EFFORT)
