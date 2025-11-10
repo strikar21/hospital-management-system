@@ -10,6 +10,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime
 import uuid
 
+from app.common.waveform import decompress_delta, adc_to_millivolts, adc_to_microvolts
+
 logger = logging.getLogger(__name__)
 
 class ConnectionManager:
@@ -312,67 +314,8 @@ class ConnectionManager:
 # ============================================
 # WAVEFORM DATA PROCESSING HELPERS
 # ============================================
-
-def decompressChannelData(channelData: Dict[str, Any]) -> List[int]:
-    """
-    Decompress delta-encoded channel data
-    Format: {baseline: int, deltas: List[int]}
-    Returns: List of decompressed ADC values
-    """
-    if not channelData or 'baseline' not in channelData or 'deltas' not in channelData:
-        return []
-
-    baseline = channelData['baseline']
-    deltas = channelData['deltas']
-
-    # Reconstruct original values from delta encoding
-    values = [baseline]
-    for delta in deltas:
-        values.append(values[-1] + delta)
-
-    return values
-
-
-def convertADCToMillivolts(adcValues: List[int]) -> List[float]:
-    """
-    Convert 24-bit ADC values to millivolts for ECG display
-
-    ADC Format (from ESP32):
-    - Midpoint: 8388608 (2^23, representing 0V)
-    - Range: ±1.0V full scale
-    - Sensitivity: ~10 μV per LSB
-
-    Conversion formula:
-    mV = (ADC_value - midpoint) * 0.01
-
-    Example:
-    - ADC 8388608 → 0.00 mV (baseline)
-    - ADC 8410496 → 218.88 mV (positive deflection)
-    - ADC 8366720 → -218.88 mV (negative deflection)
-    """
-    ADC_MIDPOINT = 8388608  # 2^23
-    SENSITIVITY_MV = 0.01   # 10 μV per LSB = 0.01 mV per LSB
-
-    return [(value - ADC_MIDPOINT) * SENSITIVITY_MV for value in adcValues]
-
-
-def convertADCToMicrovolts(adcValues: List[int]) -> List[float]:
-    """
-    Convert 24-bit ADC values to microvolts for EEG display
-
-    ADC Format (from ESP32):
-    - Midpoint: 8388608 (2^23, representing 0V)
-    - Range: ±0.1V full scale for EEG
-    - Sensitivity: ~1 μV per LSB
-
-    Conversion formula:
-    μV = (ADC_value - midpoint) * 0.001
-    """
-    ADC_MIDPOINT = 8388608
-    SENSITIVITY_UV = 0.001  # 1 μV per LSB
-
-    return [(value - ADC_MIDPOINT) * SENSITIVITY_UV for value in adcValues]
-
+# NOTE: Core waveform functions (decompress_delta, adc_to_millivolts, adc_to_microvolts)
+# are now imported from app.common.waveform module (line 13)
 
 def processWaveformData(waveformData: Dict[str, Any]) -> Dict[str, Any]:
     """
