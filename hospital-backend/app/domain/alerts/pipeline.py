@@ -250,13 +250,17 @@ class AlertPipeline:
         try:
             async with self.pool.acquire() as conn:
                 # Insert alert into patient_alerts table
+                # Strip timezone for database compatibility (PostgreSQL timestamp without time zone)
+                created_at = alert['createdAt'].replace(tzinfo=None) if alert['createdAt'].tzinfo else alert['createdAt']
+
                 query = """
                     INSERT INTO patient_alerts (
-                        "patientId", type, severity, status, message,
+                        id, "patientId", type, severity, status, message,
+                        source, "alertTimestamp",
                         "vitalType", "vitalValue", "thresholdValue",
                         "createdBy", "createdAt"
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     RETURNING id
                 """
 
@@ -267,11 +271,13 @@ class AlertPipeline:
                     alert['severity'],
                     alert['status'],
                     alert['message'],
+                    alert.get('createdBy', 'system'),  # source (device or system)
+                    created_at,  # alertTimestamp
                     alert.get('vitalType'),
                     alert.get('vitalValue'),
                     alert.get('thresholdValue'),
-                    alert.get('createdBy', 'system'),
-                    alert['createdAt']
+                    alert.get('createdBy', 'system'),  # createdBy
+                    created_at  # createdAt
                 )
 
                 logger.info(f"Created alert {alert_id} for patient {alert['patientId']}")
@@ -307,11 +313,14 @@ class AlertPipeline:
                     RETURNING id
                 """
 
+                # Strip timezone for database compatibility
+                acknowledged_at = to_utc_now().replace(tzinfo=None)
+
                 result = await conn.fetchval(
                     query,
                     alert_id,
                     acknowledged_by,
-                    to_utc_now()
+                    acknowledged_at
                 )
 
                 if result:
@@ -353,11 +362,14 @@ class AlertPipeline:
                     RETURNING id
                 """
 
+                # Strip timezone for database compatibility
+                resolved_at = to_utc_now().replace(tzinfo=None)
+
                 result = await conn.fetchval(
                     query,
                     alert_id,
                     resolved_by,
-                    to_utc_now()
+                    resolved_at
                 )
 
                 if result:

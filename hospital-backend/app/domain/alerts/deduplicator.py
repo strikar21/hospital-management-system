@@ -72,6 +72,9 @@ class AlertDeduplicator:
         now = to_utc_now()
         window_start = now - timedelta(minutes=window_minutes)
 
+        # Strip timezone for database compatibility (PostgreSQL timestamp without time zone)
+        window_start = window_start.replace(tzinfo=None)
+
         try:
             async with self.pool.acquire() as conn:
                 # For vital alerts, check patient + vital type + time window
@@ -146,6 +149,8 @@ class AlertDeduplicator:
         """
         try:
             cutoff_date = to_utc_now() - timedelta(days=days_to_keep)
+            # Strip timezone for database compatibility
+            cutoff_date = cutoff_date.replace(tzinfo=None)
 
             async with self.pool.acquire() as conn:
                 query = """
