@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Stethoscope } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { patient, user, alert as alertType, clinicalAlert } from '../types';
-import { formatTimeOnly } from '../utils';
+import { formatTimeOnly } from '../utils'; // Still used for acknowledgedAt
 import { PatientService } from '../services';
 import { PatientCRUDService } from '../services/patient/PatientCRUDService';
+import { AlertProcessor } from '../domain/alerts/AlertProcessor';
 
 interface PatientAlertsProps {
   patient: patient;
@@ -23,9 +24,17 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
   const [showClinicalAlerts, setShowClinicalAlerts] = useState(false);
   const [acknowledgingAlert, setAcknowledgingAlert] = useState<string | null>(null);
 
-  // Get unacknowledged and acknowledged alerts
-  const unacknowledgedAlerts = alerts.filter(alert => !alert.isAcknowledged);
-  const acknowledgedAlerts = alerts.filter(alert => alert.isAcknowledged);
+  // Get unacknowledged and acknowledged alerts using domain layer
+  const unacknowledgedAlerts = AlertProcessor.filterByStatus(alerts, 'active');
+  const acknowledgedAlerts = AlertProcessor.filterByStatus(alerts, 'acknowledged');
+
+  // Format alerts for display using domain layer
+  const formattedUnacknowledged = unacknowledgedAlerts.map(alert =>
+    AlertProcessor.formatAlertForDisplay(alert)
+  );
+  const formattedAcknowledged = acknowledgedAlerts.map(alert =>
+    AlertProcessor.formatAlertForDisplay(alert)
+  );
 
   // Auto-hide acknowledged alerts after 3 seconds
   useEffect(() => {
@@ -123,22 +132,20 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
             </button>
           </div>
 
-          {/* Max 4 Alerts in 2x2 Grid */}
+          {/* Max 4 Alerts in 2x2 Grid - Using formatted alerts from domain layer */}
           <div className="grid grid-cols-2 gap-2">
-            {unacknowledgedAlerts.slice(0, 4).map((alert) => (
+            {formattedUnacknowledged.slice(0, 4).map((alert) => (
               <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-red-500">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    alert.severity === 'critical' ? 'bg-red-600 animate-pulse' :
-                    alert.severity === 'high' ? 'bg-orange-500' :
-                    alert.severity === 'medium' ? 'bg-yellow-500' :
-                    'bg-blue-500'
-                  }`}></div>
+                  {/* Severity indicator using domain layer icon */}
+                  <span className="text-sm flex-shrink-0" title={alert.severity}>
+                    {alert.severityIcon}
+                  </span>
                   <span className="text-xs text-red-700 font-medium truncate flex-1">
                     {DOMPurify.sanitize(alert.message, { ALLOWED_TAGS: [] })}
                   </span>
                   <span className="text-xs text-gray-500 flex-shrink-0">
-                    {formatTimeOnly(alert.timestamp)}
+                    {alert.formattedTimestamp}
                   </span>
                 </div>
               </div>
@@ -163,7 +170,7 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
             ✅ ACKNOWLEDGED ALERTS ({acknowledgedAlerts.length}) - Will disappear shortly...
           </h3>
           <div className="space-y-1">
-            {acknowledgedAlerts.slice(0, 2).map((alert) => (
+            {formattedAcknowledged.slice(0, 2).map((alert) => (
               <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-green-500 opacity-75">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                   <div className="w-2 h-2 rounded-full bg-green-600"></div>
@@ -202,12 +209,10 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
             {clinicalAlerts.map((alert) => (
               <div key={alert.id} className="flex items-center justify-between p-2 bg-white rounded border-l-4 border-amber-400">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    alert.severity === 'critical' ? 'bg-red-600 animate-pulse' :
-                    alert.severity === 'high' ? 'bg-orange-500' :
-                    alert.severity === 'medium' ? 'bg-yellow-500' :
-                    'bg-blue-500'
-                  }`}></div>
+                  {/* Use AlertProcessor for severity icon */}
+                  <span className="text-sm flex-shrink-0" title={alert.severity}>
+                    {AlertProcessor.getSeverityIcon(alert.severity)}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <span className="text-xs text-amber-700 font-medium truncate block">
                       {DOMPurify.sanitize(alert.message, { ALLOWED_TAGS: [] })}
@@ -220,7 +225,7 @@ const PatientAlerts: React.FC<PatientAlertsProps> = ({
                     )}
                   </div>
                   <span className="text-xs text-gray-500 flex-shrink-0">
-                    {formatTimeOnly(alert.timestamp)}
+                    {AlertProcessor.formatTimestamp(alert.timestamp)}
                   </span>
                 </div>
               </div>

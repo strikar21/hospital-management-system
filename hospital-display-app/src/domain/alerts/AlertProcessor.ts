@@ -12,10 +12,10 @@
 
 export interface AlertData {
   id: string;
-  patientId: string;
-  type: 'vital' | 'arrhythmia' | 'device' | 'system';
+  patientId?: string;  // Optional for backward compatibility with existing alert type
+  type?: 'vital' | 'arrhythmia' | 'device' | 'system' | string;  // Optional and flexible
   severity: 'critical' | 'high' | 'medium' | 'low';
-  status: 'active' | 'acknowledged' | 'resolved';
+  status?: 'active' | 'acknowledged' | 'resolved';  // Optional - derived from isAcknowledged
   message: string;
   timestamp: string;
   vitalType?: string;
@@ -23,6 +23,11 @@ export interface AlertData {
   thresholdValue?: number;
   source?: string;
   isAcknowledged?: boolean;
+  // Additional fields from existing alert type
+  acknowledgedBy?: string;
+  acknowledgedByName?: string;
+  acknowledgedByRole?: string;
+  acknowledgedAt?: string;
 }
 
 export interface DisplayAlert extends AlertData {
@@ -104,7 +109,7 @@ export class AlertProcessor {
   /**
    * Calculate priority score for sorting (higher = more urgent)
    * Critical = 4, High = 3, Medium = 2, Low = 1
-   * Active status gets +0.5 bonus
+   * Active/unacknowledged status gets +0.5 bonus
    */
   static calculatePriority(alert: AlertData): number {
     const severityScores: Record<string, number> = {
@@ -116,8 +121,9 @@ export class AlertProcessor {
 
     let score = severityScores[alert.severity] || 0;
 
-    // Active alerts get priority boost
-    if (alert.status === 'active') {
+    // Active/unacknowledged alerts get priority boost
+    const isActive = alert.status === 'active' || !alert.isAcknowledged;
+    if (isActive) {
       score += 0.5;
     }
 
@@ -165,12 +171,31 @@ export class AlertProcessor {
 
   /**
    * Filter alerts by status
+   * Supports both new status field and legacy isAcknowledged field
    */
   static filterByStatus(
     alerts: AlertData[],
     status: 'active' | 'acknowledged' | 'resolved'
   ): AlertData[] {
-    return alerts.filter(alert => alert.status === status);
+    return alerts.filter(alert => {
+      // If alert has explicit status field, use it
+      if (alert.status) {
+        return alert.status === status;
+      }
+
+      // Otherwise, derive from isAcknowledged (legacy support)
+      if (status === 'active') {
+        return !alert.isAcknowledged;
+      }
+      if (status === 'acknowledged') {
+        return alert.isAcknowledged === true;
+      }
+      if (status === 'resolved') {
+        return false; // Legacy alerts don't have resolved status
+      }
+
+      return false;
+    });
   }
 
   /**
