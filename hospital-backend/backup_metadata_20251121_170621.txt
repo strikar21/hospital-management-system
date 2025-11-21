@@ -1,0 +1,22 @@
+=== Database Backup Metadata - 20251121_170621 ===
+
+Total tables: 18
+
+auditlog: 0 rows
+deviceBaselines: 0 rows
+deviceCalibration: 0 rows
+deviceMaintenanceHistory: 0 rows
+device_certificates: 0 rows
+device_mac_mapping: 0 rows
+deviceassignments: 2 rows
+devices: 2 rows
+discharge_requests: 0 rows
+fhir_resource_history: 4 rows
+fhir_resources: 3 rows
+impedancereadings: 0 rows
+loinc_vital_mapping: 7 rows
+patient_alerts: 120 rows
+provisioning_codes: 0 rows
+staff: 6 rows
+token_blacklist: 0 rows
+watchremovalevents: 0 rows
