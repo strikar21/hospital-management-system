@@ -69,13 +69,14 @@ class ObservationHandler:
 
         # Insert into TimescaleDB
         async with self.pool.acquire() as conn:
+            import json
             await conn.execute("""
                 INSERT INTO fhirObservations
                 (time, observationId, patientId, deviceId, observation,
                  code, category, valueQuantity, valueUnit, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
             """, time, observation_id, patient_id, device_id,
-               observation, code, category, value_quantity, value_unit, observation['status'])
+               json.dumps(observation), code, category, value_quantity, value_unit, observation['status'])
 
         return observation
 
@@ -147,7 +148,8 @@ class ObservationHandler:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
 
-        return [row['observation'] for row in rows]
+        import json
+        return [json.loads(row['observation']) if isinstance(row['observation'], str) else row['observation'] for row in rows]
 
     async def get_latest_observation(
         self,
@@ -172,7 +174,10 @@ class ObservationHandler:
                 LIMIT 1
             """, patient_id, code)
 
-        return row['observation'] if row else None
+        if row:
+            import json
+            return json.loads(row['observation']) if isinstance(row['observation'], str) else row['observation']
+        return None
 
     async def get_observation_stats(
         self,
