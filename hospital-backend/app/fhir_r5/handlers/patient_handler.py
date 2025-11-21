@@ -16,7 +16,7 @@ class PatientHandler:
 
     def __init__(self, repository: FHIRResourceRepository, hms_base_url: Optional[str] = None):
         self.repository = repository
-        self.hms_base_url = hms_base_url or "http://localhost:8000"  # Mock HMS for now
+        self.hms_base_url = hms_base_url or "http://localhost:8001"  # Mock HMS server
 
     async def get_patient(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -69,15 +69,41 @@ class PatientHandler:
     async def _fetch_from_hms(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """
         Fetch patient from HMS
-        For now, returns mock data. In production, would call HMS API.
+        Calls HMS API to get patient data in FHIR R5 format
         """
-        # Mock HMS response
-        # In production: async with httpx.AsyncClient() as client:
-        #     response = await client.get(f"{self.hms_base_url}/api/patients/{patient_id}")
-        #     return response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                # Try FHIR endpoint first
+                response = await client.get(
+                    f"{self.hms_base_url}/api/patients/{patient_id}/fhir",
+                    timeout=5.0
+                )
 
-        # For testing, return None (will be replaced with real HMS integration)
-        return None
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 404:
+                    return None
+                else:
+                    # Try standard HMS endpoint and transform
+                    hms_response = await client.get(
+                        f"{self.hms_base_url}/api/patients/{patient_id}",
+                        timeout=5.0
+                    )
+
+                    if hms_response.status_code == 200:
+                        return self._transform_to_fhir_r5(hms_response.json())
+
+                    return None
+
+        except httpx.TimeoutException:
+            print(f"[WARNING] HMS API timeout for patient {patient_id}")
+            return None
+        except httpx.ConnectError:
+            print(f"[WARNING] HMS API connection failed - is HMS server running?")
+            return None
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch patient from HMS: {e}")
+            return None
 
     def _transform_to_fhir_r5(self, hms_patient: Dict[str, Any]) -> Dict[str, Any]:
         """
