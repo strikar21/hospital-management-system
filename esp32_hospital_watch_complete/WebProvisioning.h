@@ -7,83 +7,56 @@
 #include <WiFi.h>
 #include <Preferences.h>
 
+// ====================================
+// WEB PROVISIONING MODULE
+// ====================================
+// HTTP Captive Portal for WiFi and MQTT configuration
+// Provides web interface for device provisioning
+
 class WebProvisioning {
 public:
   WebProvisioning();
 
-  // Initialize web provisioning
-  void begin(const char* apSSID, const char* apPassword);
+  // Initialization
+  void begin(const char* apSSID, const char* apPassword, Preferences* prefsPtr);
 
-  // Start captive portal
+  // Start captive portal (WiFi AP mode with DNS redirect)
   void startCaptivePortal();
 
   // Handle client requests (call in loop)
-  void handleClient();
+  void handleClient(bool wifiConnected);
 
-  // Check if provisioned
-  bool isProvisioned();
+  // Scan WiFi networks and populate dropdown
+  void scanWiFiNetworks(bool wifiConnected);
 
-  // Get provisioned WiFi credentials
-  String getWiFiSSID();
-  String getWiFiPassword();
-  String getServerIP();
-  String getServerPort();
-  String getMQTTPort();
-  String getProvCode();
-
-  // Set external variables (for connectToWiFi callback)
-  void setExternalVars(String* ssid, String* pass, String* serverIp,
-                       String* httpPort, String* mqttServer, String* mqttPortStr,
-                       String* macAddr, int* netCount, String* availNets);
+  // Get network scan results
+  String getAvailableNetworks() { return availableNetworks; }
+  int getNetworkCount() { return networkCount; }
 
 private:
+  // Server instances
   WebServer server;
   DNSServer dnsServer;
-  Preferences prefs;
+  Preferences* prefs;
 
-  // AP settings
+  // AP configuration
   String apSSID;
   String apPassword;
 
-  // Network info
-  String macAddress;
-  int networkCount;
-  String availableNetworks;
-
-  // Provisioned credentials
-  String wifiSSID;
-  String wifiPassword;
-  String serverIP;
-  String serverPort;
-  String mqttServer;
-  String mqttPort;
-  String provCode;
-
-  // DNS and Captive Portal
+  // DNS and network config
   const byte DNS_PORT = 53;
   IPAddress apIP;
   IPAddress netMsk;
 
-  // External variables (set by main sketch)
-  String* ext_wifiSSID;
-  String* ext_wifiPassword;
-  String* ext_serverIP;
-  String* ext_serverPort;
-  String* ext_mqttServer;
-  String* ext_mqttPort;
-  String* ext_macAddress;
-  int* ext_networkCount;
-  String* ext_availableNetworks;
+  // Network scan results
+  String availableNetworks;
+  int networkCount;
 
-  // Internal methods
-  void scanWiFiNetworks();
+  // HTTP request handlers
   void handleRoot();
   void handleScan();
   void handleConfigure();
   void handleStatus();
-
-  // Callback for WiFi connection
-  void (*connectToWiFiCallback)();
 };
 
 #endif
