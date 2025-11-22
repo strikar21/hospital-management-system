@@ -2567,14 +2567,18 @@ void sendVitals() {
   bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
   float tempCelsius = (temperature - 32.0) * 5.0 / 9.0;
 
-  // ✅ v5.4: Get real IMU motion data if available
-  float accelX = 0, accelY = 0, accelZ = 0;
-  float gyroX = 0, gyroY = 0, gyroZ = 0;
+  // ✅ v5.4: Process IMU data into actionable insights (not raw sensor values)
   const char* activityStr = "UNKNOWN";
+  int movementIntensity = 0;  // 0-100 scale (0=still, 100=very active)
+
   if (imuAvailable) {
-    imuSensor.getAcceleration(accelX, accelY, accelZ);
-    imuSensor.getGyroscope(gyroX, gyroY, gyroZ);
+    // Get activity classification
     activityStr = imuSensor.getActivityString();
+
+    // Calculate movement intensity (0-100 scale for UI/backend)
+    float magnitude = imuSensor.getAccelerationMagnitude();
+    // Map acceleration: 1.0g (still) → 0%, 2.0g (active) → 100%
+    movementIntensity = constrain((int)((magnitude - 1.0) * 100.0), 0, 100);
   }
 
   // Publish using helper template (handles connection check, retry, offline queueing)
@@ -2591,17 +2595,10 @@ void sendVitals() {
     doc["bloodPressureSystolic"] = bloodPressureSystolic;
     doc["bloodPressureDiastolic"] = bloodPressureDiastolic;
 
-    // ✅ v5.4: Add real motion data from QMI8658 IMU
+    // ✅ v5.4: Send PROCESSED motion insights (not raw sensor data)
     if (imuAvailable) {
-      JsonObject motion = doc["motion"].to<JsonObject>();
-      motion["accelX"] = serialized(String(accelX, 3));  // 3 decimal places
-      motion["accelY"] = serialized(String(accelY, 3));
-      motion["accelZ"] = serialized(String(accelZ, 3));
-      motion["gyroX"] = serialized(String(gyroX, 1));   // 1 decimal place
-      motion["gyroY"] = serialized(String(gyroY, 1));
-      motion["gyroZ"] = serialized(String(gyroZ, 1));
-      motion["activity"] = activityStr;  // "STATIONARY", "WALKING", "RUNNING", or "FALLING"
-      motion["magnitude"] = serialized(String(imuSensor.getAccelerationMagnitude(), 3));
+      doc["activity"] = activityStr;  // "STATIONARY", "WALKING", "RUNNING"
+      doc["movementIntensity"] = movementIntensity;  // 0-100 scale (for UI charts)
     }
   });
 
