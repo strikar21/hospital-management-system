@@ -358,8 +358,8 @@ QMI8658Manager::Activity QMI8658Manager::classifyActivity() {
 
   // Check for fall first (highest priority)
   if (fallDetected) {
-    currentActivity = FALLING;
-    return FALLING;
+    currentActivity = FALL_DETECTED;
+    return FALL_DETECTED;
   }
 
   float magnitude = getAccelerationMagnitude();
@@ -378,11 +378,11 @@ QMI8658Manager::Activity QMI8658Manager::classifyActivity() {
 
 const char* QMI8658Manager::getActivityString() {
   switch (currentActivity) {
-    case STATIONARY: return "STATIONARY";
-    case WALKING:    return "WALKING";
-    case RUNNING:    return "RUNNING";
-    case FALLING:    return "FALLING";
-    default:         return "UNKNOWN";
+    case STATIONARY:    return "STATIONARY";
+    case WALKING:       return "WALKING";
+    case RUNNING:       return "RUNNING";
+    case FALL_DETECTED: return "FALLING";
+    default:            return "UNKNOWN";
   }
 }
 

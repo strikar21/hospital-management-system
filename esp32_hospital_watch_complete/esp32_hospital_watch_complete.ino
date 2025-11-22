@@ -131,6 +131,7 @@
 #include <HTTPClient.h>  // ✅ v5.0: Added for HTTPS provisioning
 #include "PhysiologicalSimulator.h"  // ✅ v5.1: Vitals and ECG simulator
 #include "NFCManager.h"  // ✅ v5.2: NFC support for badges/wristbands/room tags
+#include "lcd_config.h"      // ✅ Pin definitions (EXAMPLE_PIN_NUM_TOUCH_SDA/SCL)
 #include "DisplayManager.h"  // ✅ v5.3: LVGL display manager
 #include "UIScreens.h"       // ✅ v5.3: UI screens
 #include "TouchHandler.h"    // ✅ v5.3: Touch gestures

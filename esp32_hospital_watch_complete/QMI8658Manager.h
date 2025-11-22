@@ -45,10 +45,10 @@ class QMI8658Manager {
 public:
   // Activity classification enum
   enum Activity {
-    STATIONARY = 0,  // Sitting, lying down, standing still
-    WALKING    = 1,  // Normal walking
-    RUNNING    = 2,  // Running, fast walking
-    FALLING    = 3   // Fall detected
+    STATIONARY    = 0,  // Sitting, lying down, standing still
+    WALKING       = 1,  // Normal walking
+    RUNNING       = 2,  // Running, fast walking
+    FALL_DETECTED = 3   // Fall detected (renamed from FALLING to avoid Arduino.h macro conflict)
   };
 
   // Constructor

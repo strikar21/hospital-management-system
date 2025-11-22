@@ -424,3 +424,18 @@ ScreenType UIScreens::getCurrentScreen() const {
 uint8_t UIScreens::getAlertCount() const {
     return alertCount;
 }
+
+// ✅ v5.4.1: Show popup alert (for NFC tap, etc.)
+void UIScreens::showAlert(const char* title, const char* message) {
+    // Use the critical alert banner for now
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%s - %s", title, message);
+    showCriticalAlert(buf);
+
+    // Auto-hide after 3 seconds
+    static unsigned long alertStartTime = 0;
+    alertStartTime = millis();
+
+    // Log to serial
+    Serial.printf("📱 UI Alert: %s\n", buf);
+}

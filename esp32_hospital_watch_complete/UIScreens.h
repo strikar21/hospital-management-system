@@ -32,6 +32,7 @@ public:
     void showCriticalAlert(const char* message);    // NEW
     void hideCriticalAlert();                       // NEW
     void updateAlertCount(uint8_t count);           // NEW
+    void showAlert(const char* title, const char* message);  // ✅ v5.4.1: Show popup alert
 
     void updateWaveform(int16_t *samples, uint8_t numSamples, const char *mode, const char *leadName);
     void setWaveformFrozen(bool frozen);
