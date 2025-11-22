@@ -731,8 +731,10 @@ String getISO8601Timestamp() {
 // DISPLAY BRIGHTNESS CONTROL (v5.3)
 // ====================================
 void setDisplayBrightness(uint8_t level) {
-  display.setBrightness(level);
-  Serial.println("🔆 Display brightness set to " + String(level));
+  // ✅ v5.4: Map 0-100% to 0-255 for hardware
+  uint8_t hwLevel = map(level, 0, 100, 0, 255);
+  display.setBrightness(hwLevel);
+  Serial.printf("🔆 Display brightness set to %d%% (hardware: %d/255)\n", level, hwLevel);
 }
 
 // ====================================
@@ -1540,7 +1542,8 @@ void setup() {
     Serial.println("✅ LVGL display initialized");
     ui.init();
     Serial.println("✅ UI manager initialized");
-    Serial.println("✅ Touch handled automatically by LVGL");
+    touch.init(&ui);  // ✅ v5.4: Initialize touch handler for swipe gestures
+    Serial.println("✅ Touch handler initialized (swipe navigation enabled)");
   } else {
     Serial.println("⚠️  Display initialization failed");
   }
@@ -1567,8 +1570,11 @@ void setup() {
 // MAIN LOOP
 // ====================================
 void loop() {
-  // ✅ v5.3: Update LVGL timer and UI (touch handled automatically by LVGL)
+  // ✅ v5.3: Update LVGL timer and UI
   display.update();
+
+  // ✅ v5.4: Update touch handler for swipe gesture detection
+  touch.update();
 
   if (!wifiConnected) {
     dnsServer.processNextRequest();

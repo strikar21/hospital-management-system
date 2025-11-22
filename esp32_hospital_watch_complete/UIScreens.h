@@ -62,6 +62,13 @@ private:
     lv_obj_t *objCriticalAlert;
     lv_obj_t *labelCriticalAlert;
 
+    // ✅ v5.4: Clickable boxes for navigation
+    lv_obj_t *ecgBox;
+    lv_obj_t *hrBox;
+    lv_obj_t *spo2Box;
+    lv_obj_t *bpBox;
+    lv_obj_t *tempBox;
+
     lv_obj_t *labelHR;
     lv_obj_t *labelSpO2;
     lv_obj_t *labelBP;
