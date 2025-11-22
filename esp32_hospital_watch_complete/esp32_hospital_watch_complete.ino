@@ -358,6 +358,44 @@ bool ledOn = false;
 bool publishWithRetry(const char* topic, const char* payload, int maxRetries = 3);
 
 // ====================================
+// ✅ MQTT PUBLISH HELPER (Reduces code duplication)
+// Template version - no std::function overhead
+// ====================================
+template<typename PayloadBuilder>
+bool publishMessage(String topic, PayloadBuilder buildPayload, bool queueOffline = true) {
+  // 1. Build JSON payload with common fields
+  JsonDocument doc;
+  doc["timestamp"] = getISO8601Timestamp();
+  doc["deviceId"] = deviceId;
+
+  // 2. Let caller add custom fields via lambda
+  buildPayload(doc);
+
+  // 3. Serialize to string
+  String payload;
+  serializeJson(doc, payload);
+
+  // 4. Check connection and queue if offline
+  if (!mqttClient.connected() || !isAssigned) {
+    if (queueOffline) {
+      Serial.println("⚠️  MQTT disconnected - queuing offline: " + topic);
+      // Route to appropriate queue based on topic
+      if (topic.indexOf("/vitals") > 0) {
+        offlineQueue.saveVitals(payload);
+      } else if (topic.indexOf("/alerts") > 0) {
+        offlineQueue.saveAlert(payload);
+      } else if (topic.indexOf("/stream") > 0) {
+        offlineQueue.saveWaveform(payload);
+      }
+    }
+    return false;
+  }
+
+  // 5. Publish with retry
+  return publishWithRetry(topic.c_str(), payload.c_str());
+}
+
+// ====================================
 // OFFLINE QUEUE (v5.2.1 - SPIFFS-based)
 // ====================================
 unsigned long lastQueueProcess = 0;
@@ -774,46 +812,31 @@ void syncNTPTime() {
 // ALERT SYSTEM
 // ====================================
 void sendAlert(String alertType, String severity, String message, float confidence) {
-  // ✅ v5.2.2: ALWAYS create alert payload (moved BEFORE connection check)
+  // ✅ v5.4: Refactored to use publishMessage() helper
   String topic = "hospital/devices/" + deviceId + "/alerts";
 
-  JsonDocument doc;
-  doc["alertType"] = alertType;
-  doc["severity"] = severity;
-  doc["message"] = message;
-  doc["source"] = "Watch";
-  doc["confidence"] = confidence;
-  doc["timestamp"] = getISO8601Timestamp();
-  doc["deviceId"] = deviceId;
-  doc["patientId"] = assignedPatientId;
-  doc["category"] = "device";
+  // Publish using helper template (handles connection check, retry, offline queueing)
+  bool success = publishMessage(topic, [&](JsonDocument& doc) {
+    doc["alertType"] = alertType;
+    doc["severity"] = severity;
+    doc["message"] = message;
+    doc["source"] = "Watch";
+    doc["confidence"] = confidence;
+    doc["patientId"] = assignedPatientId;
+    doc["category"] = "device";
+  });
 
-  String payload;
-  serializeJson(doc, payload);
+  // Always flash LED locally regardless of MQTT status
+  String severityUpper = severity;
+  severityUpper.toUpperCase();
 
-  // ✅ v5.2.2: NOW check connection state
-  if (!mqttClient.connected() || !isAssigned) {
-    // Connection lost or not assigned - save to offline queue
-    String severityUpper = severity;
-    severityUpper.toUpperCase();
-    Serial.println("⚠️  MQTT disconnected - queuing alert offline: [" + severityUpper + "] " + alertType);
-    offlineQueue.saveAlert(payload);
-    flashAlertPattern(severity);  // Still flash LED locally
-    return;
-  }
-
-  // ✅ Connected - attempt publish with retry
-  if (publishWithRetry(topic.c_str(), payload.c_str())) {  // ✅ v5.2.1: QoS 1 with retry
-    String severityUpper = severity;
-    severityUpper.toUpperCase();
+  if (success) {
     Serial.println("🚨 [" + severityUpper + "] " + alertType);
-    flashAlertPattern(severity);
   } else {
-    // ✅ Publish failed after retries - save to offline queue
-    Serial.println("⚠️  MQTT publish failed - queuing alert offline");
-    offlineQueue.saveAlert(payload);
-    flashAlertPattern(severity);  // Still flash LED locally
+    Serial.println("⚠️  Alert queued offline: [" + severityUpper + "] " + alertType);
   }
+
+  flashAlertPattern(severity);
 }
 
 // ✅ v5.2.4: Start LED alert pattern (non-blocking trigger)
@@ -2442,21 +2465,17 @@ void attemptProvisioning() {
 // MQTT HEARTBEAT
 // ====================================
 void sendMQTTHeartbeat() {
+  // ✅ v5.4: Refactored to use publishMessage() helper
   if (!mqttClient.connected()) return;
 
   String topic = "hospital/devices/" + deviceId + "/heartbeat";
 
-  JsonDocument doc;
-  doc["deviceId"] = deviceId;
-  doc["timestamp"] = getISO8601Timestamp();
-  doc["batteryLevel"] = batteryLevel;
-  doc["signalStrength"] = WiFi.RSSI();
-  doc["firmwareVersion"] = FIRMWARE_VERSION;
-
-  String payload;
-  serializeJson(doc, payload);
-
-  if (publishWithRetry(topic.c_str(), payload.c_str())) {  // ✅ v5.2.1: QoS 1 with retry
+  // Heartbeats should NOT be queued offline (queueOffline = false)
+  if (publishMessage(topic, [](JsonDocument& doc) {
+    doc["batteryLevel"] = batteryLevel;
+    doc["signalStrength"] = WiFi.RSSI();
+    doc["firmwareVersion"] = FIRMWARE_VERSION;
+  }, false)) {  // ✅ Don't queue heartbeats offline
     Serial.println("💓 MQTT Heartbeat sent");
   }
 }
@@ -2465,49 +2484,29 @@ void sendMQTTHeartbeat() {
 // VITALS (MQTT)
 // ====================================
 void sendVitals() {
-  // ✅ v5.2.2: ALWAYS create vitals payload (moved BEFORE connection check)
+  // ✅ v5.4: Refactored to use publishMessage() helper - reduces code duplication
   String topic = "hospital/devices/" + deviceId + "/vitals";
 
-  JsonDocument doc;
-  doc["timestamp"] = getISO8601Timestamp();
-  doc["sequence"] = vitalsSequenceCounter++;  // ✅ v5.2.6: Message ID for vitals (like waveforms)
-
-  // Read GPIO pin to determine mode (HIGH = ECG, LOW = EEG)
+  // Read GPIO pin and convert temperature BEFORE lambda (captured by reference)
   bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
-  doc["mode"] = isECGMode ? "ecg" : "eeg";
-
-  doc["deviceId"] = deviceId;
-  doc["patientId"] = assignedPatientId;
-  doc["heartRate"] = (int)heartRate;
-
   float tempCelsius = (temperature - 32.0) * 5.0 / 9.0;
-  doc["skinTemperature"] = tempCelsius;
 
-  doc["oxygenSaturation"] = (int)oxygenSat;
-  doc["signalQuality"] = quality / 100.0;
-  doc["respiratoryRate"] = (int)respiratoryRate;
-  doc["batteryLevel"] = batteryLevel;
-  doc["bloodPressureSystolic"] = bloodPressureSystolic;
-  doc["bloodPressureDiastolic"] = bloodPressureDiastolic;
+  // Publish using helper template (handles connection check, retry, offline queueing)
+  bool success = publishMessage(topic, [&](JsonDocument& doc) {
+    doc["sequence"] = vitalsSequenceCounter++;  // ✅ Message ID for vitals
+    doc["mode"] = isECGMode ? "ecg" : "eeg";
+    doc["patientId"] = assignedPatientId;
+    doc["heartRate"] = (int)heartRate;
+    doc["skinTemperature"] = tempCelsius;
+    doc["oxygenSaturation"] = (int)oxygenSat;
+    doc["signalQuality"] = quality / 100.0;
+    doc["respiratoryRate"] = (int)respiratoryRate;
+    doc["batteryLevel"] = batteryLevel;
+    doc["bloodPressureSystolic"] = bloodPressureSystolic;
+    doc["bloodPressureDiastolic"] = bloodPressureDiastolic;
+  });
 
-  String payload;
-  serializeJson(doc, payload);
-
-  // ✅ v5.2.2: NOW check connection state
-  if (!mqttClient.connected() || !isAssigned) {
-    // Connection lost or not assigned - save to offline queue
-    Serial.println("⚠️  MQTT disconnected - queuing vitals offline");
-    offlineQueue.saveVitals(payload);
-
-    // Try to reconnect for next iteration
-    if (!mqttClient.connected()) {
-      connectToMQTT();
-    }
-    return;
-  }
-
-  // ✅ Connected - attempt publish with retry
-  if (publishWithRetry(topic.c_str(), payload.c_str())) {  // ✅ v5.2.1: QoS 1 with retry
+  if (success) {
     Serial.println("📊 Vitals: Mode=" + String(isECGMode ? "ECG" : "EEG") +
                    ", HR=" + String((int)heartRate) +
                    ", BP=" + String(bloodPressureSystolic) + "/" + String(bloodPressureDiastolic) +
@@ -2515,13 +2514,10 @@ void sendVitals() {
                    ", SpO2=" + String(oxygenSat) + "%" +
                    ", RR=" + String(respiratoryRate));
 
-    // ✅ v5.3: Update UI with latest vitals
+    // ✅ Update UI with latest vitals
     ui.updateVitals(heartRate, oxygenSat, tempCelsius, bloodPressureSystolic, bloodPressureDiastolic, respiratoryRate);
-  } else {
-    // ✅ Publish failed after retries - save to offline queue
-    Serial.println("⚠️  MQTT publish failed - queuing vitals offline");
-    offlineQueue.saveVitals(payload);
   }
+  // ✅ If !success, publishMessage() already queued offline and attempted reconnect
 }
 
 // ====================================

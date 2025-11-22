@@ -1,0 +1,24 @@
+hmsMedicationId,hmsPatientId,mrn,medicationName,dosage,frequency,route,startDate,duration,prescribedBy,status
+MED001,HMS2024000001,MRN001,Aspirin,75mg,Once daily,Oral,2025-11-15 09:00:00,Ongoing,DOC0001,active
+MED002,HMS2024000001,MRN001,Atorvastatin,40mg,Once daily at bedtime,Oral,2025-11-15 09:00:00,Ongoing,DOC0001,active
+MED003,HMS2024000001,MRN001,Metoprolol,25mg,Twice daily,Oral,2025-11-15 09:00:00,7 days,DOC0001,active
+MED004,HMS2024000002,MRN002,Azithromycin,500mg,Once daily,Oral,2025-11-16 11:00:00,5 days,DOC0002,active
+MED005,HMS2024000002,MRN002,Paracetamol,500mg,Three times daily as needed,Oral,2025-11-16 11:00:00,Ongoing,DOC0002,active
+MED006,HMS2024000003,MRN003,Clopidogrel,75mg,Once daily,Oral,2025-11-14 15:00:00,Ongoing,DOC0001,active
+MED007,HMS2024000003,MRN003,Aspirin,75mg,Once daily,Oral,2025-11-14 15:00:00,Ongoing,DOC0001,active
+MED008,HMS2024000003,MRN003,Atorvastatin,80mg,Once daily at bedtime,Oral,2025-11-14 15:00:00,Ongoing,DOC0001,active
+MED009,HMS2024000004,MRN004,Ciprofloxacin,500mg,Twice daily,Oral,2025-11-17 09:30:00,7 days,DOC0002,active
+MED010,HMS2024000004,MRN004,Metronidazole,400mg,Three times daily,Oral,2025-11-17 09:30:00,7 days,DOC0002,active
+MED011,HMS2024000005,MRN005,Insulin Regular,Variable units,As per sliding scale,IV,2025-11-13 17:00:00,Ongoing,DOC0001,active
+MED012,HMS2024000005,MRN005,Potassium Chloride,20mEq,Every 6 hours,IV,2025-11-13 17:00:00,24 hours,DOC0001,active
+MED013,HMS2024000006,MRN006,Paracetamol,500mg,Four times daily as needed,Oral,2025-11-18 12:00:00,5 days,DOC0002,active
+MED014,HMS2024000006,MRN006,Normal Saline,1000ml,Every 8 hours,IV,2025-11-18 12:00:00,3 days,DOC0002,active
+MED015,HMS2024000007,MRN007,Ondansetron,4mg,Three times daily as needed,Oral,2025-11-15 14:00:00,3 days,DOC0001,active
+MED016,HMS2024000007,MRN007,Oral Rehydration Solution,1 sachet,After each loose stool,Oral,2025-11-15 14:00:00,5 days,DOC0001,active
+MED017,HMS2024000008,MRN008,Meropenem,1g,Every 8 hours,IV,2025-11-16 15:30:00,7 days,DOC0001,active
+MED018,HMS2024000008,MRN008,Norepinephrine,Variable dose,Continuous infusion,IV,2025-11-16 15:30:00,Ongoing,DOC0001,active
+MED019,HMS2024000008,MRN008,Vasopressin,0.03 units/min,Continuous infusion,IV,2025-11-16 16:00:00,Ongoing,DOC0001,active
+MED020,HMS2024000009,MRN009,Pantoprazole,40mg,Once daily,IV,2025-11-17 12:30:00,5 days,DOC0002,active
+MED021,HMS2024000009,MRN009,Tramadol,50mg,Three times daily as needed,Oral,2025-11-17 12:30:00,5 days,DOC0002,active
+MED022,HMS2024000010,MRN010,Nitrofurantoin,100mg,Twice daily,Oral,2025-11-18 15:00:00,7 days,DOC0002,active
+MED023,HMS2024000010,MRN010,Phenazopyridine,200mg,Three times daily,Oral,2025-11-18 15:00:00,2 days,DOC0002,active
