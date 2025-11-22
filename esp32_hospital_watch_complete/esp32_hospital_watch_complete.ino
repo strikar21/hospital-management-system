@@ -846,8 +846,11 @@ String getISO8601Timestamp() {
 // ====================================
 // DISPLAY BRIGHTNESS CONTROL (v5.3)
 // ====================================
+uint8_t userBrightnessLevel = 100;  // Track user's brightness setting (0-100%)
+
 void setDisplayBrightness(uint8_t level) {
   // ✅ v5.4: Map 0-100% to 0-255 for hardware
+  userBrightnessLevel = level;  // Save user's preference
   uint8_t hwLevel = map(level, 0, 100, 0, 255);
   display.setBrightness(hwLevel);
   Serial.printf("🔆 Display brightness set to %d%% (hardware: %d/255)\n", level, hwLevel);
@@ -870,10 +873,11 @@ void setScreenTimeout(uint8_t seconds) {
 void updateLastActivity() {
   lastUserActivity = millis();
   if (!screenOn) {
-    // Wake screen
+    // Wake screen and restore user's brightness
     screenOn = true;
-    display.setBrightness(255);  // Full brightness
-    Serial.println("💡 Screen woken");
+    uint8_t hwLevel = map(userBrightnessLevel, 0, 100, 0, 255);
+    display.setBrightness(hwLevel);
+    Serial.printf("💡 Screen woken - restored to %d%% brightness\n", userBrightnessLevel);
   }
 }
 
