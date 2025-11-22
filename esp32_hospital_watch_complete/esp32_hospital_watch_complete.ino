@@ -358,44 +358,6 @@ bool ledOn = false;
 bool publishWithRetry(const char* topic, const char* payload, int maxRetries = 3);
 
 // ====================================
-// ✅ MQTT PUBLISH HELPER (Reduces code duplication)
-// Template version - no std::function overhead
-// ====================================
-template<typename PayloadBuilder>
-bool publishMessage(String topic, PayloadBuilder buildPayload, bool queueOffline = true) {
-  // 1. Build JSON payload with common fields
-  JsonDocument doc;
-  doc["timestamp"] = getISO8601Timestamp();
-  doc["deviceId"] = deviceId;
-
-  // 2. Let caller add custom fields via lambda
-  buildPayload(doc);
-
-  // 3. Serialize to string
-  String payload;
-  serializeJson(doc, payload);
-
-  // 4. Check connection and queue if offline
-  if (!mqttClient.connected() || !isAssigned) {
-    if (queueOffline) {
-      Serial.println("⚠️  MQTT disconnected - queuing offline: " + topic);
-      // Route to appropriate queue based on topic
-      if (topic.indexOf("/vitals") > 0) {
-        offlineQueue.saveVitals(payload);
-      } else if (topic.indexOf("/alerts") > 0) {
-        offlineQueue.saveAlert(payload);
-      } else if (topic.indexOf("/stream") > 0) {
-        offlineQueue.saveWaveform(payload);
-      }
-    }
-    return false;
-  }
-
-  // 5. Publish with retry
-  return publishWithRetry(topic.c_str(), payload.c_str());
-}
-
-// ====================================
 // OFFLINE QUEUE (v5.2.1 - SPIFFS-based)
 // ====================================
 unsigned long lastQueueProcess = 0;
@@ -619,6 +581,45 @@ private:
 
 // Global offline queue instance
 OfflineQueue offlineQueue;
+
+// ====================================
+// ✅ MQTT PUBLISH HELPER (Reduces code duplication)
+// Template version - no std::function overhead
+// MUST be declared AFTER offlineQueue
+// ====================================
+template<typename PayloadBuilder>
+bool publishMessage(String topic, PayloadBuilder buildPayload, bool queueOffline = true) {
+  // 1. Build JSON payload with common fields
+  JsonDocument doc;
+  doc["timestamp"] = getISO8601Timestamp();
+  doc["deviceId"] = deviceId;
+
+  // 2. Let caller add custom fields via lambda
+  buildPayload(doc);
+
+  // 3. Serialize to string
+  String payload;
+  serializeJson(doc, payload);
+
+  // 4. Check connection and queue if offline
+  if (!mqttClient.connected() || !isAssigned) {
+    if (queueOffline) {
+      Serial.println("⚠️  MQTT disconnected - queuing offline: " + topic);
+      // Route to appropriate queue based on topic
+      if (topic.indexOf("/vitals") > 0) {
+        offlineQueue.saveVitals(payload);
+      } else if (topic.indexOf("/alerts") > 0) {
+        offlineQueue.saveAlert(payload);
+      } else if (topic.indexOf("/stream") > 0) {
+        offlineQueue.saveWaveform(payload);
+      }
+    }
+    return false;
+  }
+
+  // 5. Publish with retry
+  return publishWithRetry(topic.c_str(), payload.c_str());
+}
 
 // ====================================
 // CERTIFICATE MANAGEMENT (v5.0.0)
