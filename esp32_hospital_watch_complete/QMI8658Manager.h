@@ -21,7 +21,11 @@
 #define QMI8658_MANAGER_H
 
 #include <Arduino.h>
-#include <Wire.h>
+// ❌ v5.4.1: REMOVED Wire library (caused I2C bus conflict with FT3168 touch)
+// #include <Wire.h>
+// ✅ v5.4.1: Use NEW ESP-IDF I2C driver API (shared bus with touch controller)
+#include <driver/i2c_master.h>
+#include <esp_err.h>
 
 // QMI8658C I2C Address (may be 0x6A or 0x6B depending on SA0 pin)
 #define QMI8658_I2C_ADDR_PRIMARY   0x6A
@@ -59,12 +63,12 @@ public:
   // ====================================
 
   /**
-   * Initialize QMI8658 IMU on I2C bus
-   * @param sda SDA pin (default: GPIO47)
-   * @param scl SCL pin (default: GPIO48)
+   * Initialize QMI8658 IMU using shared I2C bus handle
+   * ✅ v5.4.1: Now uses shared bus created by FT3168 touch controller
+   * @param bus_handle Shared I2C bus handle (from FT3168.h: shared_i2c_bus)
    * @return true if successful
    */
-  bool begin(int sda = 47, int scl = 48);
+  bool begin(i2c_master_bus_handle_t bus_handle);
 
   /**
    * Calibrate IMU (call when device is stationary)
@@ -207,9 +211,14 @@ public:
   void printDiagnostics();
 
 private:
-  // I2C communication
+  // ✅ v5.4.1: I2C communication using NEW driver API
   uint8_t i2cAddr;
   bool initialized;
+  i2c_master_dev_handle_t i2c_dev;  // ✅ Device handle (added to shared bus)
+
+  // ✅ v5.4.1: Error tracking for bus health monitoring
+  uint8_t consecutive_errors;
+  static const uint8_t MAX_CONSECUTIVE_ERRORS = 5;
 
   // Sensor data
   float accelX, accelY, accelZ;  // g
@@ -224,6 +233,7 @@ private:
   unsigned long fallTimestamp;
   float fallMagnitude;
   unsigned long lastFallCheck;
+  unsigned long fallCooldownUntil;  // ✅ v5.4.8: Prevent re-triggering after manual clear
   float fallThreshold;           // g (default: 2.5)
 
   // Tremor detection state
@@ -240,10 +250,10 @@ private:
   // Activity classification
   Activity currentActivity;
 
-  // I2C helper functions
-  uint8_t readRegister(uint8_t reg);
-  void readRegisters(uint8_t reg, uint8_t* buffer, uint8_t length);
-  void writeRegister(uint8_t reg, uint8_t value);
+  // ✅ v5.4.1: I2C helper functions using NEW driver API
+  esp_err_t readRegister(uint8_t reg, uint8_t* value);
+  esp_err_t readRegisters(uint8_t reg, uint8_t* buffer, uint8_t length);
+  esp_err_t writeRegister(uint8_t reg, uint8_t value);
 
   // Data conversion
   int16_t combineBytes(uint8_t lsb, uint8_t msb);

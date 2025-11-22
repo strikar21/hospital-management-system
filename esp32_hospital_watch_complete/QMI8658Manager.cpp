@@ -16,6 +16,8 @@
 QMI8658Manager::QMI8658Manager() {
   initialized = false;
   i2cAddr = QMI8658_I2C_ADDR_PRIMARY;
+  i2c_dev = NULL;  // ✅ v5.4.1: Initialize device handle
+  consecutive_errors = 0;  // ✅ v5.4.1: Initialize error counter
 
   // Initialize sensor data
   accelX = accelY = accelZ = 0.0;
@@ -30,7 +32,8 @@ QMI8658Manager::QMI8658Manager() {
   fallTimestamp = 0;
   fallMagnitude = 0.0;
   lastFallCheck = 0;
-  fallThreshold = 2.5;  // 2.5g
+  fallCooldownUntil = 0;  // ✅ v5.4.8: No cooldown initially
+  fallThreshold = 3.0;  // ✅ v5.6.0: Reduced to 3.0g (clinical standard: 2.5-3.5g) - touch false positives prevented by cooldown
 
   // Initialize tremor detection
   historyIndex = 0;
@@ -54,26 +57,75 @@ QMI8658Manager::QMI8658Manager() {
 // INITIALIZATION
 // ====================================
 
-bool QMI8658Manager::begin(int sda, int scl) {
+bool QMI8658Manager::begin(i2c_master_bus_handle_t bus_handle) {
   Serial.println("🔧 Initializing QMI8658 IMU...");
 
-  // Initialize I2C (may already be done by touch controller)
-  Wire.begin(sda, scl);
-  Wire.setClock(400000);  // 400kHz I2C speed
+  // ✅ v5.4.1: Validate bus handle
+  if (bus_handle == NULL) {
+    Serial.println("❌ QMI8658: Invalid bus handle (NULL)");
+    Serial.println("   → Ensure FT3168 touch initialized first (creates shared bus)");
+    initialized = false;
+    return false;
+  }
 
-  // Try primary address first (0x6A)
+  // ✅ v5.4.1: Power-on delay (critical for IMU stability)
+  delay(100);
+
+  // ✅ v5.4.1: Try primary address first (0x6A)
   i2cAddr = QMI8658_I2C_ADDR_PRIMARY;
-  uint8_t chipId = readRegister(QMI8658_WHO_AM_I);
 
-  if (chipId != QMI8658_CHIP_ID) {
+  i2c_device_config_t dev_config = {};
+  dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+  dev_config.device_address = i2cAddr;
+  dev_config.scl_speed_hz = 400000;  // 400kHz
+
+  esp_err_t ret = i2c_master_bus_add_device(bus_handle, &dev_config, &i2c_dev);
+  if (ret != ESP_OK) {
+    Serial.printf("❌ QMI8658: Failed to add device to I2C bus (error %d)\n", ret);
+
+    // ✅ Detailed error messages
+    if (ret == ESP_ERR_TIMEOUT) {
+      Serial.println("   → I2C timeout (check pull-up resistors)");
+    } else if (ret == ESP_ERR_INVALID_ARG) {
+      Serial.println("   → Invalid I2C address or config");
+    }
+
+    initialized = false;
+    return false;
+  }
+
+  Serial.println("✅ QMI8658 IMU added to shared I2C bus");
+
+  // ✅ Read WHO_AM_I register to verify device
+  uint8_t chipId = 0;
+  ret = readRegister(QMI8658_WHO_AM_I, &chipId);
+
+  if (ret != ESP_OK || chipId != QMI8658_CHIP_ID) {
     // Try secondary address (0x6B)
     Serial.printf("⚠️  No response at 0x%02X, trying 0x%02X...\n",
                   QMI8658_I2C_ADDR_PRIMARY, QMI8658_I2C_ADDR_SECONDARY);
+
+    // Remove old device handle
+    if (i2c_dev != NULL) {
+      i2c_master_bus_rm_device(i2c_dev);
+      i2c_dev = NULL;
+    }
+
+    // Try secondary address
     i2cAddr = QMI8658_I2C_ADDR_SECONDARY;
-    chipId = readRegister(QMI8658_WHO_AM_I);
+    dev_config.device_address = i2cAddr;
+
+    ret = i2c_master_bus_add_device(bus_handle, &dev_config, &i2c_dev);
+    if (ret != ESP_OK) {
+      Serial.printf("❌ QMI8658: Failed at secondary address too (error %d)\n", ret);
+      initialized = false;
+      return false;
+    }
+
+    ret = readRegister(QMI8658_WHO_AM_I, &chipId);
   }
 
-  if (chipId != QMI8658_CHIP_ID) {
+  if (ret != ESP_OK || chipId != QMI8658_CHIP_ID) {
     Serial.printf("❌ QMI8658 not found! Expected 0x%02X, got 0x%02X\n",
                   QMI8658_CHIP_ID, chipId);
     initialized = false;
@@ -83,23 +135,23 @@ bool QMI8658Manager::begin(int sda, int scl) {
   Serial.printf("✅ QMI8658 found at I2C address 0x%02X (Chip ID: 0x%02X)\n",
                 i2cAddr, chipId);
 
-  // Soft reset
+  // ✅ Soft reset
   writeRegister(QMI8658_RESET, 0xB0);
   delay(10);
 
-  // Configure CTRL1: Enable accelerometer
+  // ✅ Configure CTRL1: Enable accelerometer
   // [7]: SelfTest=0, [6:4]: AccRange=010 (±4g), [3:0]: AccODR=0110 (250Hz)
   writeRegister(QMI8658_CTRL1, 0x26);
 
-  // Configure CTRL2: Enable gyroscope
+  // ✅ Configure CTRL2: Enable gyroscope
   // [7]: SelfTest=0, [6:4]: GyrRange=011 (±512dps), [3:0]: GyrODR=0110 (250Hz)
   writeRegister(QMI8658_CTRL2, 0x36);
 
-  // Configure CTRL3: Enable sensors
+  // ✅ Configure CTRL3: Enable sensors
   // [7]: AccEnable=1, [6]: GyrEnable=1, [5:0]: Reserved
   writeRegister(QMI8658_CTRL3, 0xC0);
 
-  // Configure CTRL7: Enable accelerometer and gyroscope data ready
+  // ✅ Configure CTRL7: Enable accelerometer and gyroscope data ready
   writeRegister(QMI8658_CTRL7, 0x03);
 
   delay(50);  // Allow sensors to stabilize
@@ -108,7 +160,7 @@ bool QMI8658Manager::begin(int sda, int scl) {
   Serial.println("✅ QMI8658 configured:");
   Serial.println("   - Accelerometer: ±4g @ 250Hz");
   Serial.println("   - Gyroscope: ±512dps @ 250Hz");
-  Serial.println("   - Fall threshold: 2.5g");
+  Serial.println("   - Fall threshold: 3.0g");  // ✅ v5.6.0: Clinical standard (2.5-3.5g)
   Serial.println("   - Tremor range: 4-12 Hz");
 
   return true;
@@ -210,8 +262,14 @@ bool QMI8658Manager::checkForFall() {
 
   unsigned long now = millis();
 
-  // Check every 50ms (20 Hz fall detection rate)
-  if (now - lastFallCheck < 50) {
+  // ✅ v5.4.8: Check cooldown period (prevent re-triggering after manual clear)
+  if (now < fallCooldownUntil) {
+    return false;  // In cooldown - ignore all acceleration
+  }
+
+  // ✅ v5.4.8: Check every 200ms (5 Hz) to reduce CPU load and improve touch responsiveness
+  // (Falls take ~100-300ms to develop, so 200ms sampling is still safe)
+  if (now - lastFallCheck < 200) {
     return fallDetected;
   }
   lastFallCheck = now;
@@ -259,7 +317,9 @@ float QMI8658Manager::getFallConfidence() {
 
 void QMI8658Manager::clearFallFlag() {
   fallDetected = false;
-  Serial.println("   Fall flag manually cleared");
+  // ✅ v5.4.8: Set 10-second cooldown to prevent immediate re-triggering
+  fallCooldownUntil = millis() + 10000;  // 10 seconds from now
+  Serial.println("   Fall flag manually cleared (10s cooldown active)");
 }
 
 // ====================================
@@ -409,10 +469,11 @@ void QMI8658Manager::setTremorParameters(float minFreq, float maxFreq, float min
 // ====================================
 
 bool QMI8658Manager::isConnected() {
-  if (!initialized) return false;
+  if (!initialized || i2c_dev == NULL) return false;
 
-  uint8_t chipId = readRegister(QMI8658_WHO_AM_I);
-  return (chipId == QMI8658_CHIP_ID);
+  uint8_t chipId = 0;
+  esp_err_t ret = readRegister(QMI8658_WHO_AM_I, &chipId);
+  return (ret == ESP_OK && chipId == QMI8658_CHIP_ID);
 }
 
 void QMI8658Manager::printDiagnostics() {
@@ -436,36 +497,87 @@ void QMI8658Manager::printDiagnostics() {
 
 // ====================================
 // I2C HELPER FUNCTIONS (PRIVATE)
+// ✅ v5.4.1: Rewritten to use NEW ESP-IDF I2C driver API
 // ====================================
 
-uint8_t QMI8658Manager::readRegister(uint8_t reg) {
-  Wire.beginTransmission(i2cAddr);
-  Wire.write(reg);
-  Wire.endTransmission(false);  // Repeated start
-
-  Wire.requestFrom(i2cAddr, (uint8_t)1);
-  if (Wire.available()) {
-    return Wire.read();
+esp_err_t QMI8658Manager::readRegister(uint8_t reg, uint8_t* value) {
+  if (i2c_dev == NULL) {
+    consecutive_errors++;
+    return ESP_ERR_INVALID_STATE;
   }
-  return 0xFF;  // Error
+
+  // ✅ Use NEW driver transmit-receive API
+  esp_err_t ret = i2c_master_transmit_receive(
+    i2c_dev,
+    &reg, 1,        // Write register address
+    value, 1,       // Read 1 byte
+    1000            // Timeout: 1000ms
+  );
+
+  if (ret != ESP_OK) {
+    consecutive_errors++;
+    Serial.printf("❌ I2C read error (reg 0x%02X): %d (consecutive: %d)\n",
+                  reg, ret, consecutive_errors);
+
+    // ✅ Trigger bus health warning if too many errors
+    if (consecutive_errors >= MAX_CONSECUTIVE_ERRORS) {
+      Serial.println("⚠️  WARNING: I2C bus health degraded!");
+      Serial.println("   → Check connections, power, and pull-up resistors");
+    }
+  } else {
+    consecutive_errors = 0;  // Reset on success
+  }
+
+  return ret;
 }
 
-void QMI8658Manager::readRegisters(uint8_t reg, uint8_t* buffer, uint8_t length) {
-  Wire.beginTransmission(i2cAddr);
-  Wire.write(reg);
-  Wire.endTransmission(false);  // Repeated start
-
-  Wire.requestFrom(i2cAddr, length);
-  for (uint8_t i = 0; i < length && Wire.available(); i++) {
-    buffer[i] = Wire.read();
+esp_err_t QMI8658Manager::readRegisters(uint8_t reg, uint8_t* buffer, uint8_t length) {
+  if (i2c_dev == NULL) {
+    consecutive_errors++;
+    return ESP_ERR_INVALID_STATE;
   }
+
+  esp_err_t ret = i2c_master_transmit_receive(
+    i2c_dev,
+    &reg, 1,
+    buffer, length,
+    1000
+  );
+
+  if (ret != ESP_OK) {
+    consecutive_errors++;
+    Serial.printf("❌ I2C bulk read error (reg 0x%02X, len %d): %d\n",
+                  reg, length, ret);
+  } else {
+    consecutive_errors = 0;
+  }
+
+  return ret;
 }
 
-void QMI8658Manager::writeRegister(uint8_t reg, uint8_t value) {
-  Wire.beginTransmission(i2cAddr);
-  Wire.write(reg);
-  Wire.write(value);
-  Wire.endTransmission();
+esp_err_t QMI8658Manager::writeRegister(uint8_t reg, uint8_t value) {
+  if (i2c_dev == NULL) {
+    consecutive_errors++;
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  uint8_t data[2] = {reg, value};
+
+  esp_err_t ret = i2c_master_transmit(
+    i2c_dev,
+    data, 2,
+    1000
+  );
+
+  if (ret != ESP_OK) {
+    consecutive_errors++;
+    Serial.printf("❌ I2C write error (reg 0x%02X = 0x%02X): %d\n",
+                  reg, value, ret);
+  } else {
+    consecutive_errors = 0;
+  }
+
+  return ret;
 }
 
 // ====================================

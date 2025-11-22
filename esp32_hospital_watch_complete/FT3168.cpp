@@ -4,8 +4,10 @@
 #include "driver/i2c_master.h"  // ✅ NEW I2C driver API
 #include "Arduino.h"            // ✅ For Serial.printf() debugging
 
+// ✅ v5.4.1: Export shared I2C bus handle for use by IMU (QMI8658)
+i2c_master_bus_handle_t shared_i2c_bus = NULL;
+
 // ✅ v5.3: Use NEW I2C master driver API (compatible with Wire library)
-static i2c_master_bus_handle_t i2c_bus_handle = NULL;
 static i2c_master_dev_handle_t ft3168_handle = NULL;
 
 uint8_t I2C_writr_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
@@ -38,24 +40,39 @@ uint8_t I2C_master_write_read_device(uint8_t addr, uint8_t *writeBuf, uint8_t wr
 
 void Touch_Init(void)
 {
-  // ✅ v5.3: Initialize I2C using NEW driver API (compatible with Wire/TwoWire)
-  i2c_master_bus_config_t bus_config = {};
-  bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
-  bus_config.i2c_port = I2C_NUM_0;
-  bus_config.scl_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SCL;
-  bus_config.sda_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SDA;
-  bus_config.glitch_ignore_cnt = 7;
-  bus_config.flags.enable_internal_pullup = true;
+  // ✅ v5.4.1: Only create shared I2C bus if not already created (by IMU or other device)
+  if (shared_i2c_bus == NULL) {
+    i2c_master_bus_config_t bus_config = {};
+    bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config.i2c_port = I2C_NUM_0;
+    bus_config.scl_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SCL;  // GPIO 48
+    bus_config.sda_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SDA;  // GPIO 47
+    bus_config.glitch_ignore_cnt = 7;
+    bus_config.flags.enable_internal_pullup = false;  // ✅ CRITICAL: Board has external 4.7kΩ pull-ups
 
-  ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &i2c_bus_handle));
+    esp_err_t ret = i2c_new_master_bus(&bus_config, &shared_i2c_bus);
+    if (ret != ESP_OK) {
+      Serial.printf("❌ Failed to create I2C master bus: %d\n", ret);
+      return;
+    }
 
-  // Add FT3168 device to I2C bus
+    Serial.println("✅ I2C Bus 0 created (shared by touch + IMU)");
+    delay(100);  // ✅ Power settling delay
+  }
+
+  // ✅ Add FT3168 touch device to shared I2C bus
   i2c_device_config_t dev_config = {};
   dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-  dev_config.device_address = I2C_ADDR_FT3168;
+  dev_config.device_address = I2C_ADDR_FT3168;  // 0x38
   dev_config.scl_speed_hz = 300000;  // 300kHz
 
-  ESP_ERROR_CHECK(i2c_master_bus_add_device(i2c_bus_handle, &dev_config, &ft3168_handle));
+  esp_err_t ret = i2c_master_bus_add_device(shared_i2c_bus, &dev_config, &ft3168_handle);
+  if (ret != ESP_OK) {
+    Serial.printf("❌ Failed to add FT3168 to I2C bus: %d\n", ret);
+    return;
+  }
+
+  Serial.println("✅ FT3168 touch controller added to shared I2C bus");
 
   // Switch to normal mode
   uint8_t data = 0x00;

@@ -47,6 +47,8 @@ This system implements a **FHIR R5 compliant** hospital management backend with 
 - ✅ **HIPAA 2025** - 6-year audit event retention and access logging
 - ✅ **Medical Device Rules 2017** - Device calibration tracking (2-month intervals)
 - ✅ **JWT Authentication** - Secure token-based authentication with blacklisting
+- ✅ **mTLS for MQTT** - Certificate-based device authentication (ESP32 watches)
+- ⚠️ **WiFi Password Storage** - ESP32 devices store WiFi credentials in flash memory. For production deployments, enable ESP32 flash encryption via Arduino IDE (Tools → Flash Encryption → Enabled). This is NOT enabled by default due to irreversibility - once enabled, the device can only be programmed via OTA updates.
 
 ### 📊 Real-Time Monitoring
 - ✅ **WebSocket Streaming** - Real-time vitals, alerts, and device status
