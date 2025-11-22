@@ -134,6 +134,7 @@
 #include "DisplayManager.h"  // ✅ v5.3: LVGL display manager
 #include "UIScreens.h"       // ✅ v5.3: UI screens
 #include "TouchHandler.h"    // ✅ v5.3: Touch gestures
+#include "QMI8658Manager.h"  // ✅ v5.4: Real IMU for fall & tremor detection
 
 // ====================================
 // DEVICE CONFIGURATION
@@ -219,6 +220,12 @@ bool mqttConfigured = false;  // ✅ v5.0.3: Track if MQTT certs already loaded
 // PHYSIOLOGICAL SIMULATOR
 // ====================================
 PhysiologicalSimulator simulator;  // ✅ v5.1: Realistic vitals and ECG generator
+
+// ====================================
+// REAL IMU (v5.4) - QMI8658 6-Axis
+// ====================================
+QMI8658Manager imuSensor;  // ✅ v5.4: Real fall & tremor detection
+bool imuAvailable = false;  // True if IMU initialized successfully
 
 // ====================================
 // NFC MANAGER (v5.2)
@@ -1586,8 +1593,31 @@ void setup() {
     Serial.println("   - Note: Display uses I2C Bus 0 (GPIO21/22)");
   }
 
+  // ✅ v5.4: Initialize real IMU for fall & tremor detection
+  Serial.println("\n🔧 Initializing QMI8658 IMU...");
+  imuAvailable = imuSensor.begin(EXAMPLE_PIN_NUM_TOUCH_SDA, EXAMPLE_PIN_NUM_TOUCH_SCL);
+  if (imuAvailable) {
+    Serial.println("✅ QMI8658 IMU initialized successfully");
+    Serial.println("   Features enabled:");
+    Serial.println("   - Fall detection (threshold: 2.5g)");
+    Serial.println("   - Tremor monitoring (Parkinson's range: 4-12 Hz)");
+    Serial.println("   - Activity classification (stationary/walking/running)");
+    Serial.println("   - Real-time motion data for MQTT streaming");
+    Serial.println("\n📍 Calibrating IMU (keep device flat and stationary)...");
+    imuSensor.calibrate();
+  } else {
+    Serial.println("⚠️  QMI8658 IMU not found (fall/tremor detection disabled)");
+    Serial.println("   The watch will continue to work, but without:");
+    Serial.println("   - Real-time fall detection");
+    Serial.println("   - Tremor analysis (Parkinson's monitoring)");
+    Serial.println("   - Motion-based activity tracking");
+  }
+
   // ✅ Use version constants for completion message
-  Serial.printf("✅ v%s: %s - Ready!\n", FIRMWARE_VERSION, VERSION_NAME);
+  Serial.printf("\n✅ v%s: %s - Ready!\n", FIRMWARE_VERSION, VERSION_NAME);
+  if (imuAvailable) {
+    Serial.println("🩺 Real IMU enabled: Fall & tremor detection active");
+  }
 }
 
 // ====================================
@@ -1599,6 +1629,51 @@ void loop() {
 
   // ✅ v5.4: Update touch handler for swipe gesture detection
   touch.update();
+
+  // ✅ v5.4: Update IMU and check for fall/tremor events (every loop iteration)
+  if (imuAvailable) {
+    imuSensor.update();  // Fetch latest accelerometer/gyroscope data
+
+    // 🚨 FALL DETECTION (highest priority - check every loop)
+    if (imuSensor.checkForFall()) {
+      float magnitude = imuSensor.getAccelerationMagnitude();
+      float confidence = imuSensor.getFallConfidence();
+
+      // Send critical alert immediately
+      sendAlert("FALL_DETECTED", "CRITICAL",
+                "Patient fall detected! Acceleration: " + String(magnitude, 2) + "g",
+                confidence);
+
+      // Flash red LED urgently
+      flashAlertPattern("critical");
+
+      // Update UI to show fall alert
+      ui.showAlert("FALL DETECTED", "🚨 Emergency Response");
+
+      // Clear fall flag after handling
+      imuSensor.clearFallFlag();
+
+      Serial.printf("🚨 FALL EVENT HANDLED - Alert sent to hospital\n");
+    }
+
+    // ⚠️ TREMOR DETECTION (check every loop - internally rate-limited to 100Hz)
+    static unsigned long lastTremorAlert = 0;
+    if (imuSensor.checkForTremor()) {
+      // Don't spam - only send alert every 30 seconds
+      if (millis() - lastTremorAlert > 30000) {
+        float freq = imuSensor.getTremorFrequency();
+        float amp = imuSensor.getTremorAmplitude();
+
+        sendAlert("TREMOR_DETECTED", "WARNING",
+                  "Tremor detected! Frequency: " + String(freq, 1) + " Hz, Amplitude: " + String(amp, 3) + "g",
+                  0.75);
+
+        lastTremorAlert = millis();
+
+        Serial.printf("⚠️  TREMOR EVENT HANDLED - Alert sent (Freq: %.1fHz, Amp: %.3fg)\n", freq, amp);
+      }
+    }
+  }
 
   if (!wifiConnected) {
     dnsServer.processNextRequest();
@@ -2492,6 +2567,16 @@ void sendVitals() {
   bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
   float tempCelsius = (temperature - 32.0) * 5.0 / 9.0;
 
+  // ✅ v5.4: Get real IMU motion data if available
+  float accelX = 0, accelY = 0, accelZ = 0;
+  float gyroX = 0, gyroY = 0, gyroZ = 0;
+  const char* activityStr = "UNKNOWN";
+  if (imuAvailable) {
+    imuSensor.getAcceleration(accelX, accelY, accelZ);
+    imuSensor.getGyroscope(gyroX, gyroY, gyroZ);
+    activityStr = imuSensor.getActivityString();
+  }
+
   // Publish using helper template (handles connection check, retry, offline queueing)
   bool success = publishMessage(topic, [&](JsonDocument& doc) {
     doc["sequence"] = vitalsSequenceCounter++;  // ✅ Message ID for vitals
@@ -2505,6 +2590,19 @@ void sendVitals() {
     doc["batteryLevel"] = batteryLevel;
     doc["bloodPressureSystolic"] = bloodPressureSystolic;
     doc["bloodPressureDiastolic"] = bloodPressureDiastolic;
+
+    // ✅ v5.4: Add real motion data from QMI8658 IMU
+    if (imuAvailable) {
+      JsonObject motion = doc["motion"].to<JsonObject>();
+      motion["accelX"] = serialized(String(accelX, 3));  // 3 decimal places
+      motion["accelY"] = serialized(String(accelY, 3));
+      motion["accelZ"] = serialized(String(accelZ, 3));
+      motion["gyroX"] = serialized(String(gyroX, 1));   // 1 decimal place
+      motion["gyroY"] = serialized(String(gyroY, 1));
+      motion["gyroZ"] = serialized(String(gyroZ, 1));
+      motion["activity"] = activityStr;  // "STATIONARY", "WALKING", "RUNNING", or "FALLING"
+      motion["magnitude"] = serialized(String(imuSensor.getAccelerationMagnitude(), 3));
+    }
   });
 
   if (success) {
