@@ -4,7 +4,7 @@ ESP32 Watch Adapter
 Converts MQTT vitals data to FHIR R5 Observation resources
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timezone
 import uuid
 from .loinc_mapping import get_loinc_for_vital
@@ -84,7 +84,7 @@ class ESP32WatchAdapter:
     def _create_observation(
         self,
         vital_type: str,
-        value: float,
+        value: Any,  # Changed from float to Any to handle string values (activity)
         patient_id: str,
         device_id: str,
         effective_time: datetime
@@ -93,8 +93,8 @@ class ESP32WatchAdapter:
         Create a single FHIR R5 Observation for a vital sign
 
         Args:
-            vital_type: Type of vital (heartRate, spo2, etc.)
-            value: Measured value
+            vital_type: Type of vital (heartRate, spo2, activity, etc.)
+            value: Measured value (float for vitals, string for activity)
             patient_id: Patient ID
             device_id: Device ID
             effective_time: Time of measurement
@@ -139,12 +139,6 @@ class ESP32WatchAdapter:
             },
             "effectiveDateTime": effective_time.isoformat(),
             "issued": datetime.now(timezone.utc).isoformat(),
-            "valueQuantity": {
-                "value": value,
-                "unit": loinc["unit"],
-                "system": "http://unitsofmeasure.org",
-                "code": loinc["ucum"]
-            },
             "device": {
                 "reference": f"Device/{device_id}"
             },
@@ -154,45 +148,70 @@ class ESP32WatchAdapter:
             }
         }
 
-        # Add interpretation if outside normal range
-        from .loinc_mapping import is_within_normal_range, is_critical
+        # Handle activity status (CodeableConcept instead of Quantity)
+        if vital_type == "activity" and isinstance(value, str):
+            value_set = loinc.get("valueSet", {})
+            activity_code = value_set.get(value, value_set.get("UNKNOWN"))
 
-        if is_critical(vital_type, value):
-            observation["interpretation"] = [
-                {
-                    "coding": [
-                        {
-                            "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
-                            "code": "HH" if value > 100 else "LL",
-                            "display": "Critical high" if value > 100 else "Critical low"
-                        }
-                    ]
-                }
-            ]
-        elif not is_within_normal_range(vital_type, value):
-            observation["interpretation"] = [
-                {
-                    "coding": [
-                        {
-                            "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
-                            "code": "A",
-                            "display": "Abnormal"
-                        }
-                    ]
-                }
-            ]
+            observation["valueCodeableConcept"] = {
+                "coding": [
+                    {
+                        "system": activity_code["system"],
+                        "code": activity_code["code"],
+                        "display": activity_code["display"]
+                    }
+                ],
+                "text": activity_code["display"]
+            }
         else:
-            observation["interpretation"] = [
-                {
-                    "coding": [
-                        {
-                            "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
-                            "code": "N",
-                            "display": "Normal"
-                        }
-                    ]
-                }
-            ]
+            # Standard quantity for numeric vitals
+            observation["valueQuantity"] = {
+                "value": value,
+                "unit": loinc["unit"],
+                "system": "http://unitsofmeasure.org",
+                "code": loinc["ucum"]
+            }
+
+        # Add interpretation if outside normal range (only for numeric vitals)
+        if isinstance(value, (int, float)):
+            from .loinc_mapping import is_within_normal_range, is_critical
+
+            if is_critical(vital_type, value):
+                observation["interpretation"] = [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "HH" if value > 100 else "LL",
+                                "display": "Critical high" if value > 100 else "Critical low"
+                            }
+                        ]
+                    }
+                ]
+            elif not is_within_normal_range(vital_type, value):
+                observation["interpretation"] = [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "A",
+                                "display": "Abnormal"
+                            }
+                        ]
+                    }
+                ]
+            else:
+                observation["interpretation"] = [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                                "code": "N",
+                                "display": "Normal"
+                            }
+                        ]
+                    }
+                ]
 
         return observation
 

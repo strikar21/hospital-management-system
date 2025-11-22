@@ -594,10 +594,25 @@ OfflineQueue offlineQueue;
 // Template version - no std::function overhead
 // MUST be declared AFTER offlineQueue
 // ====================================
+
+// Generate UUID v4 (pseudo-random, suitable for message IDs)
+String generateMessageId() {
+  char uuid[37];
+  sprintf(uuid, "%08x-%04x-%04x-%04x-%012x",
+          esp_random(),
+          (uint16_t)(esp_random() & 0xFFFF),
+          (uint16_t)((esp_random() & 0x0FFF) | 0x4000),  // Version 4
+          (uint16_t)((esp_random() & 0x3FFF) | 0x8000),  // Variant 10
+          esp_random() ^ (esp_random() << 16)
+  );
+  return String(uuid);
+}
+
 template<typename PayloadBuilder>
 bool publishMessage(String topic, PayloadBuilder buildPayload, bool queueOffline = true) {
   // 1. Build JSON payload with common fields
   JsonDocument doc;
+  doc["messageId"] = generateMessageId();  // Unique ID for idempotency and tracking
   doc["timestamp"] = getISO8601Timestamp();
   doc["deviceId"] = deviceId;
 

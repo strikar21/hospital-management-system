@@ -65,6 +65,58 @@ LOINC_CODES = {
         "system": "http://loinc.org",
         "category": "activity",
         "ucum": "{steps}"
+    },
+    "activity": {
+        "code": "82290-8",
+        "display": "Physical activity",
+        "unit": "status",
+        "system": "http://loinc.org",
+        "category": "activity",
+        "ucum": "{status}",
+        # SNOMED CT codes for activity status
+        "valueSet": {
+            "STATIONARY": {
+                "system": "http://snomed.info/sct",
+                "code": "160685001",
+                "display": "Lying/sitting"
+            },
+            "WALKING": {
+                "system": "http://snomed.info/sct",
+                "code": "228450008",
+                "display": "Walking"
+            },
+            "RUNNING": {
+                "system": "http://snomed.info/sct",
+                "code": "226034001",
+                "display": "Running"
+            },
+            "FALLING": {
+                "system": "http://snomed.info/sct",
+                "code": "217082002",
+                "display": "Accidental fall"
+            },
+            "UNKNOWN": {
+                "system": "http://snomed.info/sct",
+                "code": "261665006",
+                "display": "Unknown"
+            }
+        }
+    },
+    "movementIntensity": {
+        "code": "89574-8",
+        "display": "Physical activity intensity",
+        "unit": "%",
+        "system": "http://loinc.org",
+        "category": "activity",
+        "ucum": "%"
+    },
+    "tremorFrequency": {
+        "code": "75325-1",
+        "display": "Tremor assessment",
+        "unit": "Hz",
+        "system": "http://loinc.org",
+        "category": "exam",
+        "ucum": "Hz"
     }
 }
 
