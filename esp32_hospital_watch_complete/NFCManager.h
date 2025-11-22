@@ -97,7 +97,7 @@ public:
     void disableInterrupt();
 
     // ✅ IRQ mode functions (based on Adafruit example)
-    void updateIRQ();  // Call this in main loop() to check for cards
+    NFCReadResult updateIRQ();  // Call this in main loop() to check for cards (returns result if card detected)
     void startListeningToNFC();
     NFCReadResult handleCardDetected();
 

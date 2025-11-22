@@ -1824,7 +1824,22 @@ void loop() {
 
   // ✅ v5.2: Check NFC IRQ pin for card detection
   if (nfcAvailable) {
-    nfc.updateIRQ();
+    NFCReadResult nfcResult = nfc.updateIRQ();
+
+    // Show UI feedback when card is detected
+    if (nfcResult.success) {
+      String cardType = "NFC CARD";
+      if (nfcResult.tagType == NFC_STAFF_BADGE) cardType = "STAFF BADGE";
+      else if (nfcResult.tagType == NFC_PATIENT_WRISTBAND) cardType = "PATIENT ID";
+      else if (nfcResult.tagType == NFC_ROOM_TAG) cardType = "ROOM TAG";
+      else if (nfcResult.tagType == NFC_MEDICATION) cardType = "MEDICATION";
+
+      // Show alert on screen with card UID
+      ui.showAlert(cardType, "UID: " + nfcResult.uid);
+
+      // Flash LED to indicate NFC detection
+      flashAlertPattern("info");
+    }
   }
 
   // ✅ v5.2.4: Update non-blocking LED flasher (P1 fix)

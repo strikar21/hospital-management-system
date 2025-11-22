@@ -523,8 +523,15 @@ NFCReadResult NFCManager::handleCardDetected() {
 }
 
 // Update function - call this in main loop() to check IRQ pin
-void NFCManager::updateIRQ() {
-    if (!initialized) return;
+NFCReadResult NFCManager::updateIRQ() {
+    NFCReadResult emptyResult;
+    emptyResult.success = false;
+    emptyResult.timestamp = 0;
+    emptyResult.tagType = NFC_UNKNOWN;
+    emptyResult.uid = "";
+    emptyResult.data = "";
+
+    if (!initialized) return emptyResult;
 
     // If reader is disabled (debouncing), check if enough time has passed
     if (readerDisabled) {
@@ -532,7 +539,7 @@ void NFCManager::updateIRQ() {
             readerDisabled = false;
             startListeningToNFC();  // Re-enable listening
         }
-        return;
+        return emptyResult;
     }
 
     // Read current IRQ pin state
@@ -541,9 +548,12 @@ void NFCManager::updateIRQ() {
     // Detect HIGH → LOW transition (card detected)
     if (irqCurr == LOW && irqPrev == HIGH) {
         Serial.println("[NFC] 🔔 IRQ triggered!");
-        handleCardDetected();
+        NFCReadResult result = handleCardDetected();
+        irqPrev = irqCurr;  // Save state before returning
+        return result;  // Return the detected card info
     }
 
     // Save current state for next iteration
     irqPrev = irqCurr;
+    return emptyResult;
 }
