@@ -854,7 +854,7 @@ void setDisplayBrightness(uint8_t level) {
 }
 
 // ✅ v5.6.0: Screen timeout setting (0 = never, 1-60 seconds)
-uint8_t screenTimeoutSeconds = 15;  // Default 15s
+uint8_t screenTimeoutSeconds = 0;  // Default: NEVER timeout (disabled for medical device)
 unsigned long lastUserActivity = 0;
 bool screenOn = true;
 
@@ -1035,13 +1035,16 @@ void updateLEDFlasher() {
 // ====================================
 void checkBatteryAlerts() {
   if (batteryLevel < 10) {
-    sendAlert("criticalBatteryLevel", "high", "CRITICAL BATTERY - " + String(batteryLevel) + "%", 1.0);
+    String msg = "CRITICAL BATTERY - " + String(batteryLevel) + "%";
+    sendAlert("criticalBatteryLevel", "high", msg.c_str(), 1.0);
   } else if (batteryLevel < 20) {
-    sendAlert("lowBatteryWarning", "medium", "LOW BATTERY - " + String(batteryLevel) + "%", 0.95);
+    String msg = "LOW BATTERY - " + String(batteryLevel) + "%";
+    sendAlert("lowBatteryWarning", "medium", msg.c_str(), 0.95);
   }
 
   if (batteryHealthPercentage < 70) {
-    sendAlert("batteryDegradation", "medium", "BATTERY HEALTH - " + String(batteryHealthPercentage) + "%", 0.85);
+    String msg = "BATTERY HEALTH - " + String(batteryHealthPercentage) + "%";
+    sendAlert("batteryDegradation", "medium", msg.c_str(), 0.85);
   }
 }
 
@@ -1064,14 +1067,16 @@ void updateBatteryHealth() {
 void checkConnectivityAlerts() {
   // ✅ v5.2.2: Bug #6 fix - Only send frequentDisconnects alert ONCE (spam prevention)
   if (totalDisconnects >= 5 && !frequentDisconnectsAlertSent) {
-    sendAlert("frequentDisconnects", "medium", "DISCONNECTS - " + String(totalDisconnects) + "x", 0.9);
+    String msg = "DISCONNECTS - " + String(totalDisconnects) + "x";
+    sendAlert("frequentDisconnects", "medium", msg.c_str(), 0.9);
     frequentDisconnectsAlertSent = true;  // Prevent repeated alerts
   }
 
   // ✅ v5.2.2: Bug #5 fix - Only send deviceUnresponsive alert ONCE (spam prevention)
   // ✅ v5.2.4: Fix millis() overflow with unsigned long cast
   if (lastCommandReceivedAt > 0 && (unsigned long)(millis() - lastCommandReceivedAt) > 600000 && !deviceUnresponsiveAlertSent) {
-    sendAlert("deviceUnresponsive", "high", "UNRESPONSIVE - " + String((unsigned long)(millis() - lastCommandReceivedAt) / 60000) + " min", 0.95);
+    String msg = "UNRESPONSIVE - " + String((unsigned long)(millis() - lastCommandReceivedAt) / 60000) + " min";
+    sendAlert("deviceUnresponsive", "high", msg.c_str(), 0.95);
     deviceUnresponsiveAlertSent = true;  // Prevent repeated alerts
   }
 }
@@ -1105,7 +1110,8 @@ void checkSystemAlerts() {
   if (!isValidReading(heartRate, oxygenSat, temperature)) {
     consecutiveInvalidReadings++;
     if (consecutiveInvalidReadings >= 3 && !sensorMalfunctionAlertSent) {
-      sendAlert("sensorMalfunction", "high", "SENSOR FAIL - " + String(consecutiveInvalidReadings) + " invalid", 0.95);
+      String msg = "SENSOR FAIL - " + String(consecutiveInvalidReadings) + " invalid";
+      sendAlert("sensorMalfunction", "high", msg.c_str(), 0.95);
       sensorMalfunctionAlertSent = true;
     }
   } else {
@@ -1121,7 +1127,8 @@ void checkSystemAlerts() {
 
   float hrVariation = abs(heartRate - heartRateHistory[0]);
   if (hrVariation > 50 && heartRate > 0) {
-    sendAlert("dataQualityIssue", "low", "DATA QUALITY - HR spike " + String(hrVariation), 0.7);
+    String msg = "DATA QUALITY - HR spike " + String(hrVariation);
+    sendAlert("dataQualityIssue", "low", msg.c_str(), 0.7);
   }
 }
 
@@ -1692,6 +1699,7 @@ void setup() {
   wasMqttConnected = mqttClient.connected();
   lastBatteryUpdate = millis();
   lastValidReading = millis();
+  lastUserActivity = millis();  // ✅ Initialize screen timeout timer
 
   // ✅ v5.1: Initialize physiological simulator
   simulator.begin();
@@ -1792,10 +1800,9 @@ void loop() {
   touch.update();
 
   // ✅ v5.6.0: Update last activity on any touch (tap to wake + timeout reset)
-  // TODO: Implement public method in TouchHandler to check touch status
-  // if (touch.isTouched() && tapToWakeEnabled) {
-  //   updateLastActivity();
-  // }
+  if (touch.isTouched() && tapToWakeEnabled) {
+    updateLastActivity();
+  }
 
   // ✅ v5.6.0: Check screen timeout
   checkScreenTimeout();
@@ -1815,9 +1822,8 @@ void loop() {
       float confidence = imuSensor.getFallConfidence();
 
       // Send critical alert immediately
-      sendAlert("FALL_DETECTED", "CRITICAL",
-                "Patient fall detected! Acceleration: " + String(magnitude, 2) + "g",
-                confidence);
+      String msg = "Patient fall detected! Acceleration: " + String(magnitude, 2) + "g";
+      sendAlert("FALL_DETECTED", "CRITICAL", msg.c_str(), confidence);
 
       // Flash red LED urgently
       flashAlertPattern("critical");
@@ -1846,9 +1852,8 @@ void loop() {
         float freq = imuSensor.getTremorFrequency();
         float amp = imuSensor.getTremorAmplitude();
 
-        sendAlert("TREMOR_DETECTED", "WARNING",
-                  "Tremor detected! Frequency: " + String(freq, 1) + " Hz, Amplitude: " + String(amp, 3) + "g",
-                  0.75);
+        String msg = "Tremor detected! Frequency: " + String(freq, 1) + " Hz, Amplitude: " + String(amp, 3) + "g";
+        sendAlert("TREMOR_DETECTED", "WARNING", msg.c_str(), 0.75);
 
         lastTremorAlert = millis();
 

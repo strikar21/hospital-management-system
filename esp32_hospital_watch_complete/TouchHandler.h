@@ -72,6 +72,12 @@ public:
      */
     bool isEnabled() const;
 
+    /**
+     * Check if screen is currently being touched
+     * @return true if screen is touched, false otherwise
+     */
+    bool isTouched() const { return isTouching; }
+
 private:
     bool initialized;
     bool enabled;
