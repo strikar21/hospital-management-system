@@ -321,21 +321,7 @@ StaticJsonDocument<8192> waveformDoc;    // Waveform messages (~4KB, 8KB buffer 
 StaticJsonDocument<1024> commandDoc;     // Command responses (~400 bytes, 1KB buffer = 2.5x safety margin)
 StaticJsonDocument<4096> statusDoc;      // Device status (~2KB, 4KB buffer = 2x safety margin)
 
-// Alert thresholds (configurable per vital type)
-struct AlertThreshold {
-  float hrMin = 40.0;
-  float hrMax = 120.0;
-  float spo2Min = 90.0;
-  float spo2Max = 100.0;
-  float tempMin = 35.0;
-  float tempMax = 38.5;
-  float bpSysMin = 90.0;
-  float bpSysMax = 140.0;
-  float bpDiaMin = 60.0;
-  float bpDiaMax = 90.0;
-  float rrMin = 12.0;
-  float rrMax = 20.0;
-};
+// Alert thresholds (configurable per vital type) - using struct from VitalsAlertsManager.h
 AlertThreshold alertThresholds;
 
 // ====================================
@@ -876,9 +862,9 @@ void setScreenTimeout(uint8_t seconds) {
   screenTimeoutSeconds = seconds;
   Serial.printf("⏱️ Screen timeout set to %d seconds%s\n", seconds, (seconds == 0) ? " (never)" : "");
   // Save to preferences
-  preferences.begin("watch", false);
-  preferences.putUChar("scrTimeout", seconds);
-  preferences.end();
+  prefs.begin("watch", false);
+  prefs.putUChar("scrTimeout", seconds);
+  prefs.end();
 }
 
 void updateLastActivity() {
@@ -908,9 +894,9 @@ void setTapToWake(bool enabled) {
   tapToWakeEnabled = enabled;
   Serial.printf("👆 Tap to wake: %s\n", enabled ? "ENABLED" : "DISABLED");
   // Save to preferences
-  preferences.begin("watch", false);
-  preferences.putBool("tapToWake", enabled);
-  preferences.end();
+  prefs.begin("watch", false);
+  prefs.putBool("tapToWake", enabled);
+  prefs.end();
 }
 
 // ====================================
@@ -949,7 +935,7 @@ void syncNTPTime() {
 // ====================================
 // ALERT SYSTEM
 // ====================================
-void sendAlert(String alertType, String severity, String message, float confidence) {
+void sendAlert(const char* alertType, const char* severity, const char* message, float confidence) {
   // ✅ v5.4: Refactored to use publishMessage() helper
   String topic = "hospital/devices/" + deviceId + "/alerts";
 
@@ -1806,9 +1792,10 @@ void loop() {
   touch.update();
 
   // ✅ v5.6.0: Update last activity on any touch (tap to wake + timeout reset)
-  if (touch.getTouchStatus() && tapToWakeEnabled) {
-    updateLastActivity();
-  }
+  // TODO: Implement public method in TouchHandler to check touch status
+  // if (touch.isTouched() && tapToWakeEnabled) {
+  //   updateLastActivity();
+  // }
 
   // ✅ v5.6.0: Check screen timeout
   checkScreenTimeout();
@@ -1961,14 +1948,15 @@ void loop() {
 
   // ✅ v5.2.3: Auto-reconnect to saved WiFi when in captive portal mode
   if (!wifiConnected && (unsigned long)(millis() - lastScan) > 60000) {
-    scanWiFiNetworks();
+    webProvisioning.scanWiFiNetworks(wifiConnected);
     lastScan = millis();
 
     // Check if we have saved WiFi credentials and the network is available
     if (wifiSSID.length() > 0) {
       // Look for saved SSID in scan results
       bool networkFound = false;
-      for (int i = 0; i < networkCount; i++) {
+      int count = webProvisioning.getNetworkCount();
+      for (int i = 0; i < count; i++) {
         if (WiFi.SSID(i) == wifiSSID) {
           networkFound = true;
           break;
@@ -2815,10 +2803,10 @@ void loadConfiguration() {
   ledAlertsEnabled = prefs.getBool("led_alerts", true);
 
   // ✅ v5.6.0: Load screen timeout and tap-to-wake settings
-  preferences.begin("watch", true);  // Read-only
-  screenTimeoutSeconds = preferences.getUChar("scrTimeout", 15);  // Default 15s
-  tapToWakeEnabled = preferences.getBool("tapToWake", true);  // Default ON
-  preferences.end();
+  prefs.begin("watch", true);  // Read-only
+  screenTimeoutSeconds = prefs.getUChar("scrTimeout", 15);  // Default 15s
+  tapToWakeEnabled = prefs.getBool("tapToWake", true);  // Default ON
+  prefs.end();
   Serial.printf("⏱️ Loaded screen timeout: %d seconds\n", screenTimeoutSeconds);
   Serial.printf("👆 Loaded tap to wake: %s\n", tapToWakeEnabled ? "ON" : "OFF");
 
