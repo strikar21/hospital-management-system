@@ -1836,7 +1836,8 @@ void loop() {
       else if (nfcResult.tagType == NFC_MEDICATION) cardType = "MEDICATION";
 
       // Show alert on screen with card UID
-      ui.showAlert(cardType, "UID: " + nfcResult.uid);
+      String message = "UID: " + nfcResult.uid;
+      ui.showAlert(cardType.c_str(), message.c_str());
 
       // Flash LED to indicate NFC detection
       flashAlertPattern("info");
