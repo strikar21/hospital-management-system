@@ -2633,9 +2633,8 @@ void generateMicroBatch() {
   simulator.fillSampleBuffer(microBatch);
 
   // ✅ v5.4.3: Update home screen ECG chart with Lead II samples (channel 1)
-  if (ui.getCurrentScreen() == SCREEN_HOME) {
-    ui.updateHomeECG(microBatch[1], 10);  // Lead II for home screen waveform
-  }
+  // ✅ v5.8.3: ALWAYS update home ECG (not just when on home screen)
+  ui.updateHomeECG(microBatch[1], 10);  // Lead II for home screen waveform
 
   // Copy to accumulator
   for (int ch = 0; ch < 8; ch++) {
