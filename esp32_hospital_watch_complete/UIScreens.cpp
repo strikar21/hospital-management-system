@@ -292,7 +292,7 @@ void UIScreens::createAlertsScreen() {
     // "No alerts" placeholder label
     lv_obj_t *noAlertsLabel = lv_label_create(alertsList);
     lv_label_set_text(noAlertsLabel, "No active alerts");
-    lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_22, 0);  // ✅ Increased from 20 to 22 for better readability
+    lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_20, 0);  // ✅ Standardized to 20px
     lv_obj_set_style_text_color(noAlertsLabel, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg
     lv_obj_set_style_text_opa(noAlertsLabel, LV_OPA_COVER, 0);  // ✅ Ensure full opacity for crisp rendering
     lv_obj_center(noAlertsLabel);
@@ -308,7 +308,7 @@ void UIScreens::createAlertsScreen() {
 
     lv_obj_t *btnLabel = lv_label_create(buttonClearAlerts);
     lv_label_set_text(btnLabel, "Clear All");
-    lv_obj_set_style_text_font(btnLabel, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_font(btnLabel, &lv_font_montserrat_20, 0);  // ✅ Standardized to 20px
     lv_obj_set_style_text_color(btnLabel, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(btnLabel);
     lv_obj_add_event_cb(buttonClearAlerts, event_callback, LV_EVENT_CLICKED, this);
@@ -569,7 +569,7 @@ void UIScreens::clearAllAlerts() {
         // Show "No alerts" placeholder
         lv_obj_t *noAlertsLabel = lv_label_create(alertsList);
         lv_label_set_text(noAlertsLabel, "No active alerts");
-        lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_22, 0);  // ✅ Match font size from createAlertsScreen()
+        lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_20, 0);  // ✅ Standardized to 20px
         lv_obj_set_style_text_color(noAlertsLabel, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg
         lv_obj_set_style_text_opa(noAlertsLabel, LV_OPA_COVER, 0);  // ✅ Ensure full opacity for crisp rendering
         lv_obj_center(noAlertsLabel);

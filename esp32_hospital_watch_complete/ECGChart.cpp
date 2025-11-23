@@ -41,7 +41,7 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     // ECG label (top-left)
     lv_obj_t* labelECG = lv_label_create(container);
     lv_label_set_text(labelECG, "ECG - Lead II");
-    lv_obj_set_style_text_font(labelECG, &lv_font_montserrat_18, 0);  // ✅ Increased from 14 to 18
+    lv_obj_set_style_text_font(labelECG, &lv_font_montserrat_20, 0);  // ✅ Standardized to 20px
     lv_obj_set_style_text_color(labelECG, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on black bg
     lv_obj_align(labelECG, LV_ALIGN_TOP_LEFT, 5, 2);
 

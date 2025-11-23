@@ -125,7 +125,7 @@ lv_obj_t* VitalsCards::createCard(lv_obj_t* parent, const char* title, uint32_t 
     // Title label
     lv_obj_t* labelTitle = lv_label_create(card);
     lv_label_set_text(labelTitle, title);
-    lv_obj_set_style_text_font(labelTitle, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(labelTitle, &lv_font_montserrat_16, 0);  // ✅ Increased from 14 to 16
     lv_obj_set_style_text_color(labelTitle, lv_color_hex(0x000000), 0);
     lv_obj_align(labelTitle, LV_ALIGN_TOP_MID, 0, 2);
 

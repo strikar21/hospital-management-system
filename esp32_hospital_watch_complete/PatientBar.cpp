@@ -35,7 +35,7 @@ lv_obj_t* PatientBar::create(lv_obj_t* parent) {
     // Patient/Device ID label (centered)
     labelPatientInfo = lv_label_create(container);
     lv_label_set_text(labelPatientInfo, "Device: Unknown");
-    lv_obj_set_style_text_font(labelPatientInfo, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(labelPatientInfo, &lv_font_montserrat_20, 0);  // ✅ Standardized to 20px
     lv_obj_set_style_text_color(labelPatientInfo, lv_color_hex(0x000000), 0);  // ✅ Black text on green bg
     lv_obj_set_style_text_align(labelPatientInfo, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(labelPatientInfo, 260);
