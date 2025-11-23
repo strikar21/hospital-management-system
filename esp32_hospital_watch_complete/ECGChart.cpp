@@ -61,12 +61,12 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     lv_chart_set_point_count(chart, CHART_WIDTH);  // 1 point per pixel width
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100);  // 0-100 range
 
-    // ✅ v5.8.12: Medical ECG grid aligned with baseline at 30
-    // Chart range: 0-100, Baseline: 30 (70% from top)
-    // 10 horizontal divisions → grid at 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
-    // Baseline aligns with 3rd line from bottom (value 30)
-    // Chart height: 210px ÷ 10 = 21px per division (aligned to baseline)
-    lv_chart_set_div_line_count(chart, 7, 10);  // 7 vertical, 10 horizontal (baseline at line 3)
+    // ✅ v5.8.13: Medical ECG grid - actual 5×5 squares like ECG paper
+    // Chart: 268px wide, 210px tall
+    // Target: 42px squares (268÷42=6.4 squares wide, 210÷42=5 squares tall)
+    // 5 horizontal lines = 6 sections (0, 35, 70, 105, 140, 175, 210)
+    // 6 vertical lines = 7 sections (0, 38, 76, 114, 152, 190, 228, 268)
+    lv_chart_set_div_line_count(chart, 6, 5);  // 6 vertical, 5 horizontal for ~square grid
     lv_obj_set_style_line_color(chart, lv_color_hex(GRID_COLOR), LV_PART_MAIN);
     lv_obj_set_style_line_width(chart, 1, LV_PART_MAIN);
     lv_obj_set_style_line_opa(chart, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)
@@ -112,12 +112,13 @@ void ECGChart::updateSamples(int32_t* samples, uint8_t numSamples) {
         // AC component: ±500000 µV typical ECG range
         int32_t acSignal = samples[i] - 8388608;
 
-        // ✅ v5.8.9: Map ECG signal to chart range with baseline at 30 (medical standard)
-        // Baseline (0 µV) → 30 (70% from top)
-        // Upward deflections (R-peak ~+170000 µV) → 30 to 100 (70 units up)
-        // Downward deflections (S-wave ~-40000 µV) → 30 to 0 (30 units down)
-        // Gain: ±200000 µV fills 0-100 range (tighter than ±500000 for better visibility)
-        int value = 30 + map(acSignal, -200000, 200000, -30, 70);
+        // ✅ v5.8.13: CORRECT mapping - baseline ACTUALLY at 30
+        // When acSignal = 0 (no deflection), value = 30
+        // R-peak (+170000 µV) → value ~90
+        // S-wave (-40000 µV) → value ~24
+        // Formula: scale -200000..+200000 to 0..100, THEN shift baseline
+        float normalized = (float)acSignal / 200000.0;  // -1.0 to +1.0
+        int value = 30 + (int)(normalized * 70.0);      // 30 ± 70 units
         value = constrain(value, 0, 100);
         lv_chart_set_next_value(chart, series, value);
     }

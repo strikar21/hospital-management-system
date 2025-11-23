@@ -2001,9 +2001,9 @@ void loop() {
     for (int i = 0; i < 50; i++) {
       // Remove DC offset to get AC signal centered at 0
       int32_t acSignal = waveformAccumulator[1][i] - 8388608;
-      // ✅ Match home ECG: baseline 30, ±200000 µV → 0-100 (2.5x better gain)
-      // Baseline (0 µV) → 30, R-peak (+170000 µV) → ~90, S-wave (-40000 µV) → ~24
-      int value = 30 + map(acSignal, -200000, 200000, -30, 70);
+      // ✅ v5.8.13: CORRECT mapping - baseline ACTUALLY at 30
+      float normalized = (float)acSignal / 200000.0;
+      int value = 30 + (int)(normalized * 70.0);
       uiSamples[i] = constrain(value, 0, 100);
     }
     bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
