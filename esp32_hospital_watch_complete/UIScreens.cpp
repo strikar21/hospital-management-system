@@ -176,6 +176,11 @@ void UIScreens::createWaveformScreen() {
 
     seriesWaveform = lv_chart_add_series(chartWaveform, lv_color_hex(0x00FF00), LV_CHART_AXIS_PRIMARY_Y);
 
+    // Initialize with baseline (value 30 = 70% from top, medical ECG standard)
+    for (int i = 0; i < 200; i++) {
+        lv_chart_set_next_value(chartWaveform, seriesWaveform, 30);
+    }
+
     labelWaveformStatus = lv_label_create(waveformScreen);
     lv_label_set_text(labelWaveformStatus, "LIVE");
     lv_obj_set_style_text_font(labelWaveformStatus, &lv_font_montserrat_24, 0);
@@ -414,7 +419,10 @@ void UIScreens::event_callback(lv_event_t *e) {
 void UIScreens::updateWaveform(int16_t *samples, uint8_t numSamples, const char*, const char*) {
     if (waveformFrozen) return;
     for (uint8_t i = 0; i < numSamples && i < 10; i++) {
-        int v = map(samples[i], -500000, 500000, 0, 100);
+        // Baseline at 70% from top (value 30) - medical ECG standard
+        // Allows more space for upward deflections (P, R, T waves)
+        // Samples are already scaled to 0-100 range by caller
+        int v = constrain(samples[i], 0, 100);
         lv_chart_set_next_value(chartWaveform, seriesWaveform, v);
     }
     lv_chart_refresh(chartWaveform);
