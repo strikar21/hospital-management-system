@@ -1803,9 +1803,18 @@ void loop() {
   // ✅ v5.4: Update touch handler for swipe gesture detection
   touch.update();
 
-  // ✅ v5.6.0: Update last activity on any touch (tap to wake + timeout reset)
-  if (touch.isTouched() && tapToWakeEnabled) {
-    updateLastActivity();
+  // ✅ v5.6.0: Tap to wake - use debounced tap events instead of raw touch state
+  // This prevents phantom touches from waking screen (requires deliberate tap gesture)
+  if (tapToWakeEnabled && touch.getTapEvent()) {
+    if (!screenOn) {
+      // Screen was off - wake and return to home screen
+      updateLastActivity();
+      ui.showHomeScreen();
+      Serial.println("👆 Tap to wake - returned to home screen");
+    } else {
+      // Screen already on - just reset timeout
+      updateLastActivity();
+    }
   }
 
   // ✅ v5.6.0: Check screen timeout

@@ -78,7 +78,14 @@ public:
      */
     bool isTouched() const { return isTouching; }
 
+    /**
+     * Get the last detected tap gesture
+     * @return true if a tap was just detected (debounced, minimum 50ms duration)
+     */
+    bool getTapEvent();
+
 private:
+    bool tapEventFlag = false;  // Flag set when tap gesture detected
     bool initialized;
     bool enabled;
     UIScreens *uiScreens;

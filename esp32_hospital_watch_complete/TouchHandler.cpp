@@ -76,9 +76,21 @@ void TouchHandler::update() {
     if (!isTouching && wasTouching) {
         GestureType gesture = detectGesture();
         if (gesture != GESTURE_NONE) {
+            // Set tap event flag for tap-to-wake functionality
+            if (gesture == GESTURE_TAP) {
+                tapEventFlag = true;
+            }
             handleGesture(gesture);
         }
     }
+}
+
+bool TouchHandler::getTapEvent() {
+    if (tapEventFlag) {
+        tapEventFlag = false;  // Clear flag after reading
+        return true;
+    }
+    return false;
 }
 
 void TouchHandler::setGestureCallback(void (*callback)(GestureType type)) {
