@@ -46,6 +46,10 @@ public:
     void setWaveformFrozen(bool frozen);
     bool isWaveformFrozen() const;
 
+    // ✅ v5.8.2: Vitals auto-scroll
+    void startVitalsAutoScroll(uint16_t intervalMs);  // Start auto-scrolling vitals pages
+    void stopVitalsAutoScroll();  // Stop auto-scrolling
+
     void addAlert(const char *message, AlertSeverity severity);
     void clearAllAlerts();
     uint8_t getAlertCount() const;
@@ -83,6 +87,9 @@ private:
     lv_obj_t *labelTimeoutValue;   // ✅ v5.6.0: Screen timeout value label
     lv_obj_t *switchTapWake;       // ✅ v5.6.0: Tap to wake toggle
 
+    // ✅ v5.8.2: Vitals auto-scroll timer
+    lv_timer_t *vitalsAutoScrollTimer = nullptr;
+
     void createHomeScreen();
     void createWaveformScreen();
     void createAlertsScreen();
@@ -93,6 +100,7 @@ private:
     static void brightnessSliderCallback(lv_event_t *event);
     static void waveformTapCallback(lv_event_t *event);
     static void event_callback(lv_event_t *event);  // ✅ v5.4: Generic event callback for screen navigation
+    static void vitalsAutoScrollCallback(lv_timer_t *timer);  // ✅ v5.8.2: Auto-scroll timer callback
 };
 
 #endif

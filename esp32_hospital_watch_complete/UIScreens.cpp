@@ -52,6 +52,10 @@ void UIScreens::init() {
     applyTextSmoothing(settingsScreen);
 
     showHomeScreen();
+
+    // ✅ v5.8.2: Start vitals auto-scroll (5 seconds per page)
+    startVitalsAutoScroll(5000);  // 5000ms = 5 seconds
+
     initialized = true;
 }
 
@@ -166,6 +170,12 @@ void UIScreens::createHomeScreen() {
     lv_obj_set_style_bg_color(homeScreen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(homeScreen, LV_OPA_COVER, 0);
     lv_obj_clear_flag(homeScreen, LV_OBJ_FLAG_SCROLLABLE);  // Disable page scrolling
+
+    // ✅ v5.8.2: Add 1px white border + 1px padding around entire screen
+    lv_obj_set_style_border_width(homeScreen, 1, 0);
+    lv_obj_set_style_border_color(homeScreen, lv_color_hex(0xFFFFFF), 0);  // White border
+    lv_obj_set_style_border_opa(homeScreen, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(homeScreen, 1, 0);  // 1px padding inside border
 
     // Create modular components
     statusBar.create(homeScreen);
@@ -598,4 +608,43 @@ void UIScreens::showAlert(const char* title, const char* message) {
 
     // Log to serial
     Serial.printf("📱 UI Alert: %s\n", buf);
+}
+
+// ✅ v5.8.2: Vitals auto-scroll implementation
+void UIScreens::startVitalsAutoScroll(uint16_t intervalMs) {
+    // Stop existing timer if any
+    if (vitalsAutoScrollTimer) {
+        lv_timer_del(vitalsAutoScrollTimer);
+        vitalsAutoScrollTimer = nullptr;
+    }
+
+    // Create new timer with specified interval
+    vitalsAutoScrollTimer = lv_timer_create(vitalsAutoScrollCallback, intervalMs, this);
+    Serial.printf("✅ Vitals auto-scroll started (%dms interval)\n", intervalMs);
+}
+
+void UIScreens::stopVitalsAutoScroll() {
+    if (vitalsAutoScrollTimer) {
+        lv_timer_del(vitalsAutoScrollTimer);
+        vitalsAutoScrollTimer = nullptr;
+        Serial.println("⏸️ Vitals auto-scroll stopped");
+    }
+}
+
+void UIScreens::vitalsAutoScrollCallback(lv_timer_t *timer) {
+    UIScreens *ui = (UIScreens*)timer->user_data;
+    if (!ui) return;
+
+    // Only auto-scroll when on home screen
+    if (ui->getCurrentScreen() != SCREEN_HOME) return;
+
+    // Get current page and advance to next (0 → 1 → 2 → 0)
+    uint8_t currentPage = ui->vitalsCards.getCurrentPage();
+    uint8_t nextPage = (currentPage + 1) % 3;  // 3 pages total
+
+    // Scroll to next page with animation
+    if (example_lvgl_lock(10)) {
+        ui->vitalsCards.setPage(nextPage);
+        example_lvgl_unlock();
+    }
 }
