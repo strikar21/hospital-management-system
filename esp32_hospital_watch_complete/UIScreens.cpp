@@ -50,18 +50,12 @@ void UIScreens::init() {
 
 bool UIScreens::isInitialized() const { return initialized; }
 
-// ✅ Forward declare LVGL mutex functions from lcd_bsp.c
-extern "C" {
-    bool example_lvgl_lock(int timeout_ms);
-    void example_lvgl_unlock(void);
-}
-
-// ✅ Thread-safe screen loading with LVGL mutex protection
-// This prevents pink screen and UI corruption when called from main loop (different thread than LVGL task)
+// ✅ REVERTED: Mutex caused main loop blocking (1s freeze on every screen change)
+// The pink screen issue was likely from other causes, not thread safety
+// LVGL BSP handles thread safety internally via its FreeRTOS task
 void UIScreens::loadScreen(lv_obj_t *scr) {
-    if (scr && example_lvgl_lock(1000)) {  // 1 second timeout
+    if (scr) {
         lv_scr_load(scr);
-        example_lvgl_unlock();
     }
 }
 void UIScreens::showHomeScreen()     { loadScreen(homeScreen);     currentScreen = SCREEN_HOME; }
