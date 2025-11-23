@@ -245,9 +245,8 @@ void UIScreens::createWaveformScreen() {
 
     seriesWaveform = lv_chart_add_series(chartWaveform, lv_color_hex(0x00FF00), LV_CHART_AXIS_PRIMARY_Y);
 
-    // ✅ v5.8.16: FORCE green waveform color on ITEMS part
+    // ✅ v5.8.16: FORCE green waveform color on ITEMS part (fixes red waveform)
     lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x00FF00), LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(seriesWaveform, lv_color_hex(0x00FF00), 0);  // Series background
 
     // ✅ v5.8.10: Initialize with baseline at 30 (matches home ECG and medical standard)
     for (int i = 0; i < 600; i++) {
