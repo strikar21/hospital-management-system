@@ -27,10 +27,9 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     lv_obj_align(container, LV_ALIGN_TOP_MID, 0, Y_POSITION);
     lv_obj_set_style_bg_color(container, lv_color_hex(0x000000), 0);  // Pure black background
     lv_obj_set_style_bg_opa(container, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(container, 2, 0);
-    lv_obj_set_style_border_color(container, lv_color_hex(0x00FF00), 0);  // Green border
-    lv_obj_set_style_radius(container, 8, 0);
-    lv_obj_set_style_pad_all(container, 6, 0);
+    lv_obj_set_style_border_width(container, 0, 0);  // No border
+    lv_obj_set_style_radius(container, 0, 0);  // No rounded corners
+    lv_obj_set_style_pad_all(container, 4, 0);  // Less padding
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(container, LV_OBJ_FLAG_CLICKABLE);
 

@@ -170,12 +170,8 @@ void UIScreens::createHomeScreen() {
     lv_obj_set_style_bg_color(homeScreen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(homeScreen, LV_OPA_COVER, 0);
     lv_obj_clear_flag(homeScreen, LV_OBJ_FLAG_SCROLLABLE);  // Disable page scrolling
-
-    // ✅ v5.8.2: Add 1px white border + 1px padding around entire screen
-    lv_obj_set_style_border_width(homeScreen, 1, 0);
-    lv_obj_set_style_border_color(homeScreen, lv_color_hex(0xFFFFFF), 0);  // White border
-    lv_obj_set_style_border_opa(homeScreen, LV_OPA_COVER, 0);
-    lv_obj_set_style_pad_all(homeScreen, 1, 0);  // 1px padding inside border
+    lv_obj_set_style_border_width(homeScreen, 0, 0);  // No border
+    lv_obj_set_style_pad_all(homeScreen, 0, 0);  // No padding
 
     // Create modular components
     statusBar.create(homeScreen);
@@ -282,14 +278,13 @@ void UIScreens::createAlertsScreen() {
 
     // Create alerts list container (instead of lv_list which has default pink styling)
     alertsList = lv_obj_create(alertsScreen);
-    lv_obj_set_size(alertsList, W-30, H-160);
-    lv_obj_align(alertsList, LV_ALIGN_TOP_MID, 0, 65);
-    lv_obj_set_style_bg_color(alertsList, lv_color_hex(0x1A1A1A), 0);
+    lv_obj_set_size(alertsList, W-20, H-140);
+    lv_obj_align(alertsList, LV_ALIGN_TOP_MID, 0, 60);
+    lv_obj_set_style_bg_color(alertsList, lv_color_hex(0x000000), 0);  // Pure black
     lv_obj_set_style_bg_opa(alertsList, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(alertsList, 2, 0);
-    lv_obj_set_style_border_color(alertsList, lv_color_hex(0x3A3A3A), 0);
-    lv_obj_set_style_radius(alertsList, 8, 0);
-    lv_obj_set_style_pad_all(alertsList, 10, 0);
+    lv_obj_set_style_border_width(alertsList, 0, 0);  // No border
+    lv_obj_set_style_radius(alertsList, 0, 0);  // No rounded corners
+    lv_obj_set_style_pad_all(alertsList, 5, 0);  // Less padding
     lv_obj_set_flex_flow(alertsList, LV_FLEX_FLOW_COLUMN);  // Stack alerts vertically
     lv_obj_set_flex_align(alertsList, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_scroll_dir(alertsList, LV_DIR_VER);  // Vertical scrolling
@@ -548,7 +543,7 @@ void UIScreens::addAlert(const char *msg, AlertSeverity severity) {
         // Alert message
         lv_obj_t *label = lv_label_create(alertItem);
         lv_label_set_text(label, msg);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);  // Increased from 16 to 20
         lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
         lv_obj_set_flex_grow(label, 1);  // Take remaining space
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
