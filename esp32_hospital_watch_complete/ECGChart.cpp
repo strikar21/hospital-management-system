@@ -86,9 +86,9 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     lv_obj_set_style_line_width(chart, 3, LV_PART_ITEMS);
     lv_obj_set_style_line_rounded(chart, true, LV_PART_ITEMS);
 
-    // Initialize with baseline (value 50 = center)
+    // Initialize with baseline (value 30 = 70% from top, medical ECG standard)
     for (int i = 0; i < CHART_WIDTH; i++) {
-        lv_chart_set_next_value(chart, series, 50);
+        lv_chart_set_next_value(chart, series, 30);
     }
 
     initialized = true;
@@ -103,7 +103,8 @@ void ECGChart::updateSamples(int32_t* samples, uint8_t numSamples) {
     // Feed each sample to the chart (scrolling left)
     for (uint8_t i = 0; i < numSamples && i < 10; i++) {
         // Map ECG signal (-500000 to +500000 µV) to chart range (0-100)
-        // ECG typical range: -0.3mV to +1.2mV
+        // Baseline at 70% from top (value 30) - medical ECG standard
+        // Allows more space for upward deflections (P, R, T waves)
         int value = map(samples[i], ECG_MIN, ECG_MAX, 0, 100);
         value = constrain(value, 0, 100);
         lv_chart_set_next_value(chart, series, value);
