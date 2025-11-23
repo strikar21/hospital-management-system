@@ -1991,11 +1991,24 @@ void loop() {
   // ✅ v5.2.4: Send waveform even when offline (queues to SPIFFS automatically)
   // ✅ v5.4: Respect waveformStreamingEnabled configuration flag
   // ✅ v5.8.2: Only send to backend if provisioned and assigned
-  if (isProvisioned && isAssigned && waveformStreamingEnabled &&
-      accumulatorIndex >= 50 && (unsigned long)(millis() - lastWaveformStream) > 100) {
-    sendWaveformStream();  // Already handles offline queueing internally
+  // ✅ v5.8.4: ALWAYS update UI waveform viewer when buffer is full (even when offline)
+  if (accumulatorIndex >= 50 && (unsigned long)(millis() - lastWaveformStream) > 100) {
+    // Update UI waveform screen FIRST (before connection check)
+    // Convert Lead II samples from 24-bit (0-16777216) to chart range (0-100)
+    int16_t uiSamples[50];
+    for (int i = 0; i < 50; i++) {
+      uiSamples[i] = map(waveformAccumulator[1][i], 0, 16777216, 0, 100);
+    }
+    bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
+    ui.updateWaveform(uiSamples, 50, isECGMode ? "ECG" : "EEG", "Lead II");
+
+    // Only send to backend if provisioned, assigned, and streaming enabled
+    if (isProvisioned && isAssigned && waveformStreamingEnabled) {
+      sendWaveformStream();  // Already handles offline queueing internally
+    }
+
     lastWaveformStream = millis();
-    accumulatorIndex = 0;
+    accumulatorIndex = 0;  // Always clear buffer after UI update
   }
 
   // ✅ v5.2.3: Auto-reconnect to saved WiFi when in captive portal mode
@@ -2788,14 +2801,8 @@ void sendWaveformStream() {
     return;
   }
 
-  // ✅ v5.4.9: Update UI waveform screen with lead II data (most clinically useful)
-  // Convert 32-bit samples to 16-bit for LVGL chart (scale from 0-16777216 to 0-100)
-  int16_t uiSamples[50];
-  for (int i = 0; i < 50; i++) {
-    // Lead II is at index 1, scale from 24-bit (0-16777216) to chart range (0-100)
-    uiSamples[i] = map(waveformAccumulator[1][i], 0, 16777216, 0, 100);
-  }
-  ui.updateWaveform(uiSamples, 50, isECGMode ? "ECG" : "EEG", "Lead II");
+  // ✅ v5.8.4: UI waveform update moved to main loop (line 2003) - runs BEFORE connection check
+  // This ensures waveform viewer updates even when offline/unassigned
 
   // ✅ Connected - attempt publish with retry
   bool publishResult = publishWithRetry(topic.c_str(), payload.c_str());  // ✅ v5.2.1: QoS 1 with retry
