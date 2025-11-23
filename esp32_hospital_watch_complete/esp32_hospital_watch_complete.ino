@@ -1803,17 +1803,19 @@ void loop() {
   // ✅ v5.4: Update touch handler for swipe gesture detection
   touch.update();
 
+  // ✅ BUG FIX: Reset screen timeout on ANY touch (not just taps)
+  // This prevents screen turning off while swiping vitals cards or other UI interactions
+  if (touch.isTouched()) {
+    updateLastActivity();
+  }
+
   // ✅ v5.6.0: Tap to wake - use debounced tap events instead of raw touch state
   // This prevents phantom touches from waking screen (requires deliberate tap gesture)
   if (tapToWakeEnabled && touch.getTapEvent()) {
     if (!screenOn) {
-      // Screen was off - wake and return to home screen
-      updateLastActivity();
+      // Screen was off - wake and return to home screen (brightness already set by updateLastActivity)
       ui.showHomeScreen();
       Serial.println("👆 Tap to wake - returned to home screen");
-    } else {
-      // Screen already on - just reset timeout
-      updateLastActivity();
     }
   }
 
