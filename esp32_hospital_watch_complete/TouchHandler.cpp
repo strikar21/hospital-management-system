@@ -19,7 +19,9 @@ TouchHandler::TouchHandler()
       wasTouching(false),
       startX(0), startY(0),
       currentX(0), currentY(0),
-      touchStartTime(0) {
+      touchStartTime(0),
+      lastX(0), lastY(0),
+      touchFirstSeenTime(0) {
 }
 
 TouchHandler::~TouchHandler() {
@@ -57,14 +59,31 @@ void TouchHandler::update() {
     // ✅ v5.8.3: Validate touch coordinates to prevent phantom touches
     // Screen is 280×456, reject touches at exact boundaries (likely noise)
     // Also reject coordinates outside screen bounds
-    bool validTouch = (touched != 0) &&
-                      (x > 0 && x < 279) &&  // 1-278 valid (not 0 or 279)
-                      (y > 0 && y < 455);     // 1-454 valid (not 0 or 455)
+    bool validCoordinates = (x > 0 && x < 279) &&  // 1-278 valid (not 0 or 279)
+                            (y > 0 && y < 455);     // 1-454 valid (not 0 or 455)
 
-    if (touched && !validTouch) {
-        // Invalid/phantom touch detected - ignore it
-        Serial.printf("⚠️  Invalid touch ignored: x=%d, y=%d\n", x, y);
-        return;  // Don't update touch state
+    // ✅ v5.8.14: Time-based debouncing - require 15ms stability to confirm touch
+    // This filters out I2C noise and phantom touches from FT3168
+    bool validTouch = false;
+    if (touched && validCoordinates) {
+        // Check if coordinates match previous read
+        if (x == lastX && y == lastY) {
+            // Same coordinates - check if held long enough
+            if ((millis() - touchFirstSeenTime) >= DEBOUNCE_TIME) {
+                validTouch = true;  // Confirmed: held stable for 15ms
+            }
+        } else {
+            // Coordinates changed - reset timer
+            lastX = x;
+            lastY = y;
+            touchFirstSeenTime = millis();
+        }
+    } else {
+        // No touch or invalid coordinates - reset debounce
+        touchFirstSeenTime = millis();
+        if (touched && !validCoordinates) {
+            Serial.printf("⚠️  Invalid touch ignored: x=%d, y=%d\n", x, y);
+        }
     }
 
     wasTouching = isTouching;
