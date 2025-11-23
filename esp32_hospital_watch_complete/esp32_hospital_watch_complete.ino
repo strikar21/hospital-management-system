@@ -1924,8 +1924,9 @@ void loop() {
 
   // ✅ v5.2.4: Generate vitals even when offline (patient monitoring never stops)
   // ✅ v5.4: Use configurable vitalsTransmissionInterval (default: 5 seconds)
+  // ✅ v5.8.2: ALWAYS generate vitals for UI display (not just when provisioned/assigned)
   unsigned long vitalsInterval = vitalsTransmissionInterval * 1000UL;  // Convert seconds to milliseconds
-  if (isProvisioned && isAssigned && (unsigned long)(millis() - lastVitals) > vitalsInterval) {
+  if ((unsigned long)(millis() - lastVitals) > vitalsInterval) {
     // ✅ v5.2.12: Check GPIO pin and update simulator mode dynamically
     bool currentMode = digitalRead(MODE_SELECT_PIN) == HIGH;
     simulator.setMode(currentMode ? PhysiologicalSimulator::MODE_ECG : PhysiologicalSimulator::MODE_EEG);
@@ -1940,7 +1941,14 @@ void loop() {
     bloodPressureSystolic = simulator.getBloodPressureSystolic();
     bloodPressureDiastolic = simulator.getBloodPressureDiastolic();
 
-    sendVitals();  // Already handles offline queueing internally
+    // ✅ v5.8.2: Update UI with vitals ALWAYS (even when not provisioned)
+    float tempCelsius = (temperature - 32.0) * 5.0 / 9.0;
+    ui.updateVitals(heartRate, oxygenSat, tempCelsius, bloodPressureSystolic, bloodPressureDiastolic, respiratoryRate);
+
+    // Only send to backend if provisioned and assigned
+    if (isProvisioned && isAssigned) {
+      sendVitals();  // Already handles offline queueing internally
+    }
     lastVitals = millis();
   }
 
@@ -1974,13 +1982,15 @@ void loop() {
   }
 
   // ✅ v5.2.4: Generate micro-batches even when offline (ECG/EEG never stops)
-  if (isProvisioned && isAssigned && (unsigned long)(millis() - lastMicroBatch) > 20) {
-    generateMicroBatch();
+  // ✅ v5.8.2: ALWAYS generate waveforms for UI display (not just when provisioned/assigned)
+  if ((unsigned long)(millis() - lastMicroBatch) > 20) {
+    generateMicroBatch();  // Updates UI chart at line 2627
     lastMicroBatch = millis();
   }
 
   // ✅ v5.2.4: Send waveform even when offline (queues to SPIFFS automatically)
   // ✅ v5.4: Respect waveformStreamingEnabled configuration flag
+  // ✅ v5.8.2: Only send to backend if provisioned and assigned
   if (isProvisioned && isAssigned && waveformStreamingEnabled &&
       accumulatorIndex >= 50 && (unsigned long)(millis() - lastWaveformStream) > 100) {
     sendWaveformStream();  // Already handles offline queueing internally
@@ -2596,8 +2606,8 @@ void sendVitals() {
                    ", SpO2=" + String(oxygenSat) + "%" +
                    ", RR=" + String(respiratoryRate));
 
-    // ✅ Update UI with latest vitals
-    ui.updateVitals(heartRate, oxygenSat, tempCelsius, bloodPressureSystolic, bloodPressureDiastolic, respiratoryRate);
+    // ✅ v5.8.2: UI update moved to main loop (line 1946) to run even when not provisioned
+    // ui.updateVitals(heartRate, oxygenSat, tempCelsius, bloodPressureSystolic, bloodPressureDiastolic, respiratoryRate);  // Commented out - now in main loop
   }
   // ✅ If !success, publishMessage() already queued offline and attempted reconnect
 }

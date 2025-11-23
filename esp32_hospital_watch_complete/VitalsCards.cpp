@@ -46,13 +46,14 @@ lv_obj_t* VitalsCards::create(lv_obj_t* parent, lv_event_cb_t eventCallback, voi
     lv_obj_set_style_bg_opa(tileview, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(tileview, 0, 0);
 
-    // Add scroll event callback for page tracking
+    // Add scroll event callback for page tracking and cyclic wrapping
+    lv_obj_add_event_cb(tileview, tileviewScrollCallback, LV_EVENT_SCROLL, this);
     lv_obj_add_event_cb(tileview, tileviewScrollCallback, LV_EVENT_SCROLL_END, this);
 
-    // Create 3 tiles
-    page1 = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_RIGHT);
-    page2 = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_LEFT | LV_DIR_RIGHT);
-    page3 = lv_tileview_add_tile(tileview, 2, 0, LV_DIR_LEFT);
+    // ✅ v5.8.2: Create 3 tiles with cyclic navigation (Page 3 → Page 1)
+    page1 = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_LEFT | LV_DIR_RIGHT);  // Can swipe both ways (wraps from Page 3)
+    page2 = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_LEFT | LV_DIR_RIGHT);  // Can swipe both ways
+    page3 = lv_tileview_add_tile(tileview, 2, 0, LV_DIR_LEFT | LV_DIR_RIGHT);  // Can swipe both ways (wraps to Page 1)
 
     // Calculate card positions (2×2 grid)
     int16_t x1 = 6;   // Left column
@@ -178,23 +179,50 @@ void VitalsCards::updatePageIndicator(uint8_t activePage) {
     }
 }
 
+// ✅ v5.8.2: Handle tileview scroll with cyclic wrapping (Page 3 → Page 1, Page 1 → Page 3)
 void VitalsCards::tileviewScrollCallback(lv_event_t* e) {
     VitalsCards* vitalsCards = (VitalsCards*)lv_event_get_user_data(e);
     if (!vitalsCards || !vitalsCards->tileview) return;
 
     lv_obj_t* tv = lv_event_get_target(e);
-    lv_obj_t* tile = lv_tileview_get_tile_act(tv);
+    lv_event_code_t code = lv_event_get_code(e);
 
-    // Determine which page is active based on tile position
-    if (tile == vitalsCards->page1) {
-        vitalsCards->currentPage = 0;
-    } else if (tile == vitalsCards->page2) {
-        vitalsCards->currentPage = 1;
-    } else if (tile == vitalsCards->page3) {
-        vitalsCards->currentPage = 2;
+    if (code == LV_EVENT_SCROLL) {
+        // ✅ During scroll, detect edge cases and wrap
+        lv_point_t scroll_offset;
+        lv_obj_get_scroll_end(tv, &scroll_offset);
+
+        // Get scroll position
+        lv_coord_t x = lv_obj_get_scroll_x(tv);
+        lv_coord_t max_scroll = 280 * 2;  // 280px per page × 2 pages to the right
+
+        // Wrap from Page 3 to Page 1 (swipe right on page 3)
+        if (x >= max_scroll + 50) {  // Threshold: 50px past last page
+            lv_obj_scroll_to_x(tv, 0, LV_ANIM_OFF);  // Jump to Page 1
+            vitalsCards->currentPage = 0;
+            vitalsCards->updatePageIndicator(0);
+        }
+        // Wrap from Page 1 to Page 3 (swipe left on page 1)
+        else if (x <= -50) {  // Threshold: 50px before first page
+            lv_obj_scroll_to_x(tv, max_scroll, LV_ANIM_OFF);  // Jump to Page 3
+            vitalsCards->currentPage = 2;
+            vitalsCards->updatePageIndicator(2);
+        }
     }
+    else if (code == LV_EVENT_SCROLL_END) {
+        // Update page indicator after scroll ends
+        lv_obj_t* tile = lv_tileview_get_tile_act(tv);
 
-    vitalsCards->updatePageIndicator(vitalsCards->currentPage);
+        if (tile == vitalsCards->page1) {
+            vitalsCards->currentPage = 0;
+        } else if (tile == vitalsCards->page2) {
+            vitalsCards->currentPage = 1;
+        } else if (tile == vitalsCards->page3) {
+            vitalsCards->currentPage = 2;
+        }
+
+        vitalsCards->updatePageIndicator(vitalsCards->currentPage);
+    }
 }
 
 // ========== UPDATE METHODS - PAGE 1 ==========
