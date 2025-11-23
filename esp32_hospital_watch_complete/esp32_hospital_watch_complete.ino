@@ -846,7 +846,7 @@ String getISO8601Timestamp() {
 // ====================================
 // DISPLAY BRIGHTNESS CONTROL (v5.3)
 // ====================================
-uint8_t userBrightnessLevel = 100;  // Track user's brightness setting (0-100%)
+uint8_t userBrightnessLevel = 68;  // Default: 68% brightness (optimal for hospital use)
 
 void setDisplayBrightness(uint8_t level) {
   // ✅ v5.4: Map 0-100% to 0-255 for hardware
@@ -857,7 +857,7 @@ void setDisplayBrightness(uint8_t level) {
 }
 
 // ✅ v5.6.0: Screen timeout setting (0 = never, 1-60 seconds)
-uint8_t screenTimeoutSeconds = 0;  // Default: NEVER timeout (disabled for medical device)
+uint8_t screenTimeoutSeconds = 15;  // Default: 15 seconds timeout
 unsigned long lastUserActivity = 0;
 bool screenOn = true;
 

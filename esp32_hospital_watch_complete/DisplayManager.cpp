@@ -13,7 +13,7 @@ static unsigned long lastLvglTick = 0;
 
 DisplayManager::DisplayManager()
     : initialized(false),
-      currentBrightness(153) {  // 60% brightness (153/255 = 0.6)
+      currentBrightness(173) {  // 68% brightness (173/255 = 0.678)
 }
 
 DisplayManager::~DisplayManager() {
