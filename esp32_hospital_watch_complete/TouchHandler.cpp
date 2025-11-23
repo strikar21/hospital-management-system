@@ -62,18 +62,19 @@ void TouchHandler::update() {
     bool validCoordinates = (x > 0 && x < 279) &&  // 1-278 valid (not 0 or 279)
                             (y > 0 && y < 455);     // 1-454 valid (not 0 or 455)
 
-    // ✅ v5.8.14: Time-based debouncing - require 15ms stability to confirm touch
-    // This filters out I2C noise and phantom touches from FT3168
+    // ✅ v5.8.14: Smart debouncing - allow swipes immediately, debounce stationary touches
+    // Phantom touches are always STATIONARY (same coordinates), real swipes MOVE
     bool validTouch = false;
     if (touched && validCoordinates) {
-        // Check if coordinates match previous read
         if (x == lastX && y == lastY) {
-            // Same coordinates - check if held long enough
+            // Stationary touch - require 15ms stability to filter phantom touches
             if ((millis() - touchFirstSeenTime) >= DEBOUNCE_TIME) {
                 validTouch = true;  // Confirmed: held stable for 15ms
             }
         } else {
-            // Coordinates changed - reset timer
+            // Moving touch (swipe) - accept immediately, no debounce needed
+            // Real swipes have changing coordinates, phantom touches don't
+            validTouch = true;
             lastX = x;
             lastY = y;
             touchFirstSeenTime = millis();
