@@ -1,6 +1,13 @@
 #include "UIScreens.h"
 #include "DisplayManager.h"
 
+// ✅ v5.8.1: Forward declare LVGL mutex functions from lcd_bsp.c
+// Required to protect ALL UI updates from race conditions with LVGL rendering task
+extern "C" {
+    bool example_lvgl_lock(int timeout_ms);
+    void example_lvgl_unlock(void);
+}
+
 // ✅ v5.4: Removed duplicate 'ui' definition (already defined in .ino file)
 static const uint16_t W = 280;
 static const uint16_t H = 456;
@@ -50,9 +57,9 @@ void UIScreens::init() {
 
 bool UIScreens::isInitialized() const { return initialized; }
 
-// ✅ REVERTED: Mutex caused main loop blocking (1s freeze on every screen change)
-// The pink screen issue was likely from other causes, not thread safety
-// LVGL BSP handles thread safety internally via its FreeRTOS task
+// ✅ v5.8.1: Screen loading does NOT need mutex (called from UI events which already have mutex)
+// The REAL issue was UI UPDATE methods (updateVitals, updateHomeECG, etc.) being called
+// from main loop without mutex protection → race condition with LVGL rendering task
 void UIScreens::loadScreen(lv_obj_t *scr) {
     if (scr) {
         lv_scr_load(scr);
@@ -66,30 +73,46 @@ void UIScreens::showSettingsScreen() { loadScreen(settingsScreen); currentScreen
 void UIScreens::showNextScreen()     { int n = (currentScreen + 1) % SCREEN_COUNT; (n==0)?showHomeScreen():(n==1)?showWaveformScreen():(n==2)?showAlertsScreen():showSettingsScreen(); }
 void UIScreens::showPreviousScreen(){ int n = (currentScreen - 1 + SCREEN_COUNT) % SCREEN_COUNT; (n==0)?showHomeScreen():(n==1)?showWaveformScreen():(n==2)?showAlertsScreen():showSettingsScreen(); }
 
+// ✅ v5.8.1: Thread-safe UI updates with LVGL mutex (10ms timeout)
 void UIScreens::updateTime(const char* t) {
-    statusBar.updateTime(t);
+    if (example_lvgl_lock(10)) {
+        statusBar.updateTime(t);
+        example_lvgl_unlock();
+    }
 }
 
 void UIScreens::updateBattery(uint8_t p) {
-    statusBar.updateBattery(p);
+    if (example_lvgl_lock(10)) {
+        statusBar.updateBattery(p);
+        example_lvgl_unlock();
+    }
 }
 
 void UIScreens::updateConnectionStatus(bool wifi, bool, bool) {
-    statusBar.updateWiFi(wifi);
+    if (example_lvgl_lock(10)) {
+        statusBar.updateWiFi(wifi);
+        example_lvgl_unlock();
+    }
 }
 
 void UIScreens::updateVitals(float hr, float spo2, float temp, float bpSys, float bpDia, float rr) {
-    // Update Page 1 vitals (HR, BP, SpO2, Temp)
-    vitalsCards.updateAll(hr, spo2, temp, bpSys, bpDia);
+    if (example_lvgl_lock(10)) {
+        // Update Page 1 vitals (HR, BP, SpO2, Temp)
+        vitalsCards.updateAll(hr, spo2, temp, bpSys, bpDia);
 
-    // Update Page 2 vitals (Respiratory Rate)
-    vitalsCards.updateRespiratoryRate(rr);
+        // Update Page 2 vitals (Respiratory Rate)
+        vitalsCards.updateRespiratoryRate(rr);
+        example_lvgl_unlock();
+    }
 }
 
 void UIScreens::updateVitalIMU(float fallRisk, float tremor) {
-    // Update Page 2 vitals (Fall Risk, Tremor)
-    vitalsCards.updateFallRisk(fallRisk);
-    vitalsCards.updateTremor(tremor);
+    if (example_lvgl_lock(10)) {
+        // Update Page 2 vitals (Fall Risk, Tremor)
+        vitalsCards.updateFallRisk(fallRisk);
+        vitalsCards.updateTremor(tremor);
+        example_lvgl_unlock();
+    }
 }
 
 // ✅ v5.4.2: Show alert in alert bar with severity-based color
@@ -99,12 +122,18 @@ void UIScreens::showCriticalAlert(const char* msg) {
 
 // ✅ v5.4.6: Show alert using AlertPopup component
 void UIScreens::showCriticalAlert(const char* msg, AlertSeverity severity) {
-    alertPopup.show(msg, severity);
+    if (example_lvgl_lock(10)) {
+        alertPopup.show(msg, severity);
+        example_lvgl_unlock();
+    }
 }
 
 // ✅ v5.4.6: Hide alert using AlertPopup component
 void UIScreens::hideCriticalAlert() {
-    alertPopup.hide();
+    if (example_lvgl_lock(10)) {
+        alertPopup.hide();
+        example_lvgl_unlock();
+    }
 }
 
 // ✅ v5.4.6: Update alert count (no longer shows popup - alerts only visible in alerts screen)
@@ -117,11 +146,17 @@ void UIScreens::updateAlertCount(uint8_t c) {
 
 // ✅ v5.4.6: Update patient ID using PatientBar component
 void UIScreens::updatePatientId(const char* patientId) {
-    patientBar.updatePatientId(patientId);
+    if (example_lvgl_lock(10)) {
+        patientBar.updatePatientId(patientId);
+        example_lvgl_unlock();
+    }
 }
 
 void UIScreens::updateDeviceId(const char* deviceId) {
-    patientBar.updateDeviceId(deviceId);
+    if (example_lvgl_lock(10)) {
+        patientBar.updateDeviceId(deviceId);
+        example_lvgl_unlock();
+    }
 }
 
 // ✅ v5.4.6: HOME SCREEN - Modularized with component classes
@@ -143,8 +178,12 @@ void UIScreens::createHomeScreen() {
 }
 
 // ✅ v5.4.6: Update home screen ECG chart using ECGChart component
+// ✅ v5.8.1: CRITICAL - Protect high-frequency ECG updates (50 Hz = 20,000 calls/hour!)
 void UIScreens::updateHomeECG(int32_t *samples, uint8_t numSamples) {
-    ecgChart.updateSamples(samples, numSamples);
+    if (example_lvgl_lock(10)) {
+        ecgChart.updateSamples(samples, numSamples);
+        example_lvgl_unlock();
+    }
 }
 
 // ✅ v5.4: WAVEFORM SCREEN - Improved design with larger fonts
@@ -433,60 +472,69 @@ void UIScreens::event_callback(lv_event_t *e) {
     }
 }
 
+// ✅ v5.8.1: Thread-safe waveform chart updates (10 Hz)
 void UIScreens::updateWaveform(int16_t *samples, uint8_t numSamples, const char*, const char*) {
     if (waveformFrozen) return;
-    for (uint8_t i = 0; i < numSamples && i < 10; i++) {
-        // Baseline at 70% from top (value 30) - medical ECG standard
-        // Allows more space for upward deflections (P, R, T waves)
-        // Samples are already scaled to 0-100 range by caller
-        int v = constrain(samples[i], 0, 100);
-        lv_chart_set_next_value(chartWaveform, seriesWaveform, v);
+    if (example_lvgl_lock(10)) {
+        for (uint8_t i = 0; i < numSamples && i < 10; i++) {
+            // Baseline at 70% from top (value 30) - medical ECG standard
+            // Allows more space for upward deflections (P, R, T waves)
+            // Samples are already scaled to 0-100 range by caller
+            int v = constrain(samples[i], 0, 100);
+            lv_chart_set_next_value(chartWaveform, seriesWaveform, v);
+        }
+        lv_chart_refresh(chartWaveform);
+        example_lvgl_unlock();
     }
-    lv_chart_refresh(chartWaveform);
 }
 
 // ✅ v5.4.6: Add alert to flex container list
+// ✅ v5.8.1: Thread-safe alert UI updates
 void UIScreens::addAlert(const char *msg, AlertSeverity severity) {
     if (!alertsList) return;
 
-    // Remove "No alerts" placeholder if this is the first alert
-    if (alertCount == 0) {
-        lv_obj_clean(alertsList);
+    if (example_lvgl_lock(10)) {
+        // Remove "No alerts" placeholder if this is the first alert
+        if (alertCount == 0) {
+            lv_obj_clean(alertsList);
+        }
+
+        // Create alert item container
+        lv_obj_t *alertItem = lv_obj_create(alertsList);
+        lv_obj_set_width(alertItem, lv_pct(100));  // Full width
+        lv_obj_set_height(alertItem, LV_SIZE_CONTENT);  // Auto height
+        lv_obj_set_style_bg_color(alertItem, lv_color_hex(0x2A2A2A), 0);
+        lv_obj_set_style_bg_opa(alertItem, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(alertItem, 1, 0);
+        lv_obj_set_style_radius(alertItem, 5, 0);
+        lv_obj_set_style_pad_all(alertItem, 10, 0);
+        lv_obj_set_flex_flow(alertItem, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(alertItem, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+
+        // Set border color based on severity
+        uint32_t borderColor = (severity == ALERT_CRITICAL) ? 0xFF4444 :
+                               (severity == ALERT_WARNING) ? 0xFFAA00 : 0x4488FF;
+        lv_obj_set_style_border_color(alertItem, lv_color_hex(borderColor), 0);
+
+        // Warning icon
+        lv_obj_t *icon = lv_label_create(alertItem);
+        lv_label_set_text(icon, LV_SYMBOL_WARNING);
+        lv_obj_set_style_text_font(icon, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_color(icon, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg (border provides color coding)
+        lv_obj_set_style_pad_right(icon, 10, 0);
+
+        // Alert message
+        lv_obj_t *label = lv_label_create(alertItem);
+        lv_label_set_text(label, msg);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_flex_grow(label, 1);  // Take remaining space
+        lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+
+        example_lvgl_unlock();
     }
 
-    // Create alert item container
-    lv_obj_t *alertItem = lv_obj_create(alertsList);
-    lv_obj_set_width(alertItem, lv_pct(100));  // Full width
-    lv_obj_set_height(alertItem, LV_SIZE_CONTENT);  // Auto height
-    lv_obj_set_style_bg_color(alertItem, lv_color_hex(0x2A2A2A), 0);
-    lv_obj_set_style_bg_opa(alertItem, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(alertItem, 1, 0);
-    lv_obj_set_style_radius(alertItem, 5, 0);
-    lv_obj_set_style_pad_all(alertItem, 10, 0);
-    lv_obj_set_flex_flow(alertItem, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(alertItem, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
-
-    // Set border color based on severity
-    uint32_t borderColor = (severity == ALERT_CRITICAL) ? 0xFF4444 :
-                           (severity == ALERT_WARNING) ? 0xFFAA00 : 0x4488FF;
-    lv_obj_set_style_border_color(alertItem, lv_color_hex(borderColor), 0);
-
-    // Warning icon
-    lv_obj_t *icon = lv_label_create(alertItem);
-    lv_label_set_text(icon, LV_SYMBOL_WARNING);
-    lv_obj_set_style_text_font(icon, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(icon, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg (border provides color coding)
-    lv_obj_set_style_pad_right(icon, 10, 0);
-
-    // Alert message
-    lv_obj_t *label = lv_label_create(alertItem);
-    lv_label_set_text(label, msg);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_flex_grow(label, 1);  // Take remaining space
-    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-
-    // Increment and update alert count
+    // Increment and update alert count (outside mutex - just counter update)
     alertCount++;
     updateAlertCount(alertCount);
 
@@ -494,20 +542,26 @@ void UIScreens::addAlert(const char *msg, AlertSeverity severity) {
 }
 
 // ✅ v5.4.6: Clear all alerts and show placeholder
+// ✅ v5.8.1: Thread-safe alert clearing
 void UIScreens::clearAllAlerts() {
     if (!alertsList) return;
 
-    lv_obj_clean(alertsList);  // Remove all alert items
-    alertCount = 0;  // Reset count
-    updateAlertCount(0);
+    if (example_lvgl_lock(10)) {
+        lv_obj_clean(alertsList);  // Remove all alert items
 
-    // Show "No alerts" placeholder
-    lv_obj_t *noAlertsLabel = lv_label_create(alertsList);
-    lv_label_set_text(noAlertsLabel, "No active alerts");
-    lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_22, 0);  // ✅ Match font size from createAlertsScreen()
-    lv_obj_set_style_text_color(noAlertsLabel, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg
-    lv_obj_set_style_text_opa(noAlertsLabel, LV_OPA_COVER, 0);  // ✅ Ensure full opacity for crisp rendering
-    lv_obj_center(noAlertsLabel);
+        // Show "No alerts" placeholder
+        lv_obj_t *noAlertsLabel = lv_label_create(alertsList);
+        lv_label_set_text(noAlertsLabel, "No active alerts");
+        lv_obj_set_style_text_font(noAlertsLabel, &lv_font_montserrat_22, 0);  // ✅ Match font size from createAlertsScreen()
+        lv_obj_set_style_text_color(noAlertsLabel, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on dark bg
+        lv_obj_set_style_text_opa(noAlertsLabel, LV_OPA_COVER, 0);  // ✅ Ensure full opacity for crisp rendering
+        lv_obj_center(noAlertsLabel);
+
+        example_lvgl_unlock();
+    }
+
+    alertCount = 0;  // Reset count (outside mutex - just counter update)
+    updateAlertCount(0);
 
     Serial.println("📱 All alerts cleared");
 }
@@ -530,15 +584,16 @@ uint8_t UIScreens::getAlertCount() const {
 }
 
 // ✅ v5.4.6: Show popup alert AND add to alerts list
+// ✅ v5.8.1: Note - showCriticalAlert() and addAlert() already have mutex protection
 void UIScreens::showAlert(const char* title, const char* message) {
     // Combine title and message
     char buf[128];
     snprintf(buf, sizeof(buf), "%s - %s", title, message);
 
-    // Show popup overlay
+    // Show popup overlay (mutex protected internally)
     showCriticalAlert(buf, ALERT_CRITICAL);
 
-    // Add to alerts list so it appears in alerts screen
+    // Add to alerts list so it appears in alerts screen (mutex protected internally)
     addAlert(buf, ALERT_CRITICAL);
 
     // Log to serial
