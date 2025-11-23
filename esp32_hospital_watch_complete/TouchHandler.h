@@ -101,7 +101,7 @@ private:
     // ✅ v5.8.14: Time-based debouncing for phantom touch rejection
     uint16_t lastX, lastY;
     uint32_t touchFirstSeenTime;  // When current coordinates first appeared
-    static const uint32_t DEBOUNCE_TIME = 15;  // 15ms debounce period
+    static const uint32_t DEBOUNCE_TIME = 2;  // 2ms debounce period
 
     // Gesture detection thresholds
     static const int16_t SWIPE_THRESHOLD = 60;      // Minimum pixels for swipe

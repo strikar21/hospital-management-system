@@ -60,12 +60,14 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     lv_chart_set_point_count(chart, CHART_WIDTH);  // 1 point per pixel width
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100);  // 0-100 range
 
-    // ✅ v5.8.13: Medical ECG grid - actual 5×5 squares like ECG paper
+    // ✅ v5.8.15: Medical ECG grid aligned to baseline at 70% from top
     // Chart: 268px wide, 210px tall
-    // Target: 42px squares (268÷42=6.4 squares wide, 210÷42=5 squares tall)
-    // 5 horizontal lines = 6 sections (0, 35, 70, 105, 140, 175, 210)
-    // 6 vertical lines = 7 sections (0, 38, 76, 114, 152, 190, 228, 268)
-    lv_chart_set_div_line_count(chart, 6, 5);  // 6 vertical, 5 horizontal for ~square grid
+    // Baseline at value 30 → 70% from top → 147px from top
+    // 7 horizontal lines = 8 sections (each 26.25px)
+    // Grid at: 0, 26, 52, 78, 105, 131, 157, 183, 210
+    // Line at 157 ≈ baseline at 147 (10px off, closest possible)
+    // Vertical: 6 lines = 7 sections (38px each) for squarish grid
+    lv_chart_set_div_line_count(chart, 6, 7);  // 6 vertical, 7 horizontal
     lv_obj_set_style_line_color(chart, lv_color_hex(GRID_COLOR), LV_PART_MAIN);
     lv_obj_set_style_line_width(chart, 1, LV_PART_MAIN);
     lv_obj_set_style_line_opa(chart, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)

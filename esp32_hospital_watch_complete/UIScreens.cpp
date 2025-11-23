@@ -224,12 +224,14 @@ void UIScreens::createWaveformScreen() {
     lv_obj_set_style_bg_color(chartWaveform, lv_color_hex(0x000000), 0);  // Pure black background
     lv_obj_set_style_line_rounded(chartWaveform, true, LV_PART_ITEMS);  // Smooth lines
 
-    // ✅ v5.8.13: Medical ECG grid - actual squares like ECG paper
+    // ✅ v5.8.15: Medical ECG grid aligned to baseline at 70% from top
     // Chart: 260px wide, 300px tall
-    // Target: 50px squares (260÷50=5.2 wide, 300÷50=6 tall)
-    // 5 horizontal lines = 6 sections (50px each)
-    // 5 vertical lines = 6 sections (~43px each, close enough)
-    lv_chart_set_div_line_count(chartWaveform, 5, 5);  // 5×5 grid for square divisions
+    // Baseline at value 30 → 70% from top → 210px from top
+    // 10 horizontal lines = 11 sections (each 27.27px)
+    // Grid at: 0, 27, 55, 82, 109, 136, 164, 191, 218, 245, 273, 300
+    // Line at 218 ≈ baseline at 210 (8px off, very close!)
+    // Vertical: 5 lines = 6 sections (43px each) for squarish grid
+    lv_chart_set_div_line_count(chartWaveform, 5, 10);  // 5 vertical, 10 horizontal
     lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x1A3A1A), LV_PART_MAIN);  // Dark green grid
     lv_obj_set_style_line_width(chartWaveform, 1, LV_PART_MAIN);  // Thin grid lines
     lv_obj_set_style_line_opa(chartWaveform, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)
