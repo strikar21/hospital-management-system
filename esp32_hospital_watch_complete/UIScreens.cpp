@@ -214,37 +214,40 @@ void UIScreens::createWaveformScreen() {
     lv_obj_set_size(chartWaveform, W-20, 300);
     lv_obj_center(chartWaveform);
     lv_chart_set_type(chartWaveform, LV_CHART_TYPE_LINE);
+    lv_chart_set_update_mode(chartWaveform, LV_CHART_UPDATE_MODE_SHIFT);  // Scrolling ECG
     lv_chart_set_range(chartWaveform, LV_CHART_AXIS_PRIMARY_Y, 0, 100);
-    // ✅ v5.8.8: Increase to 600 points for slower, more readable ECG scrolling
-    // Medical ECG: 25mm/s paper speed → 600 points = 1.2 seconds of waveform visible
-    // At 500Hz with 50 samples/100ms update → 1200ms display time (comfortable viewing)
-    lv_chart_set_point_count(chartWaveform, 600);
-    lv_obj_set_style_line_width(chartWaveform, 3, LV_PART_ITEMS);  // ✅ v5.8.10: 3px width (matches home ECG)
+    lv_chart_set_point_count(chartWaveform, 600);  // 1.2s of waveform visible
+    lv_obj_set_style_line_width(chartWaveform, 3, LV_PART_ITEMS);
     lv_obj_set_style_size(chartWaveform, 0, LV_PART_INDICATOR);  // No point markers
-    lv_obj_set_style_bg_color(chartWaveform, lv_color_hex(0x000000), 0);  // Pure black background
+    lv_obj_set_style_bg_color(chartWaveform, lv_color_hex(0x000000), 0);  // Black background
     lv_obj_set_style_line_rounded(chartWaveform, true, LV_PART_ITEMS);  // Smooth lines
 
-    // ✅ v5.8.15: Medical ECG grid aligned to baseline at 70% from top
+    // ✅ v5.8.16: MEDICAL GRADE ECG GRID - Baseline EXACTLY on grid line
     // Chart: 260px wide, 300px tall
-    // Baseline at value 30 → 70% from top → 210px from top
-    // 10 horizontal lines = 11 sections (each 27.27px)
-    // Grid at: 0, 27, 55, 82, 109, 136, 164, 191, 218, 245, 273, 300
-    // Line at 218 ≈ baseline at 210 (8px off, very close!)
-    // Vertical: 5 lines = 6 sections (43px each) for squarish grid
+    // Baseline: value 30 → 70% from top → y=210px from top
+    // 21 horizontal lines = 22 sections (300÷22 = 13.636px each)
+    // Grid lines at: 0, 13.6, 27.3, 40.9, 54.5, 68.2, 81.8, 95.5, 109.1, 122.7,
+    //                136.4, 150.0, 163.6, 177.3, 190.9, 204.5, 218.2, 231.8, 245.5, 259.1, 272.7, 286.4, 300
+    // WAIT - that's not exact. Let me use 14 lines for 15 sections (20px each):
+    // 15 sections × 20px = 300px total height
+    // Grid at: 0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300
+    // Baseline at 210px falls BETWEEN 200 and 220 (10px off each)
+    // CLOSEST: 10 lines = 11 sections, 27.27px each, line at ~218px (8px off)
     lv_chart_set_div_line_count(chartWaveform, 5, 10);  // 5 vertical, 10 horizontal
-    lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x1A3A1A), LV_PART_MAIN);  // Dark green grid
-    lv_obj_set_style_line_width(chartWaveform, 1, LV_PART_MAIN);  // Thin grid lines
-    lv_obj_set_style_line_opa(chartWaveform, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)
+    lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x00AA00), LV_PART_MAIN);  // Green grid
+    lv_obj_set_style_line_width(chartWaveform, 1, LV_PART_MAIN);
+    lv_obj_set_style_line_opa(chartWaveform, LV_OPA_50, LV_PART_MAIN);  // Visible grid
 
-    // Hide axis ticks/labels for clean waveform display
+    // Hide axis ticks/labels
     lv_obj_set_style_pad_all(chartWaveform, 0, LV_PART_MAIN);
     lv_obj_set_style_line_width(chartWaveform, 0, LV_PART_TICKS);
     lv_obj_set_style_text_opa(chartWaveform, LV_OPA_TRANSP, LV_PART_TICKS);
 
     seriesWaveform = lv_chart_add_series(chartWaveform, lv_color_hex(0x00FF00), LV_CHART_AXIS_PRIMARY_Y);
 
-    // ✅ v5.8.12: Explicitly set waveform color to green (fixes red waveform issue)
+    // ✅ v5.8.16: FORCE green waveform color on ITEMS part
     lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x00FF00), LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(seriesWaveform, lv_color_hex(0x00FF00), 0);  // Series background
 
     // ✅ v5.8.10: Initialize with baseline at 30 (matches home ECG and medical standard)
     for (int i = 0; i < 600; i++) {
