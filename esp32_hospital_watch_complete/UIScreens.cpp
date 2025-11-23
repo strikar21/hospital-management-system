@@ -305,6 +305,8 @@ void UIScreens::createAlertsScreen() {
     lv_obj_set_style_bg_opa(buttonClearAlerts, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(buttonClearAlerts, 0, 0);
     lv_obj_set_style_radius(buttonClearAlerts, 8, 0);
+    // ✅ Press feedback: darker when pressed
+    lv_obj_set_style_bg_color(buttonClearAlerts, lv_color_hex(0xC0392B), LV_STATE_PRESSED);
 
     lv_obj_t *btnLabel = lv_label_create(buttonClearAlerts);
     lv_label_set_text(btnLabel, "Clear All");
@@ -387,11 +389,9 @@ void UIScreens::createSettingsScreen() {
     lv_obj_add_state(switchTapWake, LV_STATE_CHECKED);  // Default ON
     lv_obj_add_event_cb(switchTapWake, event_callback, LV_EVENT_VALUE_CHANGED, this);
 
-    lv_obj_t *hint = lv_label_create(settingsScreen);
-    lv_label_set_text(hint, "Swipe left/right to switch screens");
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(hint, lv_color_hex(0xFFFFFF), 0);  // ✅ White text on black bg
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -30);
+    // ✅ Removed misleading "Swipe left/right" hint - swipe works inconsistently
+    // (vitals area intercepts swipes, waveform screen doesn't support swipe)
+    // Users can still swipe on home screen outside vitals area
 }
 
 void UIScreens::event_callback(lv_event_t *e) {

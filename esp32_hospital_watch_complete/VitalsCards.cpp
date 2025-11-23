@@ -117,6 +117,8 @@ lv_obj_t* VitalsCards::createCard(lv_obj_t* parent, const char* title, uint32_t 
     lv_obj_set_style_pad_all(card, 4, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    // ✅ Press feedback: darken background when pressed
+    lv_obj_set_style_bg_color(card, lv_color_hex(0xD0D0D0), LV_STATE_PRESSED);
 
     if (eventCallback) {
         lv_obj_add_event_cb(card, eventCallback, LV_EVENT_CLICKED, userData);
