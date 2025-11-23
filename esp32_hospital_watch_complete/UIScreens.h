@@ -29,6 +29,7 @@ public:
     ScreenType getCurrentScreen() const;
 
     void updateVitals(float hr, float spo2, float temp, float bpSys, float bpDia, float rr);
+    void updateVitalIMU(float fallRisk, float tremor);
     void updateConnectionStatus(bool wifi, bool mqtt, bool nfc);
     void updateBattery(uint8_t percent);
     void updateDeviceId(const char *deviceId);

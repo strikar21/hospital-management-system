@@ -1820,6 +1820,11 @@ void loop() {
     lastIMUUpdate = millis();
     imuSensor.update();  // Fetch latest accelerometer/gyroscope data (I2C read)
 
+    // ✅ Update UI with IMU-derived vitals
+    float fallRisk = imuSensor.getFallConfidence() * 10.0;  // Convert 0-1 to 0-10 risk score
+    float tremorAmplitude = imuSensor.getTremorAmplitude() * 1000.0;  // Convert to mg
+    ui.updateVitalIMU(fallRisk, tremorAmplitude);
+
     // 🚨 FALL DETECTION (internally rate-limited to 200ms)
     if (imuSensor.checkForFall()) {
       float magnitude = imuSensor.getAccelerationMagnitude();

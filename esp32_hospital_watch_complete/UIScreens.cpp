@@ -71,8 +71,18 @@ void UIScreens::updateConnectionStatus(bool wifi, bool, bool) {
     statusBar.updateWiFi(wifi);
 }
 
-void UIScreens::updateVitals(float hr, float spo2, float temp, float bpSys, float bpDia, float) {
+void UIScreens::updateVitals(float hr, float spo2, float temp, float bpSys, float bpDia, float rr) {
+    // Update Page 1 vitals (HR, BP, SpO2, Temp)
     vitalsCards.updateAll(hr, spo2, temp, bpSys, bpDia);
+
+    // Update Page 2 vitals (Respiratory Rate)
+    vitalsCards.updateRespiratoryRate(rr);
+}
+
+void UIScreens::updateVitalIMU(float fallRisk, float tremor) {
+    // Update Page 2 vitals (Fall Risk, Tremor)
+    vitalsCards.updateFallRisk(fallRisk);
+    vitalsCards.updateTremor(tremor);
 }
 
 // ✅ v5.4.2: Show alert in alert bar with severity-based color

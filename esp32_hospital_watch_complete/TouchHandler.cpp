@@ -141,6 +141,18 @@ void TouchHandler::handleGesture(GestureType gesture) {
         return;
     }
 
+    // ✅ Ignore horizontal swipes on home screen vitals area (70-216px from top)
+    // This prevents conflict with vitals tileview's horizontal swipe navigation
+    if (uiScreens->getCurrentScreen() == SCREEN_HOME) {
+        if (gesture == GESTURE_SWIPE_LEFT || gesture == GESTURE_SWIPE_RIGHT) {
+            // Check if swipe started in vitals tileview area (Y: 70-216)
+            if (startY >= 70 && startY <= 216) {
+                Serial.println("👆 Swipe ignored - within vitals tileview area");
+                return;  // Let LVGL tileview handle this swipe
+            }
+        }
+    }
+
     switch (gesture) {
         case GESTURE_SWIPE_LEFT:
             Serial.println("👆 Swipe left - next screen");
