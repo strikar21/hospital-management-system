@@ -1994,10 +1994,18 @@ void loop() {
   // ✅ v5.8.4: ALWAYS update UI waveform viewer when buffer is full (even when offline)
   if (accumulatorIndex >= 50 && (unsigned long)(millis() - lastWaveformStream) > 100) {
     // Update UI waveform screen FIRST (before connection check)
-    // Convert Lead II samples from 24-bit (0-16777216) to chart range (0-100)
+    // ✅ v5.8.6: Proper scaling - remove DC offset, then map AC component with gain
+    // 24-bit ADC: DC offset = 8388608 (midpoint of 0-16777216 range)
+    // AC component: ±500000 µV typical ECG range (matches ECGChart.h constants)
+    // Chart baseline: 30 (70% from top) per medical ECG standard
     int16_t uiSamples[50];
     for (int i = 0; i < 50; i++) {
-      uiSamples[i] = map(waveformAccumulator[1][i], 0, 16777216, 0, 100);
+      // Remove DC offset to get AC signal centered at 0
+      int32_t acSignal = waveformAccumulator[1][i] - 8388608;
+      // Map ±500000 µV range to 0-100 chart range (baseline at 30)
+      // Gain: 500000 µV → 70 chart units (upward deflections get more space)
+      int value = map(acSignal, -500000, 500000, 0, 100);
+      uiSamples[i] = constrain(value, 0, 100);
     }
     bool isECGMode = digitalRead(MODE_SELECT_PIN) == HIGH;
     ui.updateWaveform(uiSamples, 50, isECGMode ? "ECG" : "EEG", "Lead II");
