@@ -91,14 +91,15 @@ uint8_t getTouch(uint16_t *x, uint16_t *y)
     *x = (((uint16_t)buf[0] & 0x0f) << 8) | (uint16_t)buf[1];
     *y = (((uint16_t)buf[2] & 0x0f) << 8) | (uint16_t)buf[3];
 
-    // ✅ v5.3: Bounds checking (like Waveshare demo)
-    if(*x > EXAMPLE_LCD_H_RES)
-      *x = EXAMPLE_LCD_H_RES;
-    if(*y > EXAMPLE_LCD_V_RES)
-      *y = EXAMPLE_LCD_V_RES;
+    // ✅ v5.8.3: REJECT invalid touches instead of clamping (prevents phantom edge touches)
+    // Invalid coordinates indicate I2C noise or touch controller glitch
+    if(*x >= EXAMPLE_LCD_H_RES || *y >= EXAMPLE_LCD_V_RES) {
+      // Serial.printf("⚠️  FT3168: Invalid touch rejected: x=%d, y=%d\n", *x, *y);
+      return 0;  // Reject this touch reading
+    }
 
-    // Debug output (can be disabled later)
-    Serial.printf("👆 Touch detected: x=%d, y=%d\n", *x, *y);
+    // ✅ v5.8.3: Debug print moved to TouchHandler (with additional validation)
+    // Serial.printf("👆 Touch detected: x=%d, y=%d\n", *x, *y);
 
     return 1;
   }

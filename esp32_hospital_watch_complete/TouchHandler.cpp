@@ -54,8 +54,21 @@ void TouchHandler::update() {
     uint16_t x, y;
     uint8_t touched = getTouch(&x, &y);
 
+    // ✅ v5.8.3: Validate touch coordinates to prevent phantom touches
+    // Screen is 280×456, reject touches at exact boundaries (likely noise)
+    // Also reject coordinates outside screen bounds
+    bool validTouch = (touched != 0) &&
+                      (x > 0 && x < 279) &&  // 1-278 valid (not 0 or 279)
+                      (y > 0 && y < 455);     // 1-454 valid (not 0 or 455)
+
+    if (touched && !validTouch) {
+        // Invalid/phantom touch detected - ignore it
+        Serial.printf("⚠️  Invalid touch ignored: x=%d, y=%d\n", x, y);
+        return;  // Don't update touch state
+    }
+
     wasTouching = isTouching;
-    isTouching = (touched != 0);
+    isTouching = validTouch;
 
     // Touch started (pressed)
     if (isTouching && !wasTouching) {
@@ -64,6 +77,7 @@ void TouchHandler::update() {
         currentX = x;
         currentY = y;
         touchStartTime = millis();
+        Serial.printf("👆 Touch detected: x=%d, y=%d\n", x, y);
     }
 
     // Touch moved (dragging)
