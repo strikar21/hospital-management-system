@@ -107,10 +107,12 @@ void ECGChart::updateSamples(int32_t* samples, uint8_t numSamples) {
         // AC component: ±500000 µV typical ECG range
         int32_t acSignal = samples[i] - 8388608;
 
-        // Map ECG signal (-500000 to +500000 µV) to chart range (0-100)
-        // Baseline at 70% from top (value 30) - medical ECG standard
-        // Allows more space for upward deflections (P, R, T waves)
-        int value = map(acSignal, ECG_MIN, ECG_MAX, 0, 100);
+        // ✅ v5.8.9: Map ECG signal to chart range with baseline at 30 (medical standard)
+        // Baseline (0 µV) → 30 (70% from top)
+        // Upward deflections (R-peak ~+170000 µV) → 30 to 100 (70 units up)
+        // Downward deflections (S-wave ~-40000 µV) → 30 to 0 (30 units down)
+        // Gain: ±200000 µV fills 0-100 range (tighter than ±500000 for better visibility)
+        int value = 30 + map(acSignal, -200000, 200000, -30, 70);
         value = constrain(value, 0, 100);
         lv_chart_set_next_value(chart, series, value);
     }
