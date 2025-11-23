@@ -228,15 +228,15 @@ void UIScreens::createWaveformScreen() {
     lv_obj_set_style_bg_color(chartWaveform, lv_color_hex(0x000000), 0);  // Pure black background
     lv_obj_set_style_line_rounded(chartWaveform, true, LV_PART_ITEMS);  // Smooth lines
 
-    // ✅ Medical ECG grid - 5mm × 5mm squares (standard medical paper grid)
-    // Chart: 260px wide, 300px tall
-    // Standard: 5mm = 50px (at typical display DPI)
-    // Horizontal: 260px ÷ 50px = 5.2 squares (~5 divisions)
-    // Vertical: 300px ÷ 50px = 6 squares (6 divisions)
-    lv_chart_set_div_line_count(chartWaveform, 5, 5);  // 5 horizontal lines, 5 vertical lines (creates 5×6 grid)
+    // ✅ v5.8.11: Medical ECG grid aligned with baseline at 30
+    // Chart range: 0-100, Baseline: 30 (70% from top)
+    // With 10 horizontal lines → grid at 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+    // Baseline aligns perfectly with the 30 grid line!
+    // Chart: 260px wide, 300px tall → 10 horizontal sections = 30px each
+    lv_chart_set_div_line_count(chartWaveform, 12, 10);  // 12 vertical, 10 horizontal (baseline at line 3)
     lv_obj_set_style_line_color(chartWaveform, lv_color_hex(0x1A3A1A), LV_PART_MAIN);  // Dark green grid
     lv_obj_set_style_line_width(chartWaveform, 1, LV_PART_MAIN);  // Thin grid lines
-    lv_obj_set_style_line_opa(chartWaveform, LV_OPA_50, LV_PART_MAIN);  // Semi-transparent
+    lv_obj_set_style_line_opa(chartWaveform, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)
 
     // Hide axis ticks/labels for clean waveform display
     lv_obj_set_style_pad_all(chartWaveform, 0, LV_PART_MAIN);
