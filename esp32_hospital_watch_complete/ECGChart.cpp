@@ -85,8 +85,11 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     // Create ECG series (bright green waveform)
     series = lv_chart_add_series(chart, lv_color_hex(WAVEFORM_COLOR), LV_CHART_AXIS_PRIMARY_Y);
 
-    // ✅ v5.8.12: Explicitly set series line color to green (fixes red waveform issue)
+    // ✅ v5.8.17: NUCLEAR OPTION - Force green on every possible style point
+    lv_chart_set_series_color(chart, series, lv_color_hex(WAVEFORM_COLOR));
     lv_obj_set_style_line_color(chart, lv_color_hex(WAVEFORM_COLOR), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(chart, lv_color_hex(WAVEFORM_COLOR), LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_color(chart, lv_color_hex(WAVEFORM_COLOR), 0);
 
     // Set line style - 3px width with rounded caps for smooth medical-grade appearance
     lv_obj_set_style_line_width(chart, 3, LV_PART_ITEMS);
