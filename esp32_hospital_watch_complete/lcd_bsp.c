@@ -124,7 +124,8 @@ void lcd_lvgl_Init(void)
   }
 }
 
-static bool example_lvgl_lock(int timeout_ms)
+// ✅ Removed static - these functions need to be called from main loop for thread-safe LVGL access
+bool example_lvgl_lock(int timeout_ms)
 {
   assert(lvgl_mux && "bsp_display_start must be called first");
 
@@ -132,7 +133,7 @@ static bool example_lvgl_lock(int timeout_ms)
   return xSemaphoreTake(lvgl_mux, timeout_ticks) == pdTRUE;
 }
 
-static void example_lvgl_unlock(void)
+void example_lvgl_unlock(void)
 {
   assert(lvgl_mux && "bsp_display_start must be called first");
   xSemaphoreGive(lvgl_mux);

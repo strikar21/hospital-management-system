@@ -50,7 +50,20 @@ void UIScreens::init() {
 
 bool UIScreens::isInitialized() const { return initialized; }
 
-void UIScreens::loadScreen(lv_obj_t *scr) { if (scr) lv_scr_load(scr); }
+// ✅ Forward declare LVGL mutex functions from lcd_bsp.c
+extern "C" {
+    bool example_lvgl_lock(int timeout_ms);
+    void example_lvgl_unlock(void);
+}
+
+// ✅ Thread-safe screen loading with LVGL mutex protection
+// This prevents pink screen and UI corruption when called from main loop (different thread than LVGL task)
+void UIScreens::loadScreen(lv_obj_t *scr) {
+    if (scr && example_lvgl_lock(1000)) {  // 1 second timeout
+        lv_scr_load(scr);
+        example_lvgl_unlock();
+    }
+}
 void UIScreens::showHomeScreen()     { loadScreen(homeScreen);     currentScreen = SCREEN_HOME; }
 void UIScreens::showWaveformScreen() { loadScreen(waveformScreen); currentScreen = SCREEN_WAVEFORM; }
 void UIScreens::showAlertsScreen()   { loadScreen(alertsScreen);   currentScreen = SCREEN_ALERTS; }

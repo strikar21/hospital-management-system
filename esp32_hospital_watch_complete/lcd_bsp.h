@@ -25,8 +25,8 @@ static void example_lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_
 void example_lvgl_rounder_cb(struct _lv_disp_drv_t *disp_drv, lv_area_t *area);
 static void example_increase_lvgl_tick(void *arg);
 static void example_lvgl_port_task(void *arg);
-static void example_lvgl_unlock(void);
-static bool example_lvgl_lock(int timeout_ms);
+void example_lvgl_unlock(void);  // ✅ Removed static - needed for thread-safe UI calls from main loop
+bool example_lvgl_lock(int timeout_ms);  // ✅ Removed static - needed for thread-safe UI calls from main loop
 void lcd_lvgl_Init(void);
 static void example_lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
 esp_err_t set_amoled_backlight(uint8_t brig);
