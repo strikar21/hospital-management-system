@@ -102,10 +102,15 @@ void ECGChart::updateSamples(int32_t* samples, uint8_t numSamples) {
 
     // Feed each sample to the chart (scrolling left)
     for (uint8_t i = 0; i < numSamples && i < 10; i++) {
+        // ✅ v5.8.7: Remove DC offset (8388608) before mapping
+        // 24-bit ADC: samples are 8388608 ± amplitude
+        // AC component: ±500000 µV typical ECG range
+        int32_t acSignal = samples[i] - 8388608;
+
         // Map ECG signal (-500000 to +500000 µV) to chart range (0-100)
         // Baseline at 70% from top (value 30) - medical ECG standard
         // Allows more space for upward deflections (P, R, T waves)
-        int value = map(samples[i], ECG_MIN, ECG_MAX, 0, 100);
+        int value = map(acSignal, ECG_MIN, ECG_MAX, 0, 100);
         value = constrain(value, 0, 100);
         lv_chart_set_next_value(chart, series, value);
     }
