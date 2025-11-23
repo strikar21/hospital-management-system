@@ -234,7 +234,12 @@ private:
   float fallMagnitude;
   unsigned long lastFallCheck;
   unsigned long fallCooldownUntil;  // ✅ v5.4.8: Prevent re-triggering after manual clear
-  float fallThreshold;           // g (default: 2.5)
+  float fallThreshold;           // g (default: 2.0 dynamic)
+
+  // ✅ v5.8.11: Spike rejection filter (prevents touch-induced false positives)
+  static const int FALL_CONFIRMATION_SAMPLES = 2;  // Require 2 consecutive high readings
+  float previousDynamicAccel;    // Previous reading for spike detection
+  int highAccelCount;            // Counter for consecutive high acceleration readings
 
   // Tremor detection state
   static const int TREMOR_BUFFER_SIZE = 32;  // 320ms @ 100Hz

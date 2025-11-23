@@ -28,8 +28,23 @@ uint8_t I2C_writr_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
 
 uint8_t I2C_read_buff(uint8_t addr, uint8_t reg, uint8_t *buf, uint8_t len)
 {
-  esp_err_t ret = i2c_master_transmit_receive(ft3168_handle, &reg, 1, buf, len, 1000);
-  return (ret == ESP_OK) ? 0 : 1;
+  // ✅ v5.8.15: Retry on I2C errors (filters transient bus noise)
+  const int MAX_RETRIES = 2;
+  for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    esp_err_t ret = i2c_master_transmit_receive(ft3168_handle, &reg, 1, buf, len, 1000);
+
+    if (ret == ESP_OK) {
+      return 0;  // Success
+    }
+
+    // On error, retry after brief delay (allows bus to settle)
+    if (attempt < MAX_RETRIES) {
+      delayMicroseconds(100);  // 100µs settling time
+    }
+  }
+
+  // All retries failed
+  return 1;
 }
 
 uint8_t I2C_master_write_read_device(uint8_t addr, uint8_t *writeBuf, uint8_t writeLen, uint8_t *readBuf, uint8_t readLen)
@@ -47,8 +62,11 @@ void Touch_Init(void)
     bus_config.i2c_port = I2C_NUM_0;
     bus_config.scl_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SCL;  // GPIO 48
     bus_config.sda_io_num = (gpio_num_t)EXAMPLE_PIN_NUM_TOUCH_SDA;  // GPIO 47
-    bus_config.glitch_ignore_cnt = 7;
-    bus_config.flags.enable_internal_pullup = false;  // ✅ CRITICAL: Board has external 4.7kΩ pull-ups
+
+    // ✅ v5.8.15: Enhanced noise filtering
+    bus_config.glitch_ignore_cnt = 12;  // Increased from 7 → 12 (filters more noise)
+                                         // 12 cycles @ 300kHz = 40µs spike rejection
+    bus_config.flags.enable_internal_pullup = false;  // ✅ Board has external 4.7kΩ pull-ups
 
     esp_err_t ret = i2c_new_master_bus(&bus_config, &shared_i2c_bus);
     if (ret != ESP_OK) {
@@ -84,10 +102,29 @@ uint8_t getTouch(uint16_t *x, uint16_t *y)
   uint8_t data;
   uint8_t buf[4];
 
-  I2C_read_buff(I2C_ADDR_FT3168, 0x02, &data, 1);
+  // Read touch point count register (0x02)
+  uint8_t readResult = I2C_read_buff(I2C_ADDR_FT3168, 0x02, &data, 1);
+
+  // ✅ v5.8.15: Reject if I2C read failed (filters bus errors)
+  if (readResult != 0) {
+    return 0;  // I2C error - reject this reading
+  }
+
+  // ✅ v5.8.15: Sanity check touch count (FT3168 supports max 5 touches)
+  if (data > 5 || data == 0) {
+    return 0;  // Invalid touch count - likely noise
+  }
+
   if(data)
   {
-    I2C_read_buff(I2C_ADDR_FT3168, 0x03, buf, 4);
+    // Read touch coordinates
+    readResult = I2C_read_buff(I2C_ADDR_FT3168, 0x03, buf, 4);
+
+    // ✅ v5.8.15: Reject if coordinate read failed
+    if (readResult != 0) {
+      return 0;  // I2C error during coordinate read
+    }
+
     *x = (((uint16_t)buf[0] & 0x0f) << 8) | (uint16_t)buf[1];
     *y = (((uint16_t)buf[2] & 0x0f) << 8) | (uint16_t)buf[3];
 
@@ -96,6 +133,11 @@ uint8_t getTouch(uint16_t *x, uint16_t *y)
     if(*x >= EXAMPLE_LCD_H_RES || *y >= EXAMPLE_LCD_V_RES) {
       // Serial.printf("⚠️  FT3168: Invalid touch rejected: x=%d, y=%d\n", *x, *y);
       return 0;  // Reject this touch reading
+    }
+
+    // ✅ v5.8.15: Additional sanity check - reject all-zeros or all-ones (bus stuck)
+    if ((*x == 0 && *y == 0) || (*x == 0xFFF && *y == 0xFFF)) {
+      return 0;  // Bus stuck condition
     }
 
     // ✅ v5.8.3: Debug print moved to TouchHandler (with additional validation)

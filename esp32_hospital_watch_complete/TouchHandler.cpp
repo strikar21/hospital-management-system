@@ -21,7 +21,8 @@ TouchHandler::TouchHandler()
       currentX(0), currentY(0),
       touchStartTime(0),
       lastX(0), lastY(0),
-      touchFirstSeenTime(0) {
+      touchFirstSeenTime(0),
+      lastTouchPollTime(0) {
 }
 
 TouchHandler::~TouchHandler() {
@@ -52,7 +53,16 @@ void TouchHandler::update() {
         return;
     }
 
-    // Read touch state
+    // ✅ v5.8.15: Rate limit I2C polling to reduce bus contention
+    // FT3168 has no hardware INT pin, so we poll I2C register 0x02
+    // Limiting to 100Hz (10ms) reduces interference with IMU (25Hz)
+    unsigned long now = millis();
+    if (now - lastTouchPollTime < TOUCH_POLL_INTERVAL) {
+        return;  // Skip this update cycle - too soon
+    }
+    lastTouchPollTime = now;
+
+    // Read touch state from FT3168 via I2C
     uint16_t x, y;
     uint8_t touched = getTouch(&x, &y);
 

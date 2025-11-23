@@ -99,9 +99,16 @@ private:
     uint32_t touchStartTime;
 
     // ✅ v5.8.14: Time-based debouncing for phantom touch rejection
+    // ✅ v5.8.15: Tuned debounce to 7ms (balance: filters noise, allows swipes)
+    //     FT3168 has no hardware INT pin, so I2C polling picks up bus noise
+    //     7ms = just enough to filter electrical spikes without breaking gestures
     uint16_t lastX, lastY;
     uint32_t touchFirstSeenTime;  // When current coordinates first appeared
-    static const uint32_t DEBOUNCE_TIME = 2;  // 2ms debounce period
+    static const uint32_t DEBOUNCE_TIME = 7;  // 7ms debounce period (was 2ms, tested 20ms too high)
+
+    // ✅ v5.8.15: I2C polling rate limiter (reduces bus contention with IMU)
+    uint32_t lastTouchPollTime;   // Last time we polled FT3168 via I2C
+    static const uint32_t TOUCH_POLL_INTERVAL = 10;  // Poll every 10ms (100Hz max)
 
     // Gesture detection thresholds
     static const int16_t SWIPE_THRESHOLD = 60;      // Minimum pixels for swipe

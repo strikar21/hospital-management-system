@@ -33,7 +33,11 @@ QMI8658Manager::QMI8658Manager() {
   fallMagnitude = 0.0;
   lastFallCheck = 0;
   fallCooldownUntil = 0;  // ✅ v5.4.8: No cooldown initially
-  fallThreshold = 3.0;  // ✅ v5.6.0: Reduced to 3.0g (clinical standard: 2.5-3.5g) - touch false positives prevented by cooldown
+  fallThreshold = 2.0;  // ✅ v5.8.11: Dynamic accel threshold (2.0g without gravity baseline)
+                        // Clinical: Falls = 2.5-3.5g total → 1.5-2.5g dynamic
+                        // 2.0g dynamic = safe middle ground, avoids hand lifts (<1.5g)
+  previousDynamicAccel = 0.0;  // ✅ v5.8.11: Spike rejection filter
+  highAccelCount = 0;
 
   // Initialize tremor detection
   historyIndex = 0;
@@ -160,7 +164,7 @@ bool QMI8658Manager::begin(i2c_master_bus_handle_t bus_handle) {
   Serial.println("✅ QMI8658 configured:");
   Serial.println("   - Accelerometer: ±4g @ 250Hz");
   Serial.println("   - Gyroscope: ±512dps @ 250Hz");
-  Serial.println("   - Fall threshold: 3.0g");  // ✅ v5.6.0: Clinical standard (2.5-3.5g)
+  Serial.println("   - Fall threshold: 2.0g (dynamic accel, gravity-compensated)");
   Serial.println("   - Tremor range: 4-12 Hz");
 
   return true;
@@ -274,23 +278,38 @@ bool QMI8658Manager::checkForFall() {
   }
   lastFallCheck = now;
 
-  // Calculate acceleration magnitude
-  float magnitude = getAccelerationMagnitude();
+  // ✅ CRITICAL FIX: Calculate DYNAMIC acceleration (excluding gravity)
+  // Total magnitude includes gravity (1g when stationary)
+  float totalMagnitude = calculateMagnitude(accelX, accelY, accelZ);
 
-  // Fall detected: sudden acceleration > threshold
-  if (magnitude > fallThreshold) {
-    if (!fallDetected) {  // New fall event
+  // Dynamic acceleration = deviation from resting state (1g)
+  // This removes gravity and measures actual movement
+  float dynamicAccel = fabs(totalMagnitude - 1.0);
+
+  // ✅ v5.8.11: Spike rejection filter (prevents touch-induced I2C noise)
+  // Require multiple consecutive high readings to filter out single spikes
+  if (dynamicAccel > fallThreshold) {
+    highAccelCount++;
+
+    // Only trigger fall if we have FALL_CONFIRMATION_SAMPLES consecutive high readings
+    if (highAccelCount >= FALL_CONFIRMATION_SAMPLES && !fallDetected) {
       fallDetected = true;
       fallTimestamp = now;
-      fallMagnitude = magnitude;
+      fallMagnitude = dynamicAccel;
 
       Serial.printf("🚨 FALL DETECTED!\n");
-      Serial.printf("   Acceleration: %.2fg (threshold: %.2fg)\n",
-                    magnitude, fallThreshold);
+      Serial.printf("   Dynamic Accel: %.2fg (threshold: %.2fg, confirmed over %d samples)\n",
+                    dynamicAccel, fallThreshold, FALL_CONFIRMATION_SAMPLES);
+      Serial.printf("   Total Magnitude: %.2fg\n", totalMagnitude);
       Serial.printf("   Vector: X=%.2f, Y=%.2f, Z=%.2f\n",
                     accelX, accelY, accelZ);
     }
+  } else {
+    // Reset counter if acceleration drops below threshold (spike rejected)
+    highAccelCount = 0;
   }
+
+  previousDynamicAccel = dynamicAccel;
 
   // Auto-clear fall flag after 5 seconds (to avoid spam)
   if (fallDetected && (now - fallTimestamp > 5000)) {
