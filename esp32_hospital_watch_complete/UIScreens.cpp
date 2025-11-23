@@ -223,7 +223,7 @@ void UIScreens::createWaveformScreen() {
     // Medical ECG: 25mm/s paper speed → 600 points = 1.2 seconds of waveform visible
     // At 500Hz with 50 samples/100ms update → 1200ms display time (comfortable viewing)
     lv_chart_set_point_count(chartWaveform, 600);
-    lv_obj_set_style_line_width(chartWaveform, 2, LV_PART_ITEMS);  // ✅ v5.4.9: 2px width for sharp green waveform
+    lv_obj_set_style_line_width(chartWaveform, 3, LV_PART_ITEMS);  // ✅ v5.8.10: 3px width (matches home ECG)
     lv_obj_set_style_size(chartWaveform, 0, LV_PART_INDICATOR);  // No point markers
     lv_obj_set_style_bg_color(chartWaveform, lv_color_hex(0x000000), 0);  // Pure black background
     lv_obj_set_style_line_rounded(chartWaveform, true, LV_PART_ITEMS);  // Smooth lines
@@ -245,9 +245,9 @@ void UIScreens::createWaveformScreen() {
 
     seriesWaveform = lv_chart_add_series(chartWaveform, lv_color_hex(0x00FF00), LV_CHART_AXIS_PRIMARY_Y);
 
-    // ✅ v5.8.8: Initialize with baseline (value 50 = middle, proper ECG baseline after DC offset removal)
+    // ✅ v5.8.10: Initialize with baseline at 30 (matches home ECG and medical standard)
     for (int i = 0; i < 600; i++) {
-        lv_chart_set_next_value(chartWaveform, seriesWaveform, 50);  // Baseline at 50 (middle)
+        lv_chart_set_next_value(chartWaveform, seriesWaveform, 30);  // Baseline at 30 (70% from top)
     }
 
     labelWaveformStatus = lv_label_create(waveformScreen);
