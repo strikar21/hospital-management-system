@@ -1830,9 +1830,22 @@ void loop() {
     imuSensor.update();  // Fetch latest accelerometer/gyroscope data (I2C read)
 
     // ✅ Update UI with IMU-derived vitals
-    float fallRisk = imuSensor.getFallConfidence() * 10.0;  // Convert 0-1 to 0-10 risk score
-    float tremorAmplitude = imuSensor.getTremorAmplitude() * 1000.0;  // Convert to mg
-    ui.updateVitalIMU(fallRisk, tremorAmplitude);
+    // Fall risk: Based on recent acceleration magnitude (0-10 scale)
+    // 0-1g = Low (0-2), 1-2g = Medium (3-6), >2g = High (7-10)
+    float accelMag = imuSensor.getAccelerationMagnitude();
+    float fallRisk = 0.0;
+    if (accelMag < 1.0) {
+      fallRisk = accelMag * 2.0;  // 0-1g → 0-2
+    } else if (accelMag < 2.0) {
+      fallRisk = 2.0 + (accelMag - 1.0) * 4.0;  // 1-2g → 2-6
+    } else {
+      fallRisk = 6.0 + min((accelMag - 2.0) * 2.0, 4.0);  // >2g → 6-10 (capped)
+    }
+    fallRisk = constrain(fallRisk, 0.0, 10.0);
+
+    // Tremor: Display frequency in Hz (4-12 Hz Parkinson's range)
+    float tremorFreq = imuSensor.getTremorFrequency();
+    ui.updateVitalIMU(fallRisk, tremorFreq);
 
     // 🚨 FALL DETECTION (internally rate-limited to 200ms)
     if (imuSensor.checkForFall()) {

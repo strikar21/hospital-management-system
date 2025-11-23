@@ -262,7 +262,16 @@ void VitalsCards::updateBioimpedance(float impedance) {
 void VitalsCards::updateTremor(float tremor) {
     if (!initialized || !labelTremor) return;
     char buf[16];
-    snprintf(buf, sizeof(buf), "%.0f/10", tremor);
+    if (tremor >= 4.0 && tremor <= 12.0) {
+        // Active tremor detected in Parkinson's range
+        snprintf(buf, sizeof(buf), "%.1fHz", tremor);
+    } else if (tremor > 0.1) {
+        // Some movement but outside Parkinson's range
+        snprintf(buf, sizeof(buf), "%.1fHz", tremor);
+    } else {
+        // No tremor
+        snprintf(buf, sizeof(buf), "None");
+    }
     lv_label_set_text(labelTremor, buf);
 }
 
