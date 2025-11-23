@@ -483,10 +483,13 @@ void UIScreens::event_callback(lv_event_t *e) {
 }
 
 // ✅ v5.8.1: Thread-safe waveform chart updates (10 Hz)
+// ✅ v5.8.5: Process ALL samples (not just 10) with longer mutex timeout
 void UIScreens::updateWaveform(int16_t *samples, uint8_t numSamples, const char*, const char*) {
     if (waveformFrozen) return;
-    if (example_lvgl_lock(10)) {
-        for (uint8_t i = 0; i < numSamples && i < 10; i++) {
+    // Longer timeout (50ms) for processing 50 samples @ 10 Hz (100ms interval)
+    // 50 samples * ~0.1ms/sample ≈ 5ms, plus 50ms rendering time = 55ms total
+    if (example_lvgl_lock(50)) {
+        for (uint8_t i = 0; i < numSamples; i++) {
             // Baseline at 70% from top (value 30) - medical ECG standard
             // Allows more space for upward deflections (P, R, T waves)
             // Samples are already scaled to 0-100 range by caller
@@ -495,6 +498,9 @@ void UIScreens::updateWaveform(int16_t *samples, uint8_t numSamples, const char*
         }
         lv_chart_refresh(chartWaveform);
         example_lvgl_unlock();
+    } else {
+        // Failed to acquire mutex - skip this update to prevent pink screen
+        Serial.println("⚠️  Waveform update skipped - mutex timeout");
     }
 }
 
