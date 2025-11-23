@@ -61,13 +61,15 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
     lv_chart_set_point_count(chart, CHART_WIDTH);  // 1 point per pixel width
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 100);  // 0-100 range
 
-    // Medical ECG grid - 5mm × 5mm squares
-    // 210px tall ÷ 42px = 5 large squares vertically (42px = 5mm equivalent)
-    // 268px wide ÷ 53.6px ≈ 5 large squares horizontally (53.6px = 5mm equivalent)
-    lv_chart_set_div_line_count(chart, 5, 4);  // 5 vertical divisions, 4 horizontal divisions
+    // ✅ v5.8.12: Medical ECG grid aligned with baseline at 30
+    // Chart range: 0-100, Baseline: 30 (70% from top)
+    // 10 horizontal divisions → grid at 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+    // Baseline aligns with 3rd line from bottom (value 30)
+    // Chart height: 210px ÷ 10 = 21px per division (aligned to baseline)
+    lv_chart_set_div_line_count(chart, 7, 10);  // 7 vertical, 10 horizontal (baseline at line 3)
     lv_obj_set_style_line_color(chart, lv_color_hex(GRID_COLOR), LV_PART_MAIN);
     lv_obj_set_style_line_width(chart, 1, LV_PART_MAIN);
-    lv_obj_set_style_line_opa(chart, LV_OPA_50, LV_PART_MAIN);  // Semi-transparent grid
+    lv_obj_set_style_line_opa(chart, LV_OPA_30, LV_PART_MAIN);  // More subtle (was 50%)
 
     // ✅ Hide Y-axis ticks and labels (no need for axis on ECG waveform)
     lv_obj_set_style_pad_left(chart, 0, LV_PART_MAIN);  // Remove left padding for axis
@@ -81,6 +83,9 @@ lv_obj_t* ECGChart::create(lv_obj_t* parent, lv_event_cb_t eventCallback, void* 
 
     // Create ECG series (bright green waveform)
     series = lv_chart_add_series(chart, lv_color_hex(WAVEFORM_COLOR), LV_CHART_AXIS_PRIMARY_Y);
+
+    // ✅ v5.8.12: Explicitly set series line color to green (fixes red waveform issue)
+    lv_obj_set_style_line_color(chart, lv_color_hex(WAVEFORM_COLOR), LV_PART_ITEMS);
 
     // Set line style - 3px width with rounded caps for smooth medical-grade appearance
     lv_obj_set_style_line_width(chart, 3, LV_PART_ITEMS);
