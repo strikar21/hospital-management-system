@@ -23,7 +23,7 @@ class DeviceStatus(str, Enum):
 
 class Device(Base):
     __tablename__ = "devices"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     deviceId = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
@@ -32,13 +32,25 @@ class Device(Base):
     location = Column(String)  # Room, ward, etc.
     macAddress = Column(String, unique=True)
     ipAddress = Column(String)
-    
+
+    # Bootstrap provisioning fields
+    uuid = Column(String(50), unique=True, index=True)  # Permanent device UUID (from MAC)
+    serial_number = Column(String(20), unique=True, index=True)  # Human-readable serial (W00001, S00001)
+    bootstrap_api_key = Column(String(100))  # Factory bootstrap key (per device type)
+    provisioned_at = Column(DateTime(timezone=True))  # When device was provisioned
+    provisioning_code = Column(String(6))  # PIN code used during provisioning
+
+    # MQTT authentication (defense in depth with mTLS)
+    mqtt_username = Column(String(50))  # Usually same as serial_number
+    mqtt_password_hash = Column(String(100))  # Bcrypt hashed password
+    certificate_serial = Column(Integer, ForeignKey("device_certificates.id"))  # Current active certificate
+
     # Configuration and capabilities
     capabilities = Column(JSON)  # What data this device can provide
     configuration = Column(JSON)  # Device-specific settings
     firmwareVersion = Column(String)
-    
-    # Authentication
+
+    # Authentication (legacy)
     deviceToken = Column(String, unique=True)  # For device authentication
     apiKey = Column(String, unique=True)
     
