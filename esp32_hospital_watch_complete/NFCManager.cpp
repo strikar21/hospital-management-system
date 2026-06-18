@@ -300,7 +300,7 @@ NFCTagType NFCManager::detectTagType(String uid, String data) {
     if (data.length() > 0) {
         JsonDocument doc;  // ✅ ArduinoJson v7 compatible
         DeserializationError error = deserializeJson(doc, data);
-        if (!error && doc.containsKey("type")) {
+        if (!error && doc["type"].is<int>()) {
             return (NFCTagType)doc["type"].as<int>();
         }
     }
@@ -363,7 +363,7 @@ bool NFCManager::parseStaffBadge(String data, String& staffId, String& staffName
     }
 
     JsonObject dataObj = doc["data"];
-    if (!dataObj.containsKey("staffId") || !dataObj.containsKey("staffName") || !dataObj.containsKey("role")) {
+    if (!dataObj["staffId"].is<String>() || !dataObj["staffName"].is<String>() || !dataObj["role"].is<String>()) {
         lastError = "Missing required fields in staff badge";
         return false;
     }
@@ -386,7 +386,7 @@ bool NFCManager::parsePatientWristband(String data, String& patientId, String& p
     }
 
     JsonObject dataObj = doc["data"];
-    if (!dataObj.containsKey("patientId") || !dataObj.containsKey("patientName")) {
+    if (!dataObj["patientId"].is<String>() || !dataObj["patientName"].is<String>()) {
         lastError = "Missing required fields in patient wristband";
         return false;
     }
@@ -408,7 +408,7 @@ bool NFCManager::parseRoomTag(String data, String& roomNumber, String& bedNumber
     }
 
     JsonObject dataObj = doc["data"];
-    if (!dataObj.containsKey("roomNumber") || !dataObj.containsKey("bedNumber")) {
+    if (!dataObj["roomNumber"].is<String>() || !dataObj["bedNumber"].is<String>()) {
         lastError = "Missing required fields in room tag";
         return false;
     }
@@ -430,7 +430,7 @@ bool NFCManager::parseMedicationTag(String data, String& medId, String& medName,
     }
 
     JsonObject dataObj = doc["data"];
-    if (!dataObj.containsKey("medicationId") || !dataObj.containsKey("medicationName") || !dataObj.containsKey("dosage")) {
+    if (!dataObj["medicationId"].is<String>() || !dataObj["medicationName"].is<String>() || !dataObj["dosage"].is<String>()) {
         lastError = "Missing required fields in medication tag";
         return false;
     }

@@ -24,6 +24,7 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include "MedicalTheme.h"
 
 class ECGChart {
 public:
@@ -84,16 +85,13 @@ private:
 
     bool initialized;
 
-    // Constants
-    static const uint16_t HEIGHT = 240;        // Chart height (increased from 230px)
-    static const uint16_t Y_POSITION = 216;    // Below vitals (70+146)
+    // Constants - Per your layout spec (Status:30px + Patient:40px + Vitals:170px + ECG:216px = 456px)
+    static const uint16_t HEIGHT = 216;        // 216px chart container height (increased from 182px)
+    static const uint16_t Y_POSITION = 240;    // Below vitals (30+40+170)
     static const uint16_t CHART_WIDTH = 268;   // Chart width (280 - 12px padding)
-    static const uint16_t CHART_HEIGHT = 210;  // Internal chart height
+    static const uint16_t CHART_HEIGHT = 194;  // Internal chart height (leave room for labels, 216-22)
 
-    // Colors
-    static const uint32_t BG_COLOR = 0x001A00;       // Dark green
-    static const uint32_t WAVEFORM_COLOR = 0x00FF00; // Bright green
-    static const uint32_t GRID_COLOR = 0x1A3A1A;     // Medium green
+    // Colors: use `MedicalTheme` palette at runtime; no in-class lv_color_t constants here.
 
     // ECG signal range (microVolts)
     static const int32_t ECG_MIN = -500000;  // -0.5mV

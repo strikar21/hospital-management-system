@@ -21,11 +21,22 @@
 #define QMI8658_MANAGER_H
 
 #include <Arduino.h>
+#include <esp_idf_version.h>
 // ❌ v5.4.1: REMOVED Wire library (caused I2C bus conflict with FT3168 touch)
 // #include <Wire.h>
+
 // ✅ v5.4.1: Use NEW ESP-IDF I2C driver API (shared bus with touch controller)
-#include <driver/i2c_master.h>
 #include <esp_err.h>
+
+// ESP-IDF v5.2+ uses new I2C driver API (redesigned in v5.2, not v5.0)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+    #include <driver/i2c_master.h>
+#else
+    #include <driver/i2c.h>
+    // Define compatibility types for older ESP-IDF
+    typedef void* i2c_master_bus_handle_t;
+    typedef void* i2c_master_dev_handle_t;
+#endif
 
 // QMI8658C I2C Address (may be 0x6A or 0x6B depending on SA0 pin)
 #define QMI8658_I2C_ADDR_PRIMARY   0x6A

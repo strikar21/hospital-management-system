@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings"""
@@ -51,7 +51,13 @@ class Settings(BaseSettings):
     # Streaming Settings
     MAX_WEBSOCKET_CONNECTIONS: int = 1000
     DATA_RETENTION_DAYS: int = 30
-    
+
+    # Bootstrap Provisioning Settings
+    CA_CERT_PATH: str = "./certs/ca.crt"
+    CA_KEY_PATH: str = "./certs/ca.key"
+    BOOTSTRAP_API_KEY_WATCH: str = "WATCH_BOOTSTRAP_KEY_7x9k2p4n6m8q1w3e5r7t9y"
+    BOOTSTRAP_API_KEY_SCANNER: str = "SCANNER_BOOTSTRAP_KEY_5a8f3g1h9j2k4l6m8n0p2q"
+
     @property
     def DATABASE_URL(self) -> str:
         """Construct database URL from components"""
@@ -69,8 +75,10 @@ class Settings(BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"  # Ignore extra fields from .env
+    )
 
 settings = Settings()

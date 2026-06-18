@@ -64,6 +64,11 @@ QMI8658Manager::QMI8658Manager() {
 bool QMI8658Manager::begin(i2c_master_bus_handle_t bus_handle) {
   Serial.println("🔧 Initializing QMI8658 IMU...");
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+  // ============================================================================
+  // NEW I2C API (ESP-IDF v5.2+)
+  // ============================================================================
+
   // ✅ v5.4.1: Validate bus handle
   if (bus_handle == NULL) {
     Serial.println("❌ QMI8658: Invalid bus handle (NULL)");
@@ -128,6 +133,34 @@ bool QMI8658Manager::begin(i2c_master_bus_handle_t bus_handle) {
 
     ret = readRegister(QMI8658_WHO_AM_I, &chipId);
   }
+
+#else
+  // ============================================================================
+  // LEGACY I2C API (ESP-IDF v4.4 - v5.1)
+  // ============================================================================
+
+  // ✅ Power-on delay (critical for IMU stability)
+  delay(100);
+
+  // ✅ Try primary address first (0x6A)
+  i2cAddr = QMI8658_I2C_ADDR_PRIMARY;
+
+  Serial.println("✅ QMI8658 using legacy I2C driver (shared bus from FT3168)");
+
+  // ✅ Read WHO_AM_I register to verify device
+  uint8_t chipId = 0;
+  esp_err_t ret = readRegister(QMI8658_WHO_AM_I, &chipId);
+
+  if (ret != ESP_OK || chipId != QMI8658_CHIP_ID) {
+    // Try secondary address (0x6B)
+    Serial.printf("⚠️  No response at 0x%02X, trying 0x%02X...\n",
+                  QMI8658_I2C_ADDR_PRIMARY, QMI8658_I2C_ADDR_SECONDARY);
+
+    i2cAddr = QMI8658_I2C_ADDR_SECONDARY;
+    ret = readRegister(QMI8658_WHO_AM_I, &chipId);
+  }
+
+#endif
 
   if (ret != ESP_OK || chipId != QMI8658_CHIP_ID) {
     Serial.printf("❌ QMI8658 not found! Expected 0x%02X, got 0x%02X\n",
@@ -488,7 +521,11 @@ void QMI8658Manager::setTremorParameters(float minFreq, float maxFreq, float min
 // ====================================
 
 bool QMI8658Manager::isConnected() {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
   if (!initialized || i2c_dev == NULL) return false;
+#else
+  if (!initialized) return false;
+#endif
 
   uint8_t chipId = 0;
   esp_err_t ret = readRegister(QMI8658_WHO_AM_I, &chipId);
@@ -516,41 +553,57 @@ void QMI8658Manager::printDiagnostics() {
 
 // ====================================
 // I2C HELPER FUNCTIONS (PRIVATE)
-// ✅ v5.4.1: Rewritten to use NEW ESP-IDF I2C driver API
+// ✅ Supports both NEW (v5.2+) and LEGACY (v4.4-v5.1) ESP-IDF I2C APIs
 // ====================================
 
 esp_err_t QMI8658Manager::readRegister(uint8_t reg, uint8_t* value) {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+  // NEW API Implementation (ESP-IDF v5.2+)
   if (i2c_dev == NULL) {
     consecutive_errors++;
     return ESP_ERR_INVALID_STATE;
   }
 
-  // ✅ Use NEW driver transmit-receive API
   esp_err_t ret = i2c_master_transmit_receive(
     i2c_dev,
     &reg, 1,        // Write register address
     value, 1,       // Read 1 byte
     1000            // Timeout: 1000ms
   );
+#else
+  // LEGACY API Implementation (ESP-IDF v4.4 - v5.1)
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, (i2cAddr << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, reg, true);
+  i2c_master_start(cmd);  // Repeated start
+  i2c_master_write_byte(cmd, (i2cAddr << 1) | I2C_MASTER_READ, true);
+  i2c_master_read_byte(cmd, value, I2C_MASTER_NACK);
+  i2c_master_stop(cmd);
+
+  esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(1000));
+  i2c_cmd_link_delete(cmd);
+#endif
 
   if (ret != ESP_OK) {
     consecutive_errors++;
     Serial.printf("❌ I2C read error (reg 0x%02X): %d (consecutive: %d)\n",
                   reg, ret, consecutive_errors);
 
-    // ✅ Trigger bus health warning if too many errors
     if (consecutive_errors >= MAX_CONSECUTIVE_ERRORS) {
       Serial.println("⚠️  WARNING: I2C bus health degraded!");
       Serial.println("   → Check connections, power, and pull-up resistors");
     }
   } else {
-    consecutive_errors = 0;  // Reset on success
+    consecutive_errors = 0;
   }
 
   return ret;
 }
 
 esp_err_t QMI8658Manager::readRegisters(uint8_t reg, uint8_t* buffer, uint8_t length) {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+  // NEW API Implementation
   if (i2c_dev == NULL) {
     consecutive_errors++;
     return ESP_ERR_INVALID_STATE;
@@ -562,6 +615,23 @@ esp_err_t QMI8658Manager::readRegisters(uint8_t reg, uint8_t* buffer, uint8_t le
     buffer, length,
     1000
   );
+#else
+  // LEGACY API Implementation
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, (i2cAddr << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, reg, true);
+  i2c_master_start(cmd);  // Repeated start
+  i2c_master_write_byte(cmd, (i2cAddr << 1) | I2C_MASTER_READ, true);
+  if (length > 1) {
+    i2c_master_read(cmd, buffer, length - 1, I2C_MASTER_ACK);
+  }
+  i2c_master_read_byte(cmd, buffer + length - 1, I2C_MASTER_NACK);
+  i2c_master_stop(cmd);
+
+  esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(1000));
+  i2c_cmd_link_delete(cmd);
+#endif
 
   if (ret != ESP_OK) {
     consecutive_errors++;
@@ -575,18 +645,31 @@ esp_err_t QMI8658Manager::readRegisters(uint8_t reg, uint8_t* buffer, uint8_t le
 }
 
 esp_err_t QMI8658Manager::writeRegister(uint8_t reg, uint8_t value) {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+  // NEW API Implementation
   if (i2c_dev == NULL) {
     consecutive_errors++;
     return ESP_ERR_INVALID_STATE;
   }
 
   uint8_t data[2] = {reg, value};
-
   esp_err_t ret = i2c_master_transmit(
     i2c_dev,
     data, 2,
     1000
   );
+#else
+  // LEGACY API Implementation
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, (i2cAddr << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, reg, true);
+  i2c_master_write_byte(cmd, value, true);
+  i2c_master_stop(cmd);
+
+  esp_err_t ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(1000));
+  i2c_cmd_link_delete(cmd);
+#endif
 
   if (ret != ESP_OK) {
     consecutive_errors++;

@@ -77,6 +77,7 @@ private:
     lv_chart_series_t *seriesWaveform;
     lv_obj_t *labelWaveformMode;
     lv_obj_t *labelWaveformStatus;
+    
 
     lv_obj_t *alertsList;
     lv_obj_t *buttonClearAlerts;

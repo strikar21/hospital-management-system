@@ -91,10 +91,7 @@ private:
     static const uint16_t HEIGHT = 80;
     static const int16_t Y_OFFSET = -50;  // Slightly above center
 
-    // Severity colors
-    static const uint32_t COLOR_INFO = 0x3498DB;      // Blue
-    static const uint32_t COLOR_WARNING = 0xF39C12;   // Orange
-    static const uint32_t COLOR_CRITICAL = 0xE74C3C;  // Red
+    // Note: severity colors are provided by MedicalTheme (STATUS_*)
 };
 
 #endif // ALERT_POPUP_H

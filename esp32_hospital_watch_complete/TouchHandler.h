@@ -79,6 +79,13 @@ public:
     bool isTouched() const { return isTouching; }
 
     /**
+     * ✅ v5.9.1: Check if ANY touch detected (before debounce)
+     * Use this for screen wake - don't wait for 15ms debounce
+     * @return true if raw touch detected with valid coordinates
+     */
+    bool isRawTouchDetected() const { return rawTouchDetected; }
+
+    /**
      * Get the last detected tap gesture
      * @return true if a tap was just detected (debounced, minimum 50ms duration)
      */
@@ -94,6 +101,7 @@ private:
     // Touch state tracking
     bool isTouching;
     bool wasTouching;
+    bool rawTouchDetected;  // ✅ v5.9.1: Raw touch state (before debounce)
     int16_t startX, startY;
     int16_t currentX, currentY;
     uint32_t touchStartTime;
@@ -111,7 +119,7 @@ private:
     static const uint32_t TOUCH_POLL_INTERVAL = 10;  // Poll every 10ms (100Hz max)
 
     // Gesture detection thresholds
-    static const int16_t SWIPE_THRESHOLD = 60;      // Minimum pixels for swipe
+    static const int16_t SWIPE_THRESHOLD = 40;      // ✅ v5.9.1: Lowered from 60 (was too high for 280px screen)
     static const uint32_t TAP_MAX_TIME = 200;       // Maximum time for tap (ms)
     static const uint32_t LONG_PRESS_TIME = 1000;   // Minimum time for long press (ms)
     static const int16_t TAP_MAX_MOVEMENT = 10;     // Maximum movement for tap (pixels)

@@ -10,6 +10,9 @@ extern "C" {
     uint8_t getTouch(uint16_t *x, uint16_t *y);
 }
 
+// ✅ v5.9.1: Access screen wake flag from main sketch
+extern bool screenJustWoke;
+
 TouchHandler::TouchHandler()
     : initialized(false),
       enabled(true),
@@ -17,6 +20,7 @@ TouchHandler::TouchHandler()
       gestureCallback(nullptr),
       isTouching(false),
       wasTouching(false),
+      rawTouchDetected(false),  // ✅ v5.9.1: Initialize raw touch state
       startX(0), startY(0),
       currentX(0), currentY(0),
       touchStartTime(0),
@@ -66,11 +70,10 @@ void TouchHandler::update() {
     uint16_t x, y;
     uint8_t touched = getTouch(&x, &y);
 
-    // ✅ v5.8.3: Validate touch coordinates to prevent phantom touches
-    // Screen is 280×456, reject touches at exact boundaries (likely noise)
-    // Also reject coordinates outside screen bounds
-    bool validCoordinates = (x > 0 && x < 279) &&  // 1-278 valid (not 0 or 279)
-                            (y > 0 && y < 455);     // 1-454 valid (not 0 or 455)
+    // ✅ v5.9.1: Fixed coordinate validation - accept ALL valid screen pixels
+    // Screen is 280×456 (0-279 for X, 0-455 for Y)
+    // Previous version incorrectly rejected edge pixels
+    bool validCoordinates = (x < 280) && (y < 456);  // 0-279 and 0-455 are valid!
 
     // ✅ v5.8.14: Smart debouncing - allow swipes immediately, debounce stationary touches
     // Phantom touches are always STATIONARY (same coordinates), real swipes MOVE
@@ -91,7 +94,7 @@ void TouchHandler::update() {
         }
     } else {
         // No touch or invalid coordinates - reset debounce
-        touchFirstSeenTime = millis();
+        touchFirstSeenTime = 0;  // ✅ v5.9.1: Fixed - was millis(), should be 0!
         if (touched && !validCoordinates) {
             Serial.printf("⚠️  Invalid touch ignored: x=%d, y=%d\n", x, y);
         }
@@ -99,6 +102,11 @@ void TouchHandler::update() {
 
     wasTouching = isTouching;
     isTouching = validTouch;
+
+    // ✅ v5.9.1: Store raw touch state (before debounce) for screen wake
+    // The main loop needs to know if touch is detected IMMEDIATELY to wake screen
+    // Debounce filter is for gesture detection, not screen wake
+    rawTouchDetected = (touched && validCoordinates);
 
     // Touch started (pressed)
     if (isTouching && !wasTouching) {
@@ -187,6 +195,13 @@ GestureType TouchHandler::detectGesture() {
 }
 
 void TouchHandler::handleGesture(GestureType gesture) {
+    // ✅ v5.9.1: Ignore gestures if screen just woke (prevent wake tap from triggering actions)
+    if (screenJustWoke) {
+        Serial.println("👆 Gesture ignored - screen just woke");
+        screenJustWoke = false;  // Clear flag for next gesture
+        return;
+    }
+
     // Call user callback if set
     if (gestureCallback != nullptr) {
         gestureCallback(gesture);

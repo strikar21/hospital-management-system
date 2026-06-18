@@ -7,6 +7,7 @@
  */
 
 #include "AlertPopup.h"
+#include "MedicalTheme.h"
 
 AlertPopup::AlertPopup() : popup(nullptr), labelText(nullptr), initialized(false), visible(false) {
 }
@@ -20,10 +21,10 @@ lv_obj_t* AlertPopup::create(lv_event_cb_t eventCallback, void* userData) {
     popup = lv_obj_create(lv_scr_act());
     lv_obj_set_size(popup, WIDTH, HEIGHT);
     lv_obj_align(popup, LV_ALIGN_CENTER, 0, Y_OFFSET);
-    lv_obj_set_style_bg_color(popup, lv_color_hex(COLOR_CRITICAL), 0);  // Red default
+    lv_obj_set_style_bg_color(popup, MedicalTheme::STATUS_CRITICAL, 0);  // Red default
     lv_obj_set_style_bg_opa(popup, LV_OPA_TRANSP, 0);  // Start completely transparent (will be set to 90 when shown)
     lv_obj_set_style_border_width(popup, 2, 0);
-    lv_obj_set_style_border_color(popup, lv_color_hex(0xFFFFFF), 0);  // White border
+    lv_obj_set_style_border_color(popup, MedicalTheme::TEXT_PRIMARY, 0);  // White border
     lv_obj_set_style_border_opa(popup, LV_OPA_TRANSP, 0);  // Start with transparent border too
     lv_obj_set_style_radius(popup, 10, 0);
     lv_obj_set_style_shadow_width(popup, 20, 0);  // Drop shadow
@@ -40,7 +41,7 @@ lv_obj_t* AlertPopup::create(lv_event_cb_t eventCallback, void* userData) {
     labelText = lv_label_create(popup);
     lv_label_set_text(labelText, "Alert message");
     lv_obj_set_style_text_font(labelText, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(labelText, lv_color_hex(0xFFFFFF), 0);  // White text
+    lv_obj_set_style_text_color(labelText, MedicalTheme::TEXT_PRIMARY, 0);  // White text
     lv_obj_set_style_text_align(labelText, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(labelText, WIDTH - 20);  // 10px padding on each side
     lv_label_set_long_mode(labelText, LV_LABEL_LONG_WRAP);  // Wrap long text
@@ -59,21 +60,21 @@ void AlertPopup::show(const char* message, AlertSeverity severity) {
     // Set message
     lv_label_set_text(labelText, message);
 
-    // Set color based on severity
-    uint32_t color;
+    // Set color based on severity (use MedicalTheme status colors)
+    lv_color_t color;
     switch (severity) {
         case ALERT_INFO:
-            color = COLOR_INFO;
+            color = MedicalTheme::STATUS_INFO;
             break;
         case ALERT_WARNING:
-            color = COLOR_WARNING;
+            color = MedicalTheme::STATUS_WARNING;
             break;
         case ALERT_CRITICAL:
         default:
-            color = COLOR_CRITICAL;
+            color = MedicalTheme::STATUS_CRITICAL;
             break;
     }
-    lv_obj_set_style_bg_color(popup, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_color(popup, color, 0);
     lv_obj_set_style_bg_opa(popup, LV_OPA_90, 0);  // Make semi-transparent when shown
     lv_obj_set_style_border_opa(popup, LV_OPA_COVER, 0);  // Show border
     lv_obj_set_style_shadow_opa(popup, LV_OPA_50, 0);  // Show shadow

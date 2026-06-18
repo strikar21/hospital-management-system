@@ -19,6 +19,7 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include "MedicalTheme.h"
 
 class PatientBar {
 public:
@@ -66,13 +67,13 @@ public:
 private:
     lv_obj_t* container;         // Patient bar container
     lv_obj_t* labelPatientInfo;  // Patient/Device ID label
+    lv_obj_t* labelMRN;          // MRN label (right side)
 
     bool initialized;
 
-    // Constants
-    static const uint16_t HEIGHT = 35;
-    static const uint16_t Y_POSITION = 35;  // Below status bar
-    static const uint32_t BG_COLOR = 0x2ECC71;  // Green
+    // Constants - Per your layout spec
+    static const uint16_t HEIGHT = 40;      // 40px height (increased for legibility)
+    static const uint16_t Y_POSITION = 30;  // Below status bar (30px)
 };
 
 #endif // PATIENT_BAR_H

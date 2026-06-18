@@ -5,7 +5,7 @@ import logging
 import uvicorn
 from contextlib import asynccontextmanager
 
-from app.api.v1 import devices, streaming, ingestion, health, patients, auth, vitals, staff, provisioning, hospital_admin, device_assignment, admission_workflow, audit, system, mobile, vitals_analytics, discharge, discharge_workflow, discharge_summary_fixed as discharge_summary
+from app.api.v1 import devices, streaming, ingestion, health, patients, auth, vitals, staff, provisioning, hospital_admin, device_assignment, admission_workflow, audit, system, mobile, vitals_analytics, discharge, discharge_workflow, discharge_summary_fixed as discharge_summary, bootstrap
 from app.core.config import settings
 from app.services.mqtt_service import MQTTService
 from app.services.websocket_manager import WebSocketManager
@@ -113,6 +113,7 @@ app.include_router(vitals_analytics.router, prefix="/api/v1", tags=["vitals-anal
 app.include_router(discharge.router, prefix="/api/v1", tags=["discharge"])
 app.include_router(discharge_workflow.router, prefix="/api/v1", tags=["discharge-workflow"])
 app.include_router(discharge_summary.router, prefix="/api/v1", tags=["discharge-summary"])
+app.include_router(bootstrap.router, prefix="/api/v1/bootstrap", tags=["bootstrap-provisioning"])
 
 @app.get("/")
 async def root():

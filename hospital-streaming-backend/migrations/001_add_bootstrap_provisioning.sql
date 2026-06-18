@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS bootstrap_codes (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     used_at TIMESTAMP WITH TIME ZONE,
     used_by_device VARCHAR(50),  -- Serial number of device that used this code
-    created_by_staff INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+    created_by_staff VARCHAR(255) REFERENCES staff(id) ON DELETE SET NULL,
     CONSTRAINT check_status CHECK (status IN ('active', 'used', 'expired'))
 );
 

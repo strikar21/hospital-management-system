@@ -1,25 +1,25 @@
 /**
  * VitalsCards.h
- * Hospital Watch - Vital Signs Cards Component (Swipeable 3-Page Layout)
+ * Hospital Watch - Vital Signs Cards Component
+ * REDESIGNED: Single static 2×2 grid - NO SCROLLING (per reference image)
  *
- * Displays vital sign cards in horizontally swipeable pages (2×2 grid per page):
- * - Page 1: Heart Rate, Blood Pressure, Oxygen Sat, Temperature
- * - Page 2: Respiratory Rate, Fall Risk, Perfusion, Bioimpedance
- * - Page 3: Tremor, Steps, Watch Status, ECG/EEG Mode
+ * Displays 4 primary vital sign cards in a 2×2 grid:
+ * - Top row: Heart Rate, SpO2
+ * - Bottom row: Blood Pressure, Temperature
  *
  * Features:
- * - Swipe left/right to navigate 3 pages
- * - Page indicator dots at bottom (● ○ ○ or ○ ● ○ or ○ ○ ●)
- * - Colored borders for quick visual reference
- * - 2×2 grid maintains readability on 1.64" AMOLED display
+ * - NO scrolling/swiping - static single page
+ * - Dark theme with colored left accent bars
+ * - Large readable fonts (28px for values)
+ * - Matches reference image layout exactly
  *
  * Layout:
- * - Total height: 164px (146px cards + 18px indicators)
- * - Position: Below patient bar (Y=70)
- * - 2 rows × 2 columns per page (4 cards per page, 12 total)
+ * - Total height: 218px (per reference: Status:24px + Patient:32px + Vitals:218px + ECG:182px = 456px)
+ * - Position: Below patient bar (Y=56px, after 24px status + 32px patient)
+ * - 2 rows × 2 columns (4 cards total - PRIMARY VITALS ONLY)
  *
- * Author: Claude/Anthropic
- * Date: 2025-11-23
+ * Author: Design Team
+ * Date: 2025-11-24
  */
 
 #ifndef VITALS_CARDS_H
@@ -28,22 +28,12 @@
 #include <Arduino.h>
 #include <lvgl.h>
 
+// Simplified enum - only 4 primary vitals (Page 2/3 removed)
 enum VitalType {
-    // Page 1 - Primary Vitals
     VITAL_HEART_RATE = 0,
     VITAL_BLOOD_PRESSURE = 1,
     VITAL_SPO2 = 2,
-    VITAL_TEMPERATURE = 3,
-    // Page 2 - Respiratory & Risk
-    VITAL_RESPIRATORY_RATE = 4,
-    VITAL_FALL_RISK = 5,
-    VITAL_PERFUSION = 6,
-    VITAL_BIOIMPEDANCE = 7,
-    // Page 3 - Activity & Status
-    VITAL_TREMOR = 8,
-    VITAL_STEPS = 9,
-    VITAL_WATCH_STATUS = 10,
-    VITAL_MODE = 11
+    VITAL_TEMPERATURE = 3
 };
 
 class VitalsCards {
@@ -93,49 +83,49 @@ public:
     void updateTemperature(float temp);
 
     /**
-     * Update respiratory rate (Page 2)
+     * Update respiratory rate (stub - not displayed)
      * @param rr Respiratory rate (breaths/min)
      */
     void updateRespiratoryRate(float rr);
 
     /**
-     * Update fall risk score (Page 2)
+     * Update fall risk score (stub - not displayed)
      * @param risk Fall risk score (0-10)
      */
     void updateFallRisk(float risk);
 
     /**
-     * Update perfusion percentage (Page 2)
+     * Update perfusion percentage (stub - not displayed)
      * @param perfusion Perfusion (%)
      */
     void updatePerfusion(float perfusion);
 
     /**
-     * Update bioimpedance (Page 2)
+     * Update bioimpedance (stub - not displayed)
      * @param impedance Bioimpedance (Ω)
      */
     void updateBioimpedance(float impedance);
 
     /**
-     * Update tremor score (Page 3)
+     * Update tremor score (stub - not displayed)
      * @param tremor Tremor score (0-10)
      */
     void updateTremor(float tremor);
 
     /**
-     * Update step count (Page 3)
+     * Update step count (stub - not displayed)
      * @param steps Step count
      */
     void updateSteps(int steps);
 
     /**
-     * Update watch status indicator (Page 3)
+     * Update watch status indicator (stub - not displayed)
      * @param status Status string (e.g., "Connected", "Offline")
      */
     void updateWatchStatus(const char* status);
 
     /**
-     * Update ECG/EEG mode indicator (Page 3)
+     * Update ECG/EEG mode indicator (stub - not displayed)
      * @param mode Mode string ("ECG" or "EEG")
      */
     void updateMode(const char* mode);
@@ -151,7 +141,7 @@ public:
     void updateAll(float hr, float spo2, float temp, float bpSys, float bpDia);
 
     /**
-     * Update all vitals including Page 2
+     * Update all vitals (stub for compatibility)
      * @param hr Heart rate (BPM)
      * @param spo2 SpO2 (%)
      * @param temp Temperature (°C)
@@ -175,14 +165,14 @@ public:
     lv_obj_t* getCard(VitalType type) const;
 
     /**
-     * Get current page index (0 = Page 1, 1 = Page 2, 2 = Page 3)
+     * Get current page index (always returns 0 - single page only)
      * @return Current page index
      */
     uint8_t getCurrentPage() const;
 
     /**
-     * Set current page (programmatic navigation)
-     * @param pageIndex Page index (0, 1, or 2)
+     * Set current page (stub - single page only)
+     * @param pageIndex Page index (ignored)
      */
     void setPage(uint8_t pageIndex);
 
@@ -193,44 +183,40 @@ public:
     bool isInitialized() const;
 
 private:
-    lv_obj_t* container;      // Main container with tileview
-    lv_obj_t* tileview;       // Tileview for swipeable pages
-    lv_obj_t* page1;          // Page 1 tile
-    lv_obj_t* page2;          // Page 2 tile
-    lv_obj_t* page3;          // Page 3 tile
-    lv_obj_t* pageIndicator;  // Page dots indicator
+    lv_obj_t* container;      // Main container (NO tileview)
+    lv_obj_t* tileview;       // Unused (kept for compatibility)
+    lv_obj_t* page1;          // Unused (kept for compatibility)
+    lv_obj_t* page2;          // Unused (kept for compatibility)
+    lv_obj_t* page3;          // Unused (kept for compatibility)
+    lv_obj_t* pageIndicator;  // Unused (kept for compatibility)
 
-    // Page 1 cards (Primary Vitals)
+    // Primary vitals cards (ONLY these 4 are displayed)
     lv_obj_t* hrBox;          // Heart rate
     lv_obj_t* bpBox;          // Blood pressure
     lv_obj_t* spo2Box;        // SpO2
     lv_obj_t* tempBox;        // Temperature
 
-    // Page 2 cards (Respiratory & Risk)
+    // Page 2/3 cards (unused - kept for compatibility)
     lv_obj_t* rrBox;          // Respiratory rate
     lv_obj_t* fallRiskBox;    // Fall risk
     lv_obj_t* perfusionBox;   // Perfusion
     lv_obj_t* bioimpBox;      // Bioimpedance
-
-    // Page 3 cards (Activity & Status)
     lv_obj_t* tremorBox;      // Tremor
     lv_obj_t* stepsBox;       // Steps
     lv_obj_t* statusBox;      // Watch status
     lv_obj_t* modeBox;        // ECG/EEG mode
 
-    // Value labels Page 1
+    // Value labels - primary vitals
     lv_obj_t* labelHR;
     lv_obj_t* labelBP;
     lv_obj_t* labelSpO2;
     lv_obj_t* labelTemp;
 
-    // Value labels Page 2
+    // Value labels - page 2/3 (unused - kept for compatibility)
     lv_obj_t* labelRR;
     lv_obj_t* labelFallRisk;
     lv_obj_t* labelPerfusion;
     lv_obj_t* labelBioimp;
-
-    // Value labels Page 3
     lv_obj_t* labelTremor;
     lv_obj_t* labelSteps;
     lv_obj_t* labelStatus;
@@ -239,37 +225,21 @@ private:
     bool initialized;
     uint8_t currentPage;
 
-    // Constants
-    static const uint16_t HEIGHT = 164;  // Increased for page indicators
-    static const uint16_t Y_POSITION = 70;  // Below patient bar (35+35)
+    // Constants - Updated Layout (Status:30px + Patient:40px + Vitals:170px + ECG:216px = 456px)
+    static const uint16_t HEIGHT = 170;  // Total vitals area height (reduced from 204px)
+    static const uint16_t Y_POSITION = 70;  // Below patient bar (30+40)
     static const uint16_t CARD_WIDTH = 130;
-    static const uint16_t CARD_HEIGHT = 65;
+    static const uint16_t CARD_HEIGHT = 76;  // Reduced from 93px to fit new layout (5+76+8+76+5=170)
     static const uint16_t CARD_SPACING = 8;
     static const uint16_t ROW_SPACING = 8;
 
-    // Colors - Page 1 (Primary Vitals)
-    static const uint32_t COLOR_HR = 0xFF0000;        // Red
-    static const uint32_t COLOR_BP = 0x9B59B6;        // Purple
-    static const uint32_t COLOR_SPO2 = 0x0000FF;      // Blue
-    static const uint32_t COLOR_TEMP = 0x00FF00;      // Green
-
-    // Colors - Page 2 (Respiratory & Risk)
-    static const uint32_t COLOR_RR = 0xFF8C00;        // Dark Orange
-    static const uint32_t COLOR_FALL = 0xFFD700;      // Gold
-    static const uint32_t COLOR_PERFUSION = 0xFF1493; // Deep Pink
-    static const uint32_t COLOR_BIOIMP = 0x1E90FF;    // Dodger Blue
-
-    // Colors - Page 3 (Activity & Status)
-    static const uint32_t COLOR_TREMOR = 0x32CD32;    // Lime Green
-    static const uint32_t COLOR_STEPS = 0x00CED1;     // Dark Turquoise
-    static const uint32_t COLOR_STATUS = 0x808080;    // Gray
-    static const uint32_t COLOR_MODE = 0xDA70D6;      // Orchid
+    // Note: per-vital accent colors are provided by MedicalTheme (VITAL_*)
 
     /**
      * Create a single vital card
      * @param parent Parent container
      * @param title Card title text
-     * @param borderColor Border color hex
+     * @param accentColor Accent color for the card (use MedicalTheme::VITAL_*)
      * @param x X position
      * @param y Y position
      * @param labelPtr Pointer to store created label
@@ -277,25 +247,25 @@ private:
      * @param userData User data for callback
      * @return Created card object
      */
-    lv_obj_t* createCard(lv_obj_t* parent, const char* title, uint32_t borderColor,
+    lv_obj_t* createCard(lv_obj_t* parent, const char* title, lv_color_t accentColor,
                          int16_t x, int16_t y, lv_obj_t** labelPtr,
                          lv_event_cb_t eventCallback, void* userData);
 
     /**
-     * Create page indicator dots
+     * Create page indicator dots (stub - not used)
      * @param parent Parent object
      * @return Indicator object
      */
     lv_obj_t* createPageIndicator(lv_obj_t* parent);
 
     /**
-     * Update page indicator dots
-     * @param activePage Active page index (0 or 1)
+     * Update page indicator dots (stub - not used)
+     * @param activePage Active page index
      */
     void updatePageIndicator(uint8_t activePage);
 
     /**
-     * Static callback for tileview scroll events
+     * Static callback for tileview scroll events (stub - not used)
      */
     static void tileviewScrollCallback(lv_event_t* e);
 };

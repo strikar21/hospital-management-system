@@ -19,6 +19,7 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include "MedicalTheme.h"
 
 class StatusBar {
 public:
@@ -79,8 +80,8 @@ private:
     bool initialized;
 
     // Constants
-    static const uint16_t HEIGHT = 35;
-    static const uint32_t BG_COLOR = 0x000000;  // ✅ Pure black background
+    static const uint16_t HEIGHT = 30;
+    // Use `MedicalTheme::BG_BLACK` at runtime when styling the object; no in-class lv_color_t constant here.
 };
 
 #endif // STATUS_BAR_H

@@ -97,16 +97,17 @@ void lcd_lvgl_Init(void)
   indev_drv.type = LV_INDEV_TYPE_POINTER;
   indev_drv.disp = disp;
   indev_drv.read_cb = example_lvgl_touch_cb;
-  lv_indev_drv_register(&indev_drv);
+  lv_indev_t *indev = lv_indev_drv_register(&indev_drv);
 
-  const esp_timer_create_args_t lvgl_tick_timer_args = 
-  {
-    .callback = &example_increase_lvgl_tick,
-    .name = "lvgl_tick"
-  };
-  esp_timer_handle_t lvgl_tick_timer = NULL;
-  ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer));
-  ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer, EXAMPLE_LVGL_TICK_PERIOD_MS * 1000));
+  // ✅ Debug: Verify input device was registered
+  printf("🔍 Checking LVGL input device registration...\n");
+  if (indev != NULL) {
+    printf("✅ LVGL input device registered (polling every %d ms)\n", LV_INDEV_DEF_READ_PERIOD);
+  } else {
+    printf("❌ FAILED to register LVGL input device!\n");
+  }
+
+  // ✅ LV_TICK_CUSTOM = 1, so LVGL uses millis() automatically (no manual tick timer needed)
 
   lvgl_mux = xSemaphoreCreateMutex(); //mutex semaphores
   assert(lvgl_mux);
@@ -160,10 +161,6 @@ static void example_lvgl_port_task(void *arg)
     vTaskDelay(pdMS_TO_TICKS(task_delay_ms));
   }
 }
-static void example_increase_lvgl_tick(void *arg)
-{
-  lv_tick_inc(EXAMPLE_LVGL_TICK_PERIOD_MS);
-}
 static bool example_notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t *edata, void *user_ctx)
 {
   lv_disp_drv_t *disp_driver = (lv_disp_drv_t *)user_ctx;
@@ -197,6 +194,14 @@ void example_lvgl_rounder_cb(struct _lv_disp_drv_t *disp_drv, lv_area_t *area)
 }
 static void example_lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
 {
+  static uint32_t call_count = 0;
+  call_count++;
+
+  // ✅ Debug: Print every 1000th call to verify callback is running
+  if (call_count % 1000 == 0) {
+    printf("🔍 Touch callback alive (call #%u)\n", call_count);
+  }
+
   uint16_t tp_x,tp_y;
   uint8_t win = getTouch(&tp_x,&tp_y);
   if(win)
@@ -204,7 +209,7 @@ static void example_lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
     data->point.x = tp_x;
     data->point.y = tp_y;
     data->state = LV_INDEV_STATE_PRESSED;
-    // ✅ Debug: Confirm LVGL sees touch events (using C printf, not Arduino Serial)
+    // ✅ Debug: Confirm LVGL sees touch events
     printf("LVGL touch callback: x=%d, y=%d, state=PRESSED\n", tp_x, tp_y);
   }
   else
